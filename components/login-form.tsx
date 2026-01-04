@@ -1,43 +1,174 @@
 "use client";
 
-import { cn } from "@/lib/utils"
-import { Button } from "@/components/ui/button"
-import {
-  Field,
-  FieldDescription,
-  FieldGroup,
-  FieldLabel,
-  FieldSeparator,
-} from "@/components/ui/field"
-import { Input } from "@/components/ui/input"
+import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useState } from "react";
+import { toast } from "sonner";
+import { useRouter } from "next/navigation";
 
 export function LoginForm({
-  className,
-  ...props
+    className,
+    ...props
 }: React.ComponentProps<"form">) {
-  return (
-    <form className={cn("flex flex-col gap-6", className)} {...props}>
-      <FieldGroup>
-        <div className="flex flex-col items-center gap-1 text-center">
-          <h1 className="text-2xl font-bold">Login to your account</h1>
-          <p className="text-muted-foreground text-sm text-balance">
-            Enter your username below to login to your account
-          </p>
-        </div>
-        <Field>
-          <FieldLabel htmlFor="username">Username</FieldLabel>
-          <Input id="username" type="username" placeholder="123456" required />
-        </Field>
-        <Field>
-          <div className="flex items-center">
-            <FieldLabel htmlFor="password">Password</FieldLabel>
-          </div>
-          <Input id="password" type="password" required placeholder="******" />
-        </Field>
-        <Field>
-          <Button variant="outline" type="submit">Login</Button>
-        </Field>
-      </FieldGroup>
-    </form>
-  )
+    const [loading, setLoading] = useState(false);
+    const [role, setRole] = useState<"student" | "teacher" | "admin">(
+        "student"
+    );
+    const router = useRouter();
+
+    async function handleSubmit(
+        e: React.FormEvent<HTMLFormElement>,
+        role: "student" | "teacher" | "admin"
+    ) {
+        e.preventDefault();
+        if (loading) return;
+
+        setLoading(true);
+        const toastId = toast.loading("Logging in...");
+
+        try {
+            const formData = new FormData(e.currentTarget);
+
+            let payload: any = { role };
+
+            if (role === "student") {
+                payload.ic_number = String(formData.get("ic_number") ?? "");
+                payload.password = String(formData.get("password") ?? "");
+            }
+
+            if (role === "teacher") {
+                payload.username = String(formData.get("username") ?? "");
+                payload.password = String(formData.get("password") ?? "");
+            }
+
+            if (role === "admin") {
+                payload.admin_id = String(formData.get("admin_id") ?? "");
+                payload.password = String(formData.get("password") ?? "");
+            }
+
+            const res = await fetch("/api/auth/login", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(payload),
+            });
+
+            const data = await res.json();
+
+            if (!res.ok) {
+                toast.error(data.message || "Login failed", { id: toastId });
+                return;
+            }
+
+            // ✅ SAVE SESSION (IMPORTANT)
+            localStorage.setItem(
+                "stg_session",
+                JSON.stringify({
+                    role: data.role,
+                    user_id: data.user_id,
+                })
+            );
+
+            toast.success("Login successful 🎉", { id: toastId });
+
+            // ================= REDIRECT =================
+            if (role === "admin") {
+                router.push("/admin/dashboard");
+            } else if (role === "student") {
+                router.push("/student/dashboard");
+            } else if (role === "teacher") {
+                const roles: string[] = data.roles ?? [];
+
+                if (roles.includes("principal")) {
+                    router.push("/principal/dashboard");
+                } else if (roles.includes("subject_coordinator")) {
+                    router.push("/coordinator/dashboard");
+                } else {
+                    router.push("/teacher/dashboard");
+                }
+            }
+        } catch (err) {
+            console.error("LOGIN ERROR:", err);
+            toast.error("Something went wrong. Please try again.", {
+                id: toastId,
+            });
+        } finally {
+            setLoading(false);
+        }
+    }
+
+    return (
+        <Tabs
+            defaultValue="student"
+            className={cn("w-full", className)}
+            onValueChange={(v) => setRole(v as any)}
+        >
+            <TabsList className="grid grid-cols-3 w-full min-h-12">
+                <TabsTrigger value="student">Student</TabsTrigger>
+                <TabsTrigger value="teacher">Teacher</TabsTrigger>
+                <TabsTrigger value="admin">Admin</TabsTrigger>
+            </TabsList>
+
+            {/* ================= STUDENT ================= */}
+            <TabsContent value="student">
+                <form onSubmit={(e) => handleSubmit(e, "student")} {...props}>
+                    <FieldGroup>
+                        <Field>
+                            <FieldLabel>IC Number</FieldLabel>
+                            <Input name="ic_number" required />
+                        </Field>
+                        <Field>
+                            <FieldLabel>Password</FieldLabel>
+                            <Input name="password" type="password" required />
+                        </Field>
+                        <Button type="submit" disabled={loading}>
+                            Login as Student
+                        </Button>
+                    </FieldGroup>
+                </form>
+            </TabsContent>
+
+            {/* ================= TEACHER ================= */}
+            <TabsContent value="teacher">
+                <form onSubmit={(e) => handleSubmit(e, "teacher")} {...props}>
+                    <FieldGroup>
+                        <Field>
+                            <FieldLabel>Username</FieldLabel>
+                            <Input name="username" required />
+                        </Field>
+
+                        <Field>
+                            <FieldLabel>Password</FieldLabel>
+                            <Input name="password" type="password" required />
+                        </Field>
+
+                        <Button type="submit" disabled={loading}>
+                            Login as Teacher
+                        </Button>
+                    </FieldGroup>
+                </form>
+            </TabsContent>
+
+            {/* ================= ADMIN ================= */}
+            <TabsContent value="admin">
+                <form onSubmit={(e) => handleSubmit(e, "admin")} {...props}>
+                    <FieldGroup>
+                        <Field>
+                            <FieldLabel>Admin ID</FieldLabel>
+                            <Input name="admin_id" required />
+                        </Field>
+                        <Field>
+                            <FieldLabel>Password</FieldLabel>
+                            <Input name="password" type="password" required />
+                        </Field>
+                        <Button type="submit" disabled={loading}>
+                            Login as Admin
+                        </Button>
+                    </FieldGroup>
+                </form>
+            </TabsContent>
+        </Tabs>
+    );
 }
