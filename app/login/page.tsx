@@ -33,7 +33,7 @@ export default function LoginPage() {
                         </div>
                         <div>
                             <h1 className="text-lg font-semibold">
-                                SMK Penanti test
+                                SMK Penanti
                             </h1>
                             <p className="text-sm opacity-80">
                                 Student Grading System
