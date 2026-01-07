@@ -14,13 +14,10 @@ export async function GET(req: Request) {
         .from("stg_admins")
         .select("admin_id");
 
-      if (error) {
-        console.error("ADMIN FETCH ERROR:", error);
-        return NextResponse.json([], { status: 200 });
-      }
+      if (error) return NextResponse.json([], { status: 200 });
 
       return NextResponse.json(
-        (data ?? []).map((a) => ({
+        data.map((a) => ({
           id: a.admin_id,
           name: "Admin",
           identifier: a.admin_id,
@@ -35,13 +32,10 @@ export async function GET(req: Request) {
         .from("stg_teachers")
         .select("teacher_id, fullname, username");
 
-      if (error) {
-        console.error("TEACHER FETCH ERROR:", error);
-        return NextResponse.json([], { status: 200 });
-      }
+      if (error) return NextResponse.json([], { status: 200 });
 
       return NextResponse.json(
-        (data ?? []).map((t) => ({
+        data.map((t) => ({
           id: t.teacher_id,
           name: t.fullname,
           identifier: t.username,
@@ -54,26 +48,21 @@ export async function GET(req: Request) {
     if (role === "student") {
       const { data, error } = await supabase
         .from("stg_students")
-        .select("student_id, fullname, ic_number");
+        .select("student_id, fullname, username");
 
-      if (error) {
-        console.error("STUDENT FETCH ERROR:", error);
-        return NextResponse.json([], { status: 200 });
-      }
+      if (error) return NextResponse.json([], { status: 200 });
 
       return NextResponse.json(
-        (data ?? []).map((s) => ({
-          id: s.student_id,
+        data.map((s) => ({
+          id: s.student_id,       // IC number
           name: s.fullname,
-          identifier: s.ic_number,
+          identifier: s.username,
           role: "student",
         }))
       );
     }
 
-    // ================= DEFAULT =================
     return NextResponse.json([], { status: 200 });
-
   } catch (error) {
     console.error("FETCH USERS ERROR:", error);
     return NextResponse.json([], { status: 200 });

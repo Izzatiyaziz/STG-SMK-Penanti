@@ -6,22 +6,22 @@ export const runtime = "nodejs";
 export async function GET() {
   try {
     const { data, error } = await supabase
-      .from("stg_classes")
-      .select("class_id, class_name");
+      .from("stg_subjects")
+      .select("subject_id, subject_name");
 
     if (error) {
-      console.error("CLASS FETCH ERROR:", error);
+      console.error("SUBJECT FETCH ERROR:", error);
       return NextResponse.json([], { status: 200 });
     }
 
-    const classes = (data ?? []).map((c) => ({
-      id: c.class_id,
-      name: c.class_name,
+    const subjects = (data ?? []).map((s) => ({
+      id: s.subject_id,
+      name: s.subject_name,
     }));
 
-    return NextResponse.json(classes);
+    return NextResponse.json(subjects);
   } catch (error) {
-    console.error("FETCH CLASSES ERROR:", error);
+    console.error("FETCH SUBJECTS ERROR:", error);
     return NextResponse.json([], { status: 200 });
   }
 }
@@ -29,25 +29,25 @@ export async function GET() {
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { class_name } = body;
+    const { subject_name } = body;
 
-    if (!class_name) {
+    if (!subject_name) {
       return NextResponse.json(
-        { message: "Class name is required" },
+        { message: "Subject name is required" },
         { status: 400 }
       );
     }
 
     const { error } = await supabase
-      .from("stg_classes")
-      .insert({ class_name });
+      .from("stg_subjects")
+      .insert({ subject_name });
 
     if (error) {
-      console.error("ADD CLASS ERROR:", error);
+      console.error("ADD SUBJECT ERROR:", error);
 
       if (error.code === "23505") {
         return NextResponse.json(
-          { message: "Class already exists" },
+          { message: "Subject already exists" },
           { status: 409 }
         );
       }
@@ -59,7 +59,7 @@ export async function POST(req: Request) {
     }
 
     return NextResponse.json(
-      { message: "Class added successfully" },
+      { message: "Subject added successfully" },
       { status: 201 }
     );
   } catch {
@@ -73,29 +73,29 @@ export async function POST(req: Request) {
 export async function PUT(req: Request) {
   try {
     const body = await req.json();
-    const { class_id, class_name } = body;
+    const { subject_id, subject_name } = body;
 
-    if (!class_id || !class_name) {
+    if (!subject_id || !subject_name) {
       return NextResponse.json(
-        { message: "Class ID and name are required" },
+        { message: "Subject ID and name are required" },
         { status: 400 }
       );
     }
 
     const { error } = await supabase
-      .from("stg_classes")
-      .update({ class_name })
-      .eq("class_id", class_id);
+      .from("stg_subjects")
+      .update({ subject_name })
+      .eq("subject_id", subject_id);
 
     if (error) {
-      console.error("UPDATE CLASS ERROR:", error);
+      console.error("UPDATE SUBJECT ERROR:", error);
       return NextResponse.json(
         { message: error.message },
         { status: 500 }
       );
     }
 
-    return NextResponse.json({ message: "Class updated successfully" });
+    return NextResponse.json({ message: "Subject updated successfully" });
   } catch {
     return NextResponse.json(
       { message: "Server error" },
@@ -107,29 +107,29 @@ export async function PUT(req: Request) {
 export async function DELETE(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
-    const class_id = searchParams.get("id");
+    const subject_id = searchParams.get("id");
 
-    if (!class_id) {
+    if (!subject_id) {
       return NextResponse.json(
-        { message: "Class ID is required" },
+        { message: "Subject ID is required" },
         { status: 400 }
       );
     }
 
     const { error } = await supabase
-      .from("stg_classes")
+      .from("stg_subjects")
       .delete()
-      .eq("class_id", class_id);
+      .eq("subject_id", subject_id);
 
     if (error) {
-      console.error("DELETE CLASS ERROR:", error);
+      console.error("DELETE SUBJECT ERROR:", error);
       return NextResponse.json(
         { message: error.message },
         { status: 500 }
       );
     }
 
-    return NextResponse.json({ message: "Class deleted successfully" });
+    return NextResponse.json({ message: "Subject deleted successfully" });
   } catch {
     return NextResponse.json(
       { message: "Server error" },
