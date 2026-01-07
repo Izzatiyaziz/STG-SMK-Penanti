@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import supabase from "@/lib/supabase";
 
+export const runtime = "nodejs";
+
 export async function POST(req: Request) {
     try {
         const body = await req.json();
@@ -9,7 +11,7 @@ export async function POST(req: Request) {
 
         if (!role || !password) {
             return NextResponse.json(
-                { message: "Role and password are required" },
+                { message: "Peranan dan kata laluan diperlukan" },
                 { status: 400 }
             );
         }
@@ -26,7 +28,7 @@ export async function POST(req: Request) {
 
             if (error || !student) {
                 return NextResponse.json(
-                    { message: "Invalid credentials" },
+                    { message: "Kelayakan tidak sah" },
                     { status: 401 }
                 );
             }
@@ -34,7 +36,7 @@ export async function POST(req: Request) {
             const valid = await bcrypt.compare(password, student.password);
             if (!valid) {
                 return NextResponse.json(
-                    { message: "Invalid credentials" },
+                    { message: "Kelayakan tidak sah" },
                     { status: 401 }
                 );
             }
@@ -51,13 +53,13 @@ export async function POST(req: Request) {
 
             const { data: admin, error } = await supabase
                 .from("stg_admins")
-                .select("admin_id, password")
+                .select("admin_id,username, password")
                 .eq("admin_id", admin_id)
                 .single();
 
             if (error || !admin) {
                 return NextResponse.json(
-                    { message: "Invalid credentials" },
+                    { message: "Kelayakan tidak sah" },
                     { status: 401 }
                 );
             }
@@ -65,7 +67,7 @@ export async function POST(req: Request) {
             const valid = await bcrypt.compare(password, admin.password);
             if (!valid) {
                 return NextResponse.json(
-                    { message: "Invalid credentials" },
+                    { message: "Kelayakan tidak sah" },
                     { status: 401 }
                 );
             }
@@ -88,7 +90,7 @@ export async function POST(req: Request) {
 
             if (error || !teacher) {
                 return NextResponse.json(
-                    { message: "Invalid credentials" },
+                    { message: "Kelayakan tidak sah" },
                     { status: 401 }
                 );
             }
@@ -96,7 +98,7 @@ export async function POST(req: Request) {
             const valid = await bcrypt.compare(password, teacher.password);
             if (!valid) {
                 return NextResponse.json(
-                    { message: "Invalid credentials" },
+                    { message: "Kelayakan tidak sah" },
                     { status: 401 }
                 );
             }

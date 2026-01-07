@@ -13,7 +13,7 @@ export default function LoginPage() {
             <div className="relative hidden lg:flex flex-col justify-between bg-[#1f3a6f] p-10 text-white">
                 {/* Overlay image */}
                 <Image
-                    src="https://images4.alphacoders.com/134/thumb-1920-1348334.jpg"
+                    src="https://images4.alphacoders.com/134/thumb-1920-1348334.jpg" 
                     alt="Background"
                     fill
                     className="object-cover opacity-20"
@@ -36,16 +36,15 @@ export default function LoginPage() {
                                 SMK Penanti
                             </h1>
                             <p className="text-sm opacity-80">
-                                Student Grading System
+                                Sistem Pemarkahan Pelajar
                             </p>
                         </div>
                     </div>
 
-                    <h2 className="text-3xl font-bold mb-4">Selamat Datang</h2>
+                    <h2 className="text-3xl font-bold mb-4">Selamat Datang!</h2>
                     <p className="text-sm leading-relaxed opacity-90 mb-8">
-                        Sistem pengurusan pemarkahan pelajar yang komprehensif
-                        untuk SMK Penanti, Kubang Semang, Pulau Pinang.
-                        Memudahkan proses pemarkahan dan penjanaan laporan.
+                        Sistem Pemarkahan Pelajar untuk SMK Penanti, Kubang Semang, Pulau Pinang 
+                        yang menyokong proses pemarkahan berstruktur dan penjanaan laporan akademik.
                     </p>
 
                     <ul className="space-y-4 text-sm">
@@ -53,10 +52,10 @@ export default function LoginPage() {
                             <CheckCircle2 className="mt-0.5 h-5 w-5 text-green-300" />
                             <div>
                                 <p className="font-medium">
-                                    Mobile OMR Scanning
+                                    Pengimbasan OMR Berasaskan Peranti Mudah Alih
                                 </p>
                                 <p className="opacity-80">
-                                    Scan answer sheets using your mobile device
+                                    Mengimbas kertas jawapan objektif menggunakan peranti mudah alih
                                 </p>
                             </div>
                         </li>
@@ -64,11 +63,10 @@ export default function LoginPage() {
                             <CheckCircle2 className="mt-0.5 h-5 w-5 text-green-300" />
                             <div>
                                 <p className="font-medium">
-                                    AI Automated Reports
+                                    Penjanaan Laporan Akademik Secara Automatik
                                 </p>
                                 <p className="opacity-80">
-                                    Generate insightful academic reports
-                                    automatically
+                                    Menjana laporan prestasi akademik pelajar berdasarkan data penilaian yang direkodkan
                                 </p>
                             </div>
                         </li>
@@ -76,10 +74,10 @@ export default function LoginPage() {
                             <CheckCircle2 className="mt-0.5 h-5 w-5 text-green-300" />
                             <div>
                                 <p className="font-medium">
-                                    Grade Verification
+                                    Aliran Kerja Pengesahan Markah
                                 </p>
                                 <p className="opacity-80">
-                                    Built-in workflow for grade accuracy
+                                    Proses pengesahan terbina untuk memastikan ketepatan dan konsistensi pemarkahan
                                 </p>
                             </div>
                         </li>
@@ -114,7 +112,7 @@ export default function LoginPage() {
                         <div className="mb-6 text-center">
                             <h1 className="text-2xl font-bold">Log Masuk</h1>
                             <p className="text-sm text-muted-foreground">
-                                Enter your credentials to access the system
+                                Masukkan kelayakan anda untuk mengakses sistem
                             </p>
                         </div>
 

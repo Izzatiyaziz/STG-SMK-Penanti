@@ -106,8 +106,8 @@ export function LoginForm({
             onValueChange={(v) => setRole(v as any)}
         >
             <TabsList className="grid grid-cols-3 w-full min-h-12">
-                <TabsTrigger value="student">Student</TabsTrigger>
-                <TabsTrigger value="teacher">Teacher</TabsTrigger>
+                <TabsTrigger value="student">Pelajar</TabsTrigger>
+                <TabsTrigger value="teacher">Guru</TabsTrigger>
                 <TabsTrigger value="admin">Admin</TabsTrigger>
             </TabsList>
 
@@ -116,15 +116,15 @@ export function LoginForm({
                 <form onSubmit={(e) => handleSubmit(e, "student")} {...props}>
                     <FieldGroup>
                         <Field>
-                            <FieldLabel>IC Number</FieldLabel>
-                            <Input name="ic_number" required />
+                            <FieldLabel>IC Nombor</FieldLabel>
+                            <Input name="ic_number" required/>
                         </Field>
                         <Field>
-                            <FieldLabel>Password</FieldLabel>
+                            <FieldLabel>Kata Laluan</FieldLabel>
                             <Input name="password" type="password" required />
                         </Field>
                         <Button type="submit" disabled={loading}>
-                            Login as Student
+                            Log Masuk sebagai Pelajar
                         </Button>
                     </FieldGroup>
                 </form>
@@ -135,17 +135,17 @@ export function LoginForm({
                 <form onSubmit={(e) => handleSubmit(e, "teacher")} {...props}>
                     <FieldGroup>
                         <Field>
-                            <FieldLabel>Username</FieldLabel>
+                            <FieldLabel>ID Guru</FieldLabel>
                             <Input name="username" required />
                         </Field>
 
                         <Field>
-                            <FieldLabel>Password</FieldLabel>
+                            <FieldLabel>Kata Laluan</FieldLabel>
                             <Input name="password" type="password" required />
                         </Field>
 
                         <Button type="submit" disabled={loading}>
-                            Login as Teacher
+                            Log Masuk sebagai Guru
                         </Button>
                     </FieldGroup>
                 </form>
@@ -156,15 +156,15 @@ export function LoginForm({
                 <form onSubmit={(e) => handleSubmit(e, "admin")} {...props}>
                     <FieldGroup>
                         <Field>
-                            <FieldLabel>Admin ID</FieldLabel>
+                            <FieldLabel>ID Admin</FieldLabel>
                             <Input name="admin_id" required />
                         </Field>
                         <Field>
-                            <FieldLabel>Password</FieldLabel>
+                            <FieldLabel>Kata Laluan</FieldLabel>
                             <Input name="password" type="password" required />
                         </Field>
                         <Button type="submit" disabled={loading}>
-                            Login as Admin
+                            Log Masuk sebagai Admin
                         </Button>
                     </FieldGroup>
                 </form>

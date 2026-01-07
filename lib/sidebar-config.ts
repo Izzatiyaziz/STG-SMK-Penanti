@@ -4,15 +4,14 @@ import {
     FileText,
     BarChart3,
     Users,
-    UserCheck,
-    Settings,
-    HelpCircle,
     Folder,
     Database,
     ListChecks,
     FileSpreadsheet,
     FileSignature,
 } from "lucide-react";
+import { LiaChalkboardTeacherSolid } from "react-icons/lia";
+import { PiStudent } from "react-icons/pi";
 
 export const sidebarConfig = {
     admin: {
@@ -23,35 +22,40 @@ export const sidebarConfig = {
                 icon: LayoutDashboard,
             },
             {
-                title: "Users",
-                url: "/admin/users",
-                icon: Users,
+                title: "Teacher",
+                url: "/admin/teacher",
+                icon: LiaChalkboardTeacherSolid,
+            },
+            {
+                title: "Student",
+                url: "/admin/student",
+                icon: PiStudent,
             },
             {
                 title: "Classes",
-                url: "/classes",
+                url: "/admin/classes",
                 icon: Database,
             },
             {
                 title: "Subjects",
-                url: "/subjects",
+                url: "/admin/subjects",
                 icon: Folder,
             },
             {
                 title: "Exams",
-                url: "/exams",
+                url: "/admin/exams",
                 icon: ListChecks,
             },
             {
                 title: "Reports",
-                url: "/reports",
+                url: "/admin/reports",
                 icon: FileText,
             },
         ],
         documents: [
             {
                 name: "Answer Schemes",
-                url: "/answer-schemes",
+                url: "/admin/answer-schemes",
                 icon: FileSignature,
             },
         ],
