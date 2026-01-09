@@ -7,11 +7,11 @@ export const runtime = "nodejs";
 export async function POST(req: Request) {
     try {
         const body = await req.json();
-        const { role, password } = body;
+        const { role } = body;
 
-        if (!role || !password) {
+        if (!role) {
             return NextResponse.json(
-                { message: "Peranan dan kata laluan diperlukan" },
+                { message: "Peranan diperlukan" },
                 { status: 400 }
             );
         }
@@ -20,24 +20,30 @@ export async function POST(req: Request) {
         if (role === "student") {
             const { ic_number } = body;
 
+            if (!ic_number) {
+                return NextResponse.json(
+                    { message: "IC number diperlukan" },
+                    { status: 400 }
+                );
+            }
+
             const { data: student, error } = await supabase
                 .from("stg_students")
-                .select("student_id, password")
+                .select("student_id, status")
                 .eq("ic_number", ic_number)
                 .single();
 
             if (error || !student) {
                 return NextResponse.json(
-                    { message: "Kelayakan tidak sah" },
+                    { message: "Pelajar tidak dijumpai" },
                     { status: 401 }
                 );
             }
 
-            const valid = await bcrypt.compare(password, student.password);
-            if (!valid) {
+            if (student.status !== "active") {
                 return NextResponse.json(
-                    { message: "Kelayakan tidak sah" },
-                    { status: 401 }
+                    { message: "Akaun pelajar tidak aktif" },
+                    { status: 403 }
                 );
             }
 
@@ -49,11 +55,18 @@ export async function POST(req: Request) {
 
         // ================= ADMIN =================
         if (role === "admin") {
-            const { admin_id } = body;
+            const { admin_id, password } = body;
+
+            if (!admin_id || !password) {
+                return NextResponse.json(
+                    { message: "ID Admin dan kata laluan diperlukan" },
+                    { status: 400 }
+                );
+            }
 
             const { data: admin, error } = await supabase
                 .from("stg_admins")
-                .select("admin_id,username, password")
+                .select("admin_id, password")
                 .eq("admin_id", admin_id)
                 .single();
 
@@ -80,7 +93,14 @@ export async function POST(req: Request) {
 
         // ================= TEACHER =================
         if (role === "teacher") {
-            const { username } = body;
+            const { username, password } = body;
+
+            if (!username || !password) {
+                return NextResponse.json(
+                    { message: "ID Guru dan kata laluan diperlukan" },
+                    { status: 400 }
+                );
+            }
 
             const { data: teacher, error } = await supabase
                 .from("stg_teachers")
@@ -103,7 +123,6 @@ export async function POST(req: Request) {
                 );
             }
 
-            // 1️⃣ Get role IDs
             const { data: teacherRoles } = await supabase
                 .from("stg_teacher_roles")
                 .select("role_id")
@@ -111,9 +130,7 @@ export async function POST(req: Request) {
 
             const roleIds = teacherRoles?.map((r) => r.role_id) ?? [];
 
-            // 2️⃣ Get role names
             let roleNames: string[] = [];
-
             if (roleIds.length > 0) {
                 const { data: roles } = await supabase
                     .from("stg_roles")
@@ -131,7 +148,10 @@ export async function POST(req: Request) {
             });
         }
 
-        return NextResponse.json({ message: "Invalid role" }, { status: 400 });
+        return NextResponse.json(
+            { message: "Peranan tidak sah" },
+            { status: 400 }
+        );
     } catch (err) {
         console.error("LOGIN ERROR:", err);
         return NextResponse.json({ message: "Server error" }, { status: 500 });

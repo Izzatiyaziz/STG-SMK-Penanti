@@ -20,7 +20,20 @@ import {
     SidebarMenuItem,
 } from "@/components/ui/sidebar";
 
-import { sidebarConfig } from "@/lib/sidebar-config";
+import { sidebarConfig, teacherRoleConfig } from "@/lib/sidebar-config";
+
+/* ================= TYPES ================= */
+
+type UserType = "admin" | "student" | "principal";
+type TeacherUserType = "teacher";
+
+type TeacherRole = "class teacher" | "subject teacher" | "subject coordinator";
+
+type Session = {
+    user_id: string;
+    userType: UserType | TeacherUserType;
+    role: string;
+};
 
 type UserProfile = {
     name: string;
@@ -28,43 +41,94 @@ type UserProfile = {
     avatar: string;
 };
 
-export function AppSidebar({
-    role = "teacher",
-    ...props
-}: React.ComponentProps<typeof Sidebar> & {
-    role: "admin" | "teacher" | "student" | "principal";
-}) {
+/* ============== HELPERS ============== */
+
+// 🔥 VERY IMPORTANT
+const normalize = (value: string) => value.toLowerCase().trim();
+
+function isTeacherRole(role: string): role is TeacherRole {
+    return normalize(role) in teacherRoleConfig;
+}
+
+/* ============== COMPONENT ============== */
+
+export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
     const router = useRouter();
-    const config = sidebarConfig[role];
 
     const [user, setUser] = React.useState<UserProfile | null>(null);
+    const [session, setSession] = React.useState<Session | null>(null);
 
-    // ================= FETCH USER =================
     React.useEffect(() => {
-        const session = JSON.parse(localStorage.getItem("stg_session") || "{}");
+        const stored = localStorage.getItem("stg_session");
 
-        if (!session.role || !session.user_id) {
+        if (!stored) {
             router.replace("/login");
             return;
         }
 
+        let parsed: Session;
+
+        try {
+            parsed = JSON.parse(stored);
+        } catch {
+            localStorage.removeItem("stg_session");
+            router.replace("/login");
+            return;
+        }
+
+        if (!parsed.user_id || !parsed.userType || !parsed.role) {
+            localStorage.removeItem("stg_session");
+            router.replace("/login");
+            return;
+        }
+
+        // 🔥 NORMALIZE ROLE (FIX MENU NOT APPEARING)
+        parsed.role = normalize(parsed.role);
+
+        setSession(parsed);
+
         fetch("/api/auth/me", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(session),
+            body: JSON.stringify({
+                role: parsed.userType,
+                user_id: parsed.user_id,
+            }),
         })
             .then((res) => {
                 if (!res.ok) throw new Error("Unauthorized");
                 return res.json();
             })
-            .then((data) => setUser(data))
+            .then((data: UserProfile) => setUser(data))
             .catch(() => {
-                localStorage.clear();
                 router.replace("/login");
             });
     }, [router]);
 
-    if (!user) return null;
+    if (!user || !session) return null;
+
+    /* ========== RESOLVE SIDEBAR CONFIG ========== */
+
+    let config:
+        | {
+              navMain: any[];
+              documents: any[];
+          }
+        | undefined;
+
+    if (session.userType === "teacher") {
+        if (isTeacherRole(session.role)) {
+            config = teacherRoleConfig[session.role];
+        }
+    } else {
+        config = sidebarConfig[session.userType];
+    }
+
+    if (!config) return null;
+
+    const { navMain = [], documents = [] } = config;
+
+    /* ================= RENDER ================= */
 
     return (
         <Sidebar collapsible="offcanvas" {...props}>
@@ -89,11 +153,9 @@ export function AppSidebar({
             </SidebarHeader>
 
             <SidebarContent>
-                <NavMain items={config.navMain} />
+                <NavMain items={navMain} />
 
-                {config.documents.length > 0 && (
-                    <NavDocuments items={config.documents} />
-                )}
+                {documents.length > 0 && <NavDocuments items={documents} />}
 
                 <NavSecondary
                     items={[

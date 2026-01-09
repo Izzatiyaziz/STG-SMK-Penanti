@@ -1,6 +1,5 @@
 import {
     LayoutDashboard,
-    Camera,
     FileText,
     BarChart3,
     Users,
@@ -9,11 +8,97 @@ import {
     ListChecks,
     FileSpreadsheet,
     FileSignature,
+    Camera,
 } from "lucide-react";
 import { LiaChalkboardTeacherSolid } from "react-icons/lia";
 import { PiStudent } from "react-icons/pi";
 
+/* ================= TEACHER ROLES ================= */
+
+export const teacherRoleConfig = {
+    /* ================= CLASS TEACHER ================= */
+    "class teacher": {
+        navMain: [
+            {
+                title: "Dashboard",
+                url: "/teacher/dashboard",
+                icon: LayoutDashboard,
+            },
+            {
+                title: "My Class Students",
+                url: "/teacher/my-class",
+                icon: Users,
+            },
+            {
+                title: "Report",
+                url: "/teacher/report",
+                icon: FileText,
+            },
+        ],
+        documents: [],
+    },
+
+    /* ================= SUBJECT TEACHER ================= */
+    "subject teacher": {
+        navMain: [
+            {
+                title: "Dashboard",
+                url: "/teacher/dashboard",
+                icon: LayoutDashboard,
+            },
+            {
+                title: "My Subjects",
+                url: "/teacher/subjects",
+                icon: Folder,
+            },
+            { title: "OMR Scanning", url: "/teacher/omr", icon: Camera },
+            {
+                title: "Reports",
+                url: "/teacher/reports",
+                icon: FileText,
+            },
+        ],
+        documents: [],
+    },
+
+    /* ================= SUBJECT COORDINATOR ================= */
+    "subject coordinator": {
+        navMain: [
+            {
+                title: "Dashboard",
+                url: "/coordinator/dashboard",
+                icon: LayoutDashboard,
+            },
+            {
+                title: "Pending Approvals",
+                url: "/coordinator/approvals",
+                icon: ListChecks,
+            },
+            {
+                title: "Teacher Assignments",
+                url: "/coordinator/assignments",
+                icon: LiaChalkboardTeacherSolid,
+            },
+            {
+                title: "Reports",
+                url: "/coordinator/reports",
+                icon: FileText,
+            },
+        ],
+        documents: [
+            {
+                name: "Answer Schemes",
+                url: "/coordinator/answer-schemes",
+                icon: FileSignature,
+            },
+        ],
+    },
+};
+
+/* ================= MAIN SIDEBAR CONFIG ================= */
+
 export const sidebarConfig = {
+    /* ================= ADMIN ================= */
     admin: {
         navMain: [
             {
@@ -22,12 +107,12 @@ export const sidebarConfig = {
                 icon: LayoutDashboard,
             },
             {
-                title: "Teacher",
+                title: "Teachers",
                 url: "/admin/teacher",
                 icon: LiaChalkboardTeacherSolid,
             },
             {
-                title: "Student",
+                title: "Students",
                 url: "/admin/student",
                 icon: PiStudent,
             },
@@ -61,38 +146,7 @@ export const sidebarConfig = {
         ],
     },
 
-    teacher: {
-        navMain: [
-            {
-                title: "Dashboard",
-                url: "/teacher/dashboard",
-                icon: LayoutDashboard,
-            },
-            {
-                title: "OMR Scanning",
-                url: "/omr",
-                icon: Camera,
-            },
-            {
-                title: "My Classes",
-                url: "/teacher/classes",
-                icon: Database,
-            },
-            {
-                title: "Results",
-                url: "/results",
-                icon: FileText,
-            },
-        ],
-        documents: [
-            {
-                name: "Subjects",
-                url: "/subjects",
-                icon: Folder,
-            },
-        ],
-    },
-
+    /* ================= STUDENT ================= */
     student: {
         navMain: [
             {
@@ -114,6 +168,7 @@ export const sidebarConfig = {
         documents: [],
     },
 
+    /* ================= PRINCIPAL ================= */
     principal: {
         navMain: [
             {
@@ -123,12 +178,12 @@ export const sidebarConfig = {
             },
             {
                 title: "School Analytics",
-                url: "/analytics",
+                url: "/principal/analytics",
                 icon: BarChart3,
             },
             {
                 title: "Reports",
-                url: "/reports",
+                url: "/principal/reports",
                 icon: FileText,
             },
         ],

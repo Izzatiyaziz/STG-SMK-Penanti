@@ -17,6 +17,8 @@ export function LoginForm({
     const [role, setRole] = useState<"student" | "teacher" | "admin">(
         "student"
     );
+    const [teacherRoles, setTeacherRoles] = useState<string[]>([]);
+    const [selectedTeacherRole, setSelectedTeacherRole] = useState("");
     const router = useRouter();
 
     async function handleSubmit(
@@ -36,7 +38,6 @@ export function LoginForm({
 
             if (role === "student") {
                 payload.ic_number = String(formData.get("ic_number") ?? "");
-                payload.password = String(formData.get("password") ?? "");
             }
 
             if (role === "teacher") {
@@ -62,32 +63,51 @@ export function LoginForm({
                 return;
             }
 
-            // ✅ SAVE SESSION (IMPORTANT)
+            // ================= TEACHER ROLE PICK =================
+            if (role === "teacher") {
+                const roles: string[] = data.roles ?? [];
+
+                if (roles.length > 1 && !selectedTeacherRole) {
+                    setTeacherRoles(roles);
+                    toast.info("Sila pilih peranan guru dahulu", {
+                        id: toastId,
+                    });
+                    return;
+                }
+
+                const finalRole =
+                    selectedTeacherRole || roles[0] || "subject teacher";
+
+                localStorage.setItem(
+                    "stg_session",
+                    JSON.stringify({
+                        userType: "teacher", // 🔥 PENTING
+                        role: finalRole, // sub-role
+                        user_id: data.user_id,
+                    })
+                );
+
+                toast.success("Login successful 🎉", { id: toastId });
+                router.push("/teacher/dashboard");
+                return;
+            }
+
+            // ================= STUDENT / ADMIN =================
             localStorage.setItem(
                 "stg_session",
                 JSON.stringify({
-                    role: data.role,
+                    userType: role, // "student" | "admin"
+                    role: role,
                     user_id: data.user_id,
                 })
             );
 
             toast.success("Login successful 🎉", { id: toastId });
 
-            // ================= REDIRECT =================
             if (role === "admin") {
                 router.push("/admin/dashboard");
-            } else if (role === "student") {
+            } else {
                 router.push("/student/dashboard");
-            } else if (role === "teacher") {
-                const roles: string[] = data.roles ?? [];
-
-                if (roles.includes("principal")) {
-                    router.push("/principal/dashboard");
-                } else if (roles.includes("subject_coordinator")) {
-                    router.push("/coordinator/dashboard");
-                } else {
-                    router.push("/teacher/dashboard");
-                }
             }
         } catch (err) {
             console.error("LOGIN ERROR:", err);
@@ -103,7 +123,11 @@ export function LoginForm({
         <Tabs
             defaultValue="student"
             className={cn("w-full", className)}
-            onValueChange={(v) => setRole(v as any)}
+            onValueChange={(v) => {
+                setRole(v as any);
+                setTeacherRoles([]);
+                setSelectedTeacherRole("");
+            }}
         >
             <TabsList className="grid grid-cols-3 w-full min-h-12">
                 <TabsTrigger value="student">Pelajar</TabsTrigger>
@@ -117,12 +141,13 @@ export function LoginForm({
                     <FieldGroup>
                         <Field>
                             <FieldLabel>IC Nombor</FieldLabel>
-                            <Input name="ic_number" required/>
+                            <Input
+                                name="ic_number"
+                                placeholder="Contoh: 050101-01-1234"
+                                required
+                            />
                         </Field>
-                        <Field>
-                            <FieldLabel>Kata Laluan</FieldLabel>
-                            <Input name="password" type="password" required />
-                        </Field>
+
                         <Button type="submit" disabled={loading}>
                             Log Masuk sebagai Pelajar
                         </Button>
@@ -143,6 +168,29 @@ export function LoginForm({
                             <FieldLabel>Kata Laluan</FieldLabel>
                             <Input name="password" type="password" required />
                         </Field>
+
+                        {teacherRoles.length > 0 && (
+                            <Field>
+                                <FieldLabel>Pilih Peranan</FieldLabel>
+                                <select
+                                    className="w-full border rounded-md p-2"
+                                    value={selectedTeacherRole}
+                                    onChange={(e) =>
+                                        setSelectedTeacherRole(e.target.value)
+                                    }
+                                    required
+                                >
+                                    <option value="">
+                                        -- Pilih Peranan --
+                                    </option>
+                                    {teacherRoles.map((r) => (
+                                        <option key={r} value={r}>
+                                            {r}
+                                        </option>
+                                    ))}
+                                </select>
+                            </Field>
+                        )}
 
                         <Button type="submit" disabled={loading}>
                             Log Masuk sebagai Guru

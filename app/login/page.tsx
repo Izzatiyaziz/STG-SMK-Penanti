@@ -1,10 +1,10 @@
 "use client";
 
-import { LoginForm } from "@/components/login-form";
 import { ModeToggle } from "@/components/mode-toggle";
 import Image from "next/image";
 import Link from "next/link";
 import { CheckCircle2 } from "lucide-react";
+import { LoginForm } from "./login-form";
 
 export default function LoginPage() {
     return (
