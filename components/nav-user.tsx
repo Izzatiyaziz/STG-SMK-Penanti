@@ -1,15 +1,11 @@
 "use client";
 
 import {
-    IconCreditCard,
     IconDotsVertical,
     IconLogout,
-    IconNotification,
     IconUserCircle,
 } from "@tabler/icons-react";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
-
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
     DropdownMenu,
@@ -26,6 +22,7 @@ import {
     SidebarMenuItem,
     useSidebar,
 } from "@/components/ui/sidebar";
+import Link from "next/link";
 
 export function NavUser({
     user,
@@ -45,6 +42,17 @@ export function NavUser({
         router.replace("/login");
     };
 
+    const getProfilePath = () => {
+        const session = localStorage.getItem("stg_session");
+        if (!session) return "/login";
+
+        try {
+            const parsed = JSON.parse(session);
+            return `/${parsed.userType}/profile`;
+        } catch {
+            return "/login";
+        }
+    };
 
     return (
         <SidebarMenu>
@@ -79,7 +87,7 @@ export function NavUser({
                     </DropdownMenuTrigger>
 
                     <DropdownMenuContent
-                        className="min-w-56 rounded-lg"
+                        className="max-w-56 rounded-lg"
                         side={isMobile ? "bottom" : "right"}
                         align="end"
                         sideOffset={4}
@@ -96,7 +104,7 @@ export function NavUser({
                                     </AvatarFallback>
                                 </Avatar>
                                 <div className="grid text-sm leading-tight">
-                                    <span className="font-medium">
+                                    <span className="font-medium truncate">
                                         {user.name}
                                     </span>
                                     <span className="text-xs text-muted-foreground">
@@ -109,18 +117,12 @@ export function NavUser({
                         <DropdownMenuSeparator />
 
                         <DropdownMenuGroup>
-                            <DropdownMenuItem>
-                                <IconUserCircle />
-                                Account
-                            </DropdownMenuItem>
-                            <DropdownMenuItem>
-                                <IconCreditCard />
-                                Billing
-                            </DropdownMenuItem>
-                            <DropdownMenuItem>
-                                <IconNotification />
-                                Notifications
-                            </DropdownMenuItem>
+                            <Link href={getProfilePath()}>
+                                <DropdownMenuItem>
+                                    <IconUserCircle />
+                                    Account
+                                </DropdownMenuItem>
+                            </Link>
                         </DropdownMenuGroup>
 
                         <DropdownMenuSeparator />

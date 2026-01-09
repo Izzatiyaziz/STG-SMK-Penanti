@@ -16,22 +16,26 @@ export async function POST(req: Request) {
         if (role === "student") {
             const { data, error } = await supabase
                 .from("stg_students")
-                .select("student_id, fullname, email")
+                .select("*")
                 .eq("student_id", user_id)
                 .single();
 
             if (error || !data) {
                 return NextResponse.json(
                     { message: "User not found" },
-                    { status: 404 }
+                    { status: 401 }
                 );
             }
 
             return NextResponse.json({
                 role: "student",
+                ic_number: data.ic_number,
                 name: data.fullname,
                 email: data.email,
-                avatar: "/img/student-avatar.png",
+                phone_number: data.phone_number,
+                status: data.status ?? "active",
+                class_name: data.class_id,
+                created_at: data.created_at,
             });
         }
 
