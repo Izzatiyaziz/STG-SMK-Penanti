@@ -277,39 +277,6 @@ export function AddStudentDialog({
                         </div>
                     </div>
 
-                    {/* ACCOUNT SECTION */}
-                    <div className="space-y-4">
-                        <div className="flex items-center gap-2 mb-2">
-                            <Lock className="w-4 h-4 text-accent" />
-                            <h3 className="font-semibold text-foreground">
-                                Maklumat Akaun
-                            </h3>
-                        </div>
-
-                        <div className="space-y-2">
-                            <Label
-                                htmlFor="password"
-                                className="text-sm font-medium"
-                            >
-                                Kata Laluan Awal *
-                            </Label>
-                            <Input
-                                id="password"
-                                name="password"
-                                type="password"
-                                value={formData.password}
-                                onChange={handleInputChange}
-                                placeholder="Minimum 8 aksara"
-                                required
-                                className="rounded-xl border-2 border-border/30 focus:border-primary/50 h-11"
-                            />
-                            <p className="text-xs text-muted-foreground mt-1">
-                                * Pelajar perlu menukar kata laluan pada log
-                                masuk pertama
-                            </p>
-                        </div>
-                    </div>
-
                     {/* ACTION BUTTONS */}
                     <div className="flex gap-3 pt-2">
                         <Button

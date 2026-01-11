@@ -1,19 +1,13 @@
 import type { Metadata } from "next";
-import { DM_Sans, Space_Mono } from "next/font/google";
+import { Poppins } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "sonner";
 import { ThemeProvider } from "@/components/theme-provider";
 
-const dmSans = DM_Sans({
+const poppins = Poppins({
     subsets: ["latin"],
-    weight: ["400", "500", "600", "700"],
+    weight: ["500", "600", "700"],
     variable: "--font-sans",
-});
-
-const spaceMono = Space_Mono({
-    subsets: ["latin"],
-    weight: ["400", "700"],
-    variable: "--font-mono",
 });
 
 export const metadata: Metadata = {
@@ -31,9 +25,7 @@ export default function RootLayout({
 }) {
     return (
         <html lang="en" suppressHydrationWarning>
-            <body
-                className={`${dmSans.className} ${spaceMono.className} antialiased`}
-            >
+            <body className={`${poppins.className} antialiased`}>
                 <ThemeProvider
                     attribute="class"
                     defaultTheme="system"

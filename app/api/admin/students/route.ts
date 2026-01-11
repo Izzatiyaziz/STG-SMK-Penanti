@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import bcrypt from "bcryptjs";
 import supabase from "@/lib/supabase";
 
 export const runtime = "nodejs";
@@ -7,38 +6,33 @@ export const runtime = "nodejs";
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-const { username, fullname, email, class_id, password } = body;
+    const { ic_number, fullname, class_id } = body;
 
-    if (!fullname || !password) {
+    // ❗ Student tak guna password
+    if (!ic_number || !fullname) {
       return NextResponse.json(
-        { message: "All fields are required" },
+        { message: "Required fields missing" },
         { status: 400 }
       );
     }
 
-    // Hash password
-    const hashedPassword = await bcrypt.hash(password, 10);
-
     const { error } = await supabase.from("stg_students").insert({
-  username,
-  fullname,
-  email,
-  class_id,
-  password: hashedPassword,
-  status: "active",
-});
+      ic_number,
+      fullname,
+      class_id,
+    });
 
     if (error) {
       console.error("ADD STUDENT ERROR:", error);
       return NextResponse.json(
-        { message: "Failed to add student" },
-        { status: 500 }
+        { message: "Student already exists or error occurred" },
+        { status: 400 }
       );
     }
 
-    return NextResponse.json({ message: "Student added successfully" });
+    return NextResponse.json({ message: "Student created successfully" });
   } catch (error) {
-    console.error("POST STUDENT ERROR:", error);
+    console.error("ADD STUDENT SERVER ERROR:", error);
     return NextResponse.json(
       { message: "Server error" },
       { status: 500 }

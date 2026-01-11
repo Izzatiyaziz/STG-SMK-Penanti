@@ -127,11 +127,6 @@ export const sidebarConfig = {
                 icon: Folder,
             },
             {
-                title: "Exams",
-                url: "/admin/exams",
-                icon: ListChecks,
-            },
-            {
                 title: "Reports",
                 url: "/admin/reports",
                 icon: FileText,
@@ -156,7 +151,7 @@ export const sidebarConfig = {
             },
             {
                 title: "My Results",
-                url: "/student/results",
+                url: "/student/my-results",
                 icon: FileText,
             },
             {

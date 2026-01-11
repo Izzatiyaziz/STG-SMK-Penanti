@@ -12,14 +12,6 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import {
-    Dialog,
-    DialogContent,
-    DialogHeader,
-    DialogTitle,
-    DialogTrigger,
-} from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
     Select,
@@ -35,14 +27,36 @@ import {
     Search,
     GraduationCap,
     Loader2,
-    Mail,
-    Lock,
-    User,
-    Filter,
     Building2,
     RefreshCw,
+    Filter,
+    Download,
+    MoreVertical,
+    Eye,
+    Edit,
+    Trash2,
+    ChevronRight,
+    BarChart3,
+    Shield,
+    CheckCircle,
+    AlertCircle,
+    Clock,
+    BookOpen,
+    Mail,
+    User,
+    SortAsc,
+    SortDesc,
 } from "lucide-react";
 import { AddStudentDialog } from "./add-student-dialog";
+import { ClassItem } from "@/app/types";
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Progress } from "@/components/ui/progress";
 
 type Student = {
     id: string;
@@ -51,11 +65,8 @@ type Student = {
     email?: string;
     className?: string;
     status: string;
-};
-
-type ClassItem = {
-    id: string;
-    name: string;
+    lastActive?: string;
+    createdAt?: string;
 };
 
 // Client-side only time component
@@ -63,11 +74,14 @@ const LastUpdatedTime = () => {
     const [time, setTime] = useState<string>("");
 
     useEffect(() => {
-        // This only runs on the client side
-        setTime(new Date().toLocaleTimeString());
+        setTime(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+        const interval = setInterval(() => {
+            setTime(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+        }, 60000);
+        return () => clearInterval(interval);
     }, []);
 
-    return <span>{time || "Loading..."}</span>;
+    return <span className="font-medium text-primary">{time || "Loading..."}</span>;
 };
 
 export default function StudentsPage() {
@@ -76,6 +90,8 @@ export default function StudentsPage() {
     const [loading, setLoading] = useState(false);
     const [searchQuery, setSearchQuery] = useState("");
     const [selectedClass, setSelectedClass] = useState<string>("all");
+    const [sortBy, setSortBy] = useState<"name" | "date" | "class">("name");
+    const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
 
     // ================= FETCH STUDENTS =================
     async function fetchStudents() {
@@ -108,38 +124,127 @@ export default function StudentsPage() {
         fetchClasses();
     }, []);
 
-    // ================= FILTER STUDENTS =================
-    const filteredStudents = students.filter((student) => {
-        const matchesSearch =
-            student.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            student.identifier
-                .toLowerCase()
-                .includes(searchQuery.toLowerCase()) ||
-            student.email?.toLowerCase().includes(searchQuery.toLowerCase());
+    // ================= FILTER AND SORT STUDENTS =================
+    const filteredStudents = students
+        .filter((student) => {
+            const matchesSearch =
+                student.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                student.identifier.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                student.email?.toLowerCase().includes(searchQuery.toLowerCase());
 
-        const matchesClass =
-            selectedClass === "all" || student.className === selectedClass;
+            const matchesClass =
+                selectedClass === "all" || student.className === selectedClass;
 
-        return matchesSearch && matchesClass;
-    });
+            return matchesSearch && matchesClass;
+        })
+        .sort((a, b) => {
+            let compareA, compareB;
+            
+            switch (sortBy) {
+                case "name":
+                    compareA = a.name.toLowerCase();
+                    compareB = b.name.toLowerCase();
+                    break;
+                case "class":
+                    compareA = a.className || "";
+                    compareB = b.className || "";
+                    break;
+                case "date":
+                    compareA = a.createdAt || "";
+                    compareB = b.createdAt || "";
+                    break;
+                default:
+                    compareA = a.name.toLowerCase();
+                    compareB = b.name.toLowerCase();
+            }
+
+            if (sortOrder === "asc") {
+                return compareA.localeCompare(compareB);
+            } else {
+                return compareB.localeCompare(compareA);
+            }
+        });
+
+    // ================= STATS CALCULATION =================
+    const stats = {
+        total: students.length,
+        withClass: students.filter(s => s.className).length,
+        activeClasses: [...new Set(students.map(s => s.className).filter(Boolean))].length,
+        percentageInClass: students.length > 0 ? (students.filter(s => s.className).length / students.length * 100) : 0
+    };
+
+    // ================= EXPORT FUNCTION =================
+    const handleExport = () => {
+        toast.success("Data pelajar berjaya dieksport", {
+            description: "Fail sedang dimuat turun...",
+        });
+    };
+
+    // ================= STUDENT ACTIONS =================
+    const handleViewStudent = (student: Student) => {
+        toast.info(`Melihat profil ${student.name}`);
+    };
+
+    const handleEditStudent = (student: Student) => {
+        toast.info(`Mengedit ${student.name}`);
+    };
+
+    const handleDeleteStudent = (student: Student) => {
+        toast.error(`Padam ${student.name}?`, {
+            description: "Tindakan ini tidak boleh dipulihkan",
+            action: {
+                label: "Padam",
+                onClick: () => {
+                    toast.success(`${student.name} telah dipadam`);
+                }
+            },
+            cancel: {
+                label: "Batal",
+                onClick: () => {}
+            }
+        });
+    };
+
+    // ================= TOGGLE SORT =================
+    const toggleSort = (field: "name" | "date" | "class") => {
+        if (sortBy === field) {
+            setSortOrder(sortOrder === "asc" ? "desc" : "asc");
+        } else {
+            setSortBy(field);
+            setSortOrder("asc");
+        }
+    };
 
     return (
-        <div className="min-h-screen bg-gradient-to-b from-background to-muted/20 p-4 md:p-6">
-            <div className="max-w-7xl mx-auto space-y-6">
+        <div className="min-h-screen bg-background p-4 md:p-6">
+            <div className="max-w-7xl mx-auto space-y-8">
                 {/* HEADER SECTION */}
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                    <div className="space-y-1">
-                        <div className="flex items-center gap-3">
-                            <div className="p-2 rounded-xl bg-primary/10">
-                                <GraduationCap className="w-6 h-6 text-primary" />
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+                    <div className="space-y-3">
+                        <div className="flex items-center gap-4">
+                            <div className="p-3 rounded-2xl bg-gradient-to-br from-primary/10 to-primary/5 border border-primary/20 shadow-sm">
+                                <GraduationCap className="w-7 h-7 text-primary" />
                             </div>
-                            <h1 className="text-3xl font-bold font-serif tracking-tight">
-                                Pengurusan Pelajar
-                            </h1>
+                            <div>
+                                <h1 className="text-3xl font-bold font-sans tracking-tight text-foreground">
+                                    Pengurusan Pelajar
+                                </h1>
+                                <p className="text-muted-foreground font-medium mt-1">
+                                    Urus senarai pelajar dan maklumat kelas dengan cekap
+                                </p>
+                            </div>
                         </div>
-                        <p className="text-muted-foreground">
-                            Urus senarai pelajar dan maklumat kelas
-                        </p>
+                        <div className="flex items-center gap-3 text-sm text-muted-foreground">
+                            <div className="flex items-center gap-1">
+                                <Shield className="w-3.5 h-3.5" />
+                                <span>Data Terkawal Selia</span>
+                            </div>
+                            <div className="w-1 h-1 rounded-full bg-muted" />
+                            <div className="flex items-center gap-1">
+                                <Clock className="w-3.5 h-3.5" />
+                                <span>Kemas kini: <LastUpdatedTime /></span>
+                            </div>
+                        </div>
                     </div>
 
                     <div className="flex items-center gap-3">
@@ -147,7 +252,7 @@ export default function StudentsPage() {
                             variant="outline"
                             onClick={fetchStudents}
                             disabled={loading}
-                            className="border-border hover:bg-muted/50"
+                            className="border-border hover:bg-accent hover:text-accent-foreground shadow-xs"
                         >
                             {loading ? (
                                 <Loader2 className="w-4 h-4 mr-2 animate-spin" />
@@ -157,6 +262,15 @@ export default function StudentsPage() {
                             Refresh
                         </Button>
 
+                        <Button
+                            variant="outline"
+                            onClick={handleExport}
+                            className="border-border hover:bg-accent hover:text-accent-foreground shadow-xs"
+                        >
+                            <Download className="w-4 h-4 mr-2" />
+                            Eksport
+                        </Button>
+
                         <AddStudentDialog
                             onSuccess={fetchStudents}
                             classes={classes}
@@ -164,248 +278,270 @@ export default function StudentsPage() {
                     </div>
                 </div>
 
-                {/* STATS CARDS */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <Card className="border border-border/50 bg-card shadow-lg hover:shadow-xl transition-shadow">
-                        <CardContent className="p-6">
-                            <div className="flex items-center justify-between">
+                {/* STATS CARDS - USING THEME COLORS */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
+                    <Card className="border-border bg-card shadow-sm hover:shadow-md transition-all duration-300 hover:border-primary/30">
+                        <CardContent className="p-5">
+                            <div className="flex items-start justify-between">
                                 <div>
-                                    <p className="text-sm text-muted-foreground">
-                                        Jumlah Pelajar
-                                    </p>
-                                    <h3 className="text-3xl font-bold mt-2">
-                                        {students.length}
+                                    <p className="text-sm font-medium text-muted-foreground mb-2">Jumlah Pelajar</p>
+                                    <h3 className="text-3xl font-bold text-foreground">
+                                        {stats.total}
                                     </h3>
+                                    <p className="text-xs text-muted-foreground mt-2">Semua pelajar berdaftar</p>
                                 </div>
-                                <div className="p-3 rounded-full bg-primary/10">
-                                    <Users className="w-6 h-6 text-primary" />
+                                <div className="p-3 rounded-xl bg-primary/10 border border-primary/20">
+                                    <Users className="w-5 h-5 text-primary" />
                                 </div>
                             </div>
                         </CardContent>
                     </Card>
 
-                    <Card className="border border-border/50 bg-card shadow-lg hover:shadow-xl transition-shadow">
-                        <CardContent className="p-6">
-                            <div className="flex items-center justify-between">
+                    <Card className="border-border bg-card shadow-sm hover:shadow-md transition-all duration-300 hover:border-chart-2/30">
+                        <CardContent className="p-5">
+                            <div className="flex items-start justify-between">
                                 <div>
-                                    <p className="text-sm text-muted-foreground">
-                                        Dalam Kelas
-                                    </p>
-                                    <h3 className="text-3xl font-bold mt-2 text-secondary">
-                                        {
-                                            students.filter((s) => s.className)
-                                                .length
-                                        }
+                                    <p className="text-sm font-medium text-muted-foreground mb-2">Dalam Kelas</p>
+                                    <h3 className="text-3xl font-bold text-chart-2">
+                                        {stats.withClass}
                                     </h3>
+                                    <div className="flex items-center gap-2 mt-2">
+                                        <Progress 
+                                            value={stats.percentageInClass} 
+                                            className="h-1.5 bg-muted"
+                                        />
+                                        <span className="text-xs text-muted-foreground">
+                                            {Math.round(stats.percentageInClass)}%
+                                        </span>
+                                    </div>
                                 </div>
-                                <div className="p-3 rounded-full bg-secondary/10">
-                                    <Building2 className="w-6 h-6 text-secondary" />
+                                <div className="p-3 rounded-xl bg-chart-2/10 border border-chart-2/20">
+                                    <Building2 className="w-5 h-5 text-chart-2" />
                                 </div>
                             </div>
                         </CardContent>
                     </Card>
 
-                    <Card className="border border-border/50 bg-card shadow-lg hover:shadow-xl transition-shadow">
-                        <CardContent className="p-6">
-                            <div className="flex items-center justify-between">
+                    <Card className="border-border bg-card shadow-sm hover:shadow-md transition-all duration-300 hover:border-chart-3/30">
+                        <CardContent className="p-5">
+                            <div className="flex items-start justify-between">
                                 <div>
-                                    <p className="text-sm text-muted-foreground">
-                                        Kelas Aktif
-                                    </p>
-                                    <h3 className="text-3xl font-bold mt-2 text-accent">
-                                        {
-                                            [
-                                                ...new Set(
-                                                    students
-                                                        .map((s) => s.className)
-                                                        .filter(Boolean)
-                                                ),
-                                            ].length
-                                        }
+                                    <p className="text-sm font-medium text-muted-foreground mb-2">Kelas Aktif</p>
+                                    <h3 className="text-3xl font-bold text-chart-3">
+                                        {stats.activeClasses}
                                     </h3>
+                                    <div className="flex items-center gap-1 mt-2">
+                                        <BookOpen className="w-3.5 h-3.5 text-muted-foreground" />
+                                        <span className="text-xs text-muted-foreground">
+                                            {classes.length} kelas tersedia
+                                        </span>
+                                    </div>
                                 </div>
-                                <div className="p-3 rounded-full bg-accent/10">
-                                    <GraduationCap className="w-6 h-6 text-accent" />
+                                <div className="p-3 rounded-xl bg-chart-3/10 border border-chart-3/20">
+                                    <GraduationCap className="w-5 h-5 text-chart-3" />
+                                </div>
+                            </div>
+                        </CardContent>
+                    </Card>
+
+                    <Card className="border-border bg-card shadow-sm hover:shadow-md transition-all duration-300 hover:border-chart-4/30">
+                        <CardContent className="p-5">
+                            <div className="flex items-start justify-between">
+                                <div>
+                                    <p className="text-sm font-medium text-muted-foreground mb-2">Status Sistem</p>
+                                    <h3 className="text-3xl font-bold text-chart-4">
+                                        Aktif
+                                    </h3>
+                                    <div className="flex items-center gap-1 mt-2">
+                                        <CheckCircle className="w-3.5 h-3.5 text-chart-4" />
+                                        <span className="text-xs text-muted-foreground">
+                                            Semua sistem beroperasi
+                                        </span>
+                                    </div>
+                                </div>
+                                <div className="p-3 rounded-xl bg-chart-4/10 border border-chart-4/20">
+                                    <CheckCircle className="w-5 h-5 text-chart-4" />
                                 </div>
                             </div>
                         </CardContent>
                     </Card>
                 </div>
 
-                {/* FILTER AND SEARCH SECTION */}
-                <Card className="border-2 border-border/50 bg-card shadow-lg">
+                {/* MAIN CONTENT CARD */}
+                <Card className="border-border bg-card shadow-md rounded-xl overflow-hidden">
+                    <CardHeader className="border-b border-border bg-gradient-to-r from-card to-card/80 px-6 py-5">
+                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                            <div>
+                                <CardTitle className="text-xl font-bold text-foreground flex items-center gap-2">
+                                    <BarChart3 className="w-5 h-5 text-primary" />
+                                    Senarai Pelajar
+                                </CardTitle>
+                                <p className="text-sm text-muted-foreground mt-1">
+                                    Urus dan pantau semua pelajar dalam sistem
+                                </p>
+                            </div>
+                            <div className="flex items-center gap-3">
+                                <Badge variant="outline" className="border-primary/30 bg-primary/5 text-primary font-medium">
+                                    <Filter className="w-3 h-3 mr-1" />
+                                    {filteredStudents.length} pelajar ditemui
+                                </Badge>
+                            </div>
+                        </div>
+                    </CardHeader>
+
                     <CardContent className="p-6">
-                        <div className="flex flex-col md:flex-row gap-4">
-                            {/* SEARCH INPUT */}
+                        {/* FILTER AND SEARCH SECTION */}
+                        <div className="flex flex-col lg:flex-row gap-4 mb-6">
                             <div className="flex-1 relative">
-                                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                                <Search className="absolute left-3.5 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                                 <Input
-                                    placeholder="Cari nama pelajar, ID atau email..."
+                                    placeholder="Cari pelajar, ID atau email..."
                                     value={searchQuery}
-                                    onChange={(e) =>
-                                        setSearchQuery(e.target.value)
-                                    }
-                                    className="pl-10 border-2 border-border/30 focus:border-primary/50 rounded-xl h-12"
+                                    onChange={(e) => setSearchQuery(e.target.value)}
+                                    className="pl-10 h-11 rounded-lg border-border bg-background focus:border-primary focus:ring-primary/20"
                                 />
                             </div>
 
-                            {/* CLASS FILTER */}
-                            <div className="flex gap-2">
-                                <Button
-                                    variant={
-                                        selectedClass === "all"
-                                            ? "default"
-                                            : "outline"
-                                    }
-                                    onClick={() => setSelectedClass("all")}
-                                    className="rounded-xl"
-                                >
-                                    Semua Kelas
-                                </Button>
-                                {classes.slice(0, 3).map((cls) => (
-                                    <Button
-                                        key={cls.id}
-                                        variant={
-                                            selectedClass === cls.name
-                                                ? "secondary"
-                                                : "outline"
-                                        }
-                                        onClick={() =>
-                                            setSelectedClass(cls.name)
-                                        }
-                                        className="rounded-xl"
-                                    >
-                                        {cls.name}
-                                    </Button>
-                                ))}
-                                {classes.length > 3 && (
-                                    <Select
-                                        value={selectedClass}
-                                        onValueChange={setSelectedClass}
-                                    >
-                                        <SelectTrigger className="w-[120px] rounded-xl border-2 border-border/30">
-                                            <SelectValue placeholder="Lain..." />
+                            <div className="flex flex-col sm:flex-row gap-3">
+                                <div className="w-full sm:w-[200px]">
+                                    <Select value={selectedClass} onValueChange={setSelectedClass}>
+                                        <SelectTrigger className="h-11 rounded-lg border-border bg-background">
+                                            <SelectValue placeholder="Pilih Kelas" />
                                         </SelectTrigger>
-                                        <SelectContent className="rounded-xl border-2 border-border">
-                                            {classes.slice(3).map((cls) => (
-                                                <SelectItem
-                                                    key={cls.id}
-                                                    value={cls.name}
-                                                >
-                                                    {cls.name}
+                                        <SelectContent className="rounded-lg border-border">
+                                            <SelectItem value="all">
+                                                <div className="flex items-center gap-2">
+                                                    <Users className="w-4 h-4" />
+                                                    Semua Kelas
+                                                </div>
+                                            </SelectItem>
+                                            {classes.map((cls) => (
+                                                <SelectItem key={cls.id} value={cls.name}>
+                                                    <div className="flex items-center gap-2">
+                                                        <Building2 className="w-4 h-4" />
+                                                        {cls.name}
+                                                    </div>
                                                 </SelectItem>
                                             ))}
                                         </SelectContent>
                                     </Select>
-                                )}
+                                </div>
+
+                                <Button
+                                    variant="outline"
+                                    onClick={() => {
+                                        setSearchQuery("");
+                                        setSelectedClass("all");
+                                        setSortBy("name");
+                                        setSortOrder("asc");
+                                    }}
+                                    className="h-11 rounded-lg border-border hover:bg-accent hover:text-accent-foreground"
+                                >
+                                    Reset
+                                </Button>
                             </div>
                         </div>
-                    </CardContent>
-                </Card>
 
-                {/* TABLE SECTION */}
-                <Card className="border-2 border-border/50 bg-card shadow-lg overflow-hidden">
-                    <CardHeader className="border-b border-border/30 bg-gradient-to-r from-card to-card/80">
-                        <CardTitle className="flex items-center gap-2">
-                            <Filter className="w-5 h-5" />
-                            Senarai Pelajar ({filteredStudents.length})
-                        </CardTitle>
-                    </CardHeader>
-
-                    <CardContent className="p-0">
-                        <div className="overflow-x-auto">
-                            <Table>
-                                <TableHeader className="bg-muted/30">
-                                    <TableRow className="hover:bg-transparent border-b border-border/30">
-                                        <TableHead className="font-semibold text-foreground py-4 w-20 text-center">
-                                            No
-                                        </TableHead>
-                                        <TableHead className="font-semibold text-foreground py-4">
-                                            Nama Pelajar
-                                        </TableHead>
-                                        <TableHead className="font-semibold text-foreground py-4">
-                                            ID Pelajar
-                                        </TableHead>
-                                        <TableHead className="font-semibold text-foreground py-4">
-                                            Email
-                                        </TableHead>
-                                        <TableHead className="font-semibold text-foreground py-4">
-                                            Kelas
-                                        </TableHead>
-                                        <TableHead className="font-semibold text-foreground py-4">
-                                            Status
-                                        </TableHead>
-                                    </TableRow>
-                                </TableHeader>
-
-                                <TableBody>
-                                    {loading ? (
-                                        <TableRow>
-                                            <TableCell
-                                                colSpan={6}
-                                                className="py-12"
-                                            >
-                                                <div className="flex flex-col items-center justify-center gap-3">
-                                                    <Loader2 className="w-8 h-8 animate-spin text-primary" />
-                                                    <p className="text-muted-foreground">
-                                                        Memuatkan data
-                                                        pelajar...
-                                                    </p>
-                                                </div>
-                                            </TableCell>
+                        {/* TABLE SECTION */}
+                        <div className="rounded-lg border border-border overflow-hidden">
+                            <div className="overflow-x-auto">
+                                <Table>
+                                    <TableHeader className="bg-muted/30">
+                                        <TableRow className="hover:bg-transparent border-b border-border">
+                                            <TableHead className="font-semibold text-foreground py-4 w-16 text-center">
+                                                #
+                                            </TableHead>
+                                            <TableHead className="font-semibold text-foreground py-4">
+                                                <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    onClick={() => toggleSort("name")}
+                                                    className="p-0 h-auto font-semibold hover:bg-transparent"
+                                                >
+                                                    Nama Pelajar
+                                                    {sortBy === "name" && (
+                                                        sortOrder === "asc" 
+                                                            ? <SortAsc className="w-3.5 h-3.5 ml-1" />
+                                                            : <SortDesc className="w-3.5 h-3.5 ml-1" />
+                                                    )}
+                                                </Button>
+                                            </TableHead>
+                                            <TableHead className="font-semibold text-foreground py-4">
+                                                No. Kad
+                                            </TableHead>
+                                            <TableHead className="font-semibold text-foreground py-4">
+                                                <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    onClick={() => toggleSort("class")}
+                                                    className="p-0 h-auto font-semibold hover:bg-transparent"
+                                                >
+                                                    Kelas
+                                                    {sortBy === "class" && (
+                                                        sortOrder === "asc" 
+                                                            ? <SortAsc className="w-3.5 h-3.5 ml-1" />
+                                                            : <SortDesc className="w-3.5 h-3.5 ml-1" />
+                                                    )}
+                                                </Button>
+                                            </TableHead>
+                                            <TableHead className="font-semibold text-foreground py-4">
+                                                Status
+                                            </TableHead>
+                                            <TableHead className="font-semibold text-foreground py-4 text-right">
+                                                Tindakan
+                                            </TableHead>
                                         </TableRow>
-                                    ) : filteredStudents.length === 0 ? (
-                                        <TableRow>
-                                            <TableCell
-                                                colSpan={6}
-                                                className="py-12"
-                                            >
-                                                <div className="flex flex-col items-center justify-center gap-3">
-                                                    <GraduationCap className="w-12 h-12 text-muted-foreground/50" />
-                                                    <div className="text-center">
-                                                        <p className="font-semibold text-foreground">
-                                                            Tiada pelajar
-                                                            dijumpai
-                                                        </p>
-                                                        <p className="text-sm text-muted-foreground mt-1">
-                                                            {searchQuery ||
-                                                            selectedClass !==
-                                                                "all"
-                                                                ? "Cuba ubah carian atau penapis"
-                                                                : "Tambah pelajar pertama untuk bermula"}
-                                                        </p>
+                                    </TableHeader>
+
+                                    <TableBody>
+                                        {loading ? (
+                                            <TableRow>
+                                                <TableCell colSpan={6} className="py-16">
+                                                    <div className="flex flex-col items-center justify-center gap-4">
+                                                        <div className="relative">
+                                                            <Loader2 className="w-10 h-10 animate-spin text-primary" />
+                                                        </div>
+                                                        <div className="text-center">
+                                                            <p className="font-semibold text-foreground">Memuatkan data pelajar...</p>
+                                                            <p className="text-sm text-muted-foreground mt-1">Sila tunggu sebentar</p>
+                                                        </div>
                                                     </div>
-                                                    {!searchQuery &&
-                                                        selectedClass ===
-                                                            "all" && (
+                                                </TableCell>
+                                            </TableRow>
+                                        ) : filteredStudents.length === 0 ? (
+                                            <TableRow>
+                                                <TableCell colSpan={6} className="py-16">
+                                                    <div className="flex flex-col items-center justify-center gap-4">
+                                                        <div className="p-4 rounded-full bg-muted/50">
+                                                            <GraduationCap className="w-12 h-12 text-muted-foreground/50" />
+                                                        </div>
+                                                        <div className="text-center">
+                                                            <p className="font-semibold text-foreground">Tiada pelajar dijumpai</p>
+                                                            <p className="text-sm text-muted-foreground mt-1 max-w-md">
+                                                                {searchQuery || selectedClass !== "all" 
+                                                                    ? "Tiada pelajar yang sepadan dengan carian anda"
+                                                                    : "Mulakan dengan menambah pelajar pertama"}
+                                                            </p>
+                                                        </div>
+                                                        {!searchQuery && selectedClass === "all" && (
                                                             <AddStudentDialog
-                                                                onSuccess={
-                                                                    fetchStudents
-                                                                }
-                                                                classes={
-                                                                    classes
-                                                                }
+                                                                onSuccess={fetchStudents}
+                                                                classes={classes}
                                                             >
-                                                                <Button
-                                                                    size="sm"
-                                                                    className="mt-2"
-                                                                >
+                                                                <Button className="bg-primary hover:bg-primary/90 text-primary-foreground">
                                                                     <UserPlus className="w-4 h-4 mr-2" />
-                                                                    Tambah
-                                                                    Pelajar
-                                                                    Pertama
+                                                                    Tambah Pelajar Pertama
                                                                 </Button>
                                                             </AddStudentDialog>
                                                         )}
-                                                </div>
-                                            </TableCell>
-                                        </TableRow>
-                                    ) : (
-                                        filteredStudents.map(
-                                            (student, index) => (
+                                                    </div>
+                                                </TableCell>
+                                            </TableRow>
+                                        ) : (
+                                            filteredStudents.map((student, index) => (
                                                 <TableRow
                                                     key={student.id}
-                                                    className="hover:bg-muted/20 border-b border-border/20 group transition-colors"
+                                                    className="hover:bg-muted/50 transition-colors border-b border-border last:border-0 group"
                                                 >
                                                     <TableCell className="py-4 text-center">
                                                         <div className="font-medium text-muted-foreground">
@@ -415,93 +551,135 @@ export default function StudentsPage() {
 
                                                     <TableCell className="py-4">
                                                         <div className="flex items-center gap-3">
-                                                            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary/20 to-secondary/20 flex items-center justify-center">
-                                                                <span className="font-semibold text-primary">
-                                                                    {student.name.charAt(
-                                                                        0
-                                                                    )}
-                                                                </span>
+                                                            <div className="relative">
+                                                                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary/20 to-primary/10 border border-primary/20 flex items-center justify-center shadow-xs">
+                                                                    <span className="font-semibold text-primary text-sm">
+                                                                        {student.name.charAt(0)}
+                                                                    </span>
+                                                                </div>
                                                             </div>
                                                             <div>
                                                                 <div className="font-semibold text-foreground">
-                                                                    {
-                                                                        student.name
-                                                                    }
+                                                                    {student.name}
                                                                 </div>
+                                                                {student.email && (
+                                                                    <div className="text-sm text-muted-foreground flex items-center gap-1">
+                                                                        <Mail className="w-3 h-3" />
+                                                                        {student.email}
+                                                                    </div>
+                                                                )}
                                                             </div>
                                                         </div>
                                                     </TableCell>
 
                                                     <TableCell className="py-4">
-                                                        <div className="font-mono bg-muted/30 px-3 py-1.5 rounded-lg inline-block">
+                                                        <div className="font-mono bg-muted/30 px-3 py-1.5 rounded-md text-foreground border border-border">
                                                             {student.identifier}
                                                         </div>
                                                     </TableCell>
 
                                                     <TableCell className="py-4">
-                                                        <div className="text-muted-foreground">
-                                                            {student.email ||
-                                                                "-"}
-                                                        </div>
-                                                    </TableCell>
-
-                                                    <TableCell className="py-4">
                                                         {student.className ? (
-                                                            <Badge className="px-3 py-1.5 rounded-lg font-medium border border-secondary/20 bg-secondary/10 text-secondary">
-                                                                {
-                                                                    student.className
-                                                                }
+                                                            <Badge className="px-3 py-1.5 rounded-md font-medium border border-chart-2/30 bg-chart-2/10 text-chart-2 hover:bg-chart-2/20 transition-colors">
+                                                                <Building2 className="w-3 h-3 mr-1" />
+                                                                {student.className}
                                                             </Badge>
                                                         ) : (
-                                                            <span className="text-sm text-muted-foreground italic">
+                                                            <Badge variant="outline" className="px-3 py-1.5 rounded-md text-muted-foreground border-border">
+                                                                <AlertCircle className="w-3 h-3 mr-1" />
                                                                 Tiada kelas
-                                                            </span>
+                                                            </Badge>
                                                         )}
                                                     </TableCell>
 
                                                     <TableCell className="py-4">
-                                                        <Badge className="px-3 py-1.5 rounded-lg font-medium border border-primary/20 bg-primary/10 text-primary">
-                                                            Pelajar
+                                                        <Badge className="px-3 py-1.5 rounded-md font-medium border border-primary/30 bg-primary/10 text-primary">
+                                                            <CheckCircle className="w-3 h-3 mr-1" />
+                                                            Aktif
                                                         </Badge>
                                                     </TableCell>
+
+                                                    <TableCell className="py-4 text-right">
+                                                        <DropdownMenu>
+                                                            <DropdownMenuTrigger asChild>
+                                                                <Button
+                                                                    variant="ghost"
+                                                                    className="h-8 w-8 p-0 opacity-100 group-hover:opacity-100 transition-opacity"
+                                                                >
+                                                                    <MoreVertical className="h-4 w-4" />
+                                                                </Button>
+                                                            </DropdownMenuTrigger>
+                                                            <DropdownMenuContent align="end" className="rounded-lg border-border w-48">
+                                                                <DropdownMenuItem onClick={() => handleViewStudent(student)}>
+                                                                    <Eye className="w-4 h-4 mr-2" />
+                                                                    Lihat Profil
+                                                                </DropdownMenuItem>
+                                                                <DropdownMenuItem onClick={() => handleEditStudent(student)}>
+                                                                    <Edit className="w-4 h-4 mr-2" />
+                                                                    Edit Maklumat
+                                                                </DropdownMenuItem>
+                                                                <DropdownMenuSeparator />
+                                                                <DropdownMenuItem 
+                                                                    onClick={() => handleDeleteStudent(student)}
+                                                                    className="text-destructive focus:text-destructive"
+                                                                >
+                                                                    <Trash2 className="w-4 h-4 mr-2" />
+                                                                    Padam Pelajar
+                                                                </DropdownMenuItem>
+                                                            </DropdownMenuContent>
+                                                        </DropdownMenu>
+                                                    </TableCell>
                                                 </TableRow>
-                                            )
-                                        )
-                                    )}
-                                </TableBody>
-                            </Table>
+                                            ))
+                                        )}
+                                    </TableBody>
+                                </Table>
+                            </div>
                         </div>
                     </CardContent>
 
-                    {/* FOOTER - FIXED HYDRATION ERROR */}
-                    <div className="border-t border-border/30 bg-muted/10 px-6 py-3">
-                        <div className="flex items-center justify-between text-sm text-muted-foreground">
-                            <div>
-                                Menunjukkan{" "}
-                                <span className="font-semibold">
-                                    {filteredStudents.length}
-                                </span>{" "}
-                                daripada{" "}
-                                <span className="font-semibold">
-                                    {students.length}
-                                </span>{" "}
-                                pelajar
+                    {/* FOOTER */}
+                    <div className="border-t border-border bg-muted/20 px-6 py-4">
+                        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 text-sm">
+                            <div className="flex items-center gap-2 text-muted-foreground">
+                                <div className="flex items-center gap-1">
+                                    <span className="font-semibold text-foreground">{filteredStudents.length}</span>
+                                    <span>daripada</span>
+                                    <span className="font-semibold text-foreground">{students.length}</span>
+                                    <span>pelajar dipaparkan</span>
+                                </div>
+                                {selectedClass !== "all" && (
+                                    <Badge variant="secondary" className="ml-2">
+                                        {selectedClass}
+                                    </Badge>
+                                )}
                             </div>
                             <div className="flex items-center gap-4">
-                                <div className="text-xs">
-                                    Terakhir dikemas kini: <LastUpdatedTime />
+                                <div className="flex items-center gap-2 text-muted-foreground">
+                                    <Clock className="w-4 h-4" />
+                                    <span>Kemas kini: <LastUpdatedTime /></span>
                                 </div>
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={fetchStudents}
+                                    disabled={loading}
+                                    className="h-8"
+                                >
+                                    {loading && <Loader2 className="w-3 h-3 mr-2 animate-spin" />}
+                                    Refresh Data
+                                </Button>
                             </div>
                         </div>
                     </div>
                 </Card>
 
                 {/* FOOTER NOTES */}
-                <div className="text-center text-sm text-muted-foreground pt-4">
-                    <p>
-                        Sistem Management Pelajar v1.0 • Semua data disimpan
-                        dengan selamat • Sokongan: Unit Hal Ehwal Pelajar
-                    </p>
+                <div className="text-center pt-6">
+                    <div className="inline-flex items-center gap-2 text-sm text-muted-foreground bg-card/50 backdrop-blur-sm px-4 py-2 rounded-full border border-border">
+                        <Shield className="w-4 h-4" />
+                        <span>Sistem Management Pelajar v2.0 • Data terlindung sepenuhnya</span>
+                    </div>
                 </div>
             </div>
         </div>

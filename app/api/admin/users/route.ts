@@ -14,10 +14,13 @@ export async function GET(req: Request) {
         .from("stg_admins")
         .select("admin_id");
 
-      if (error) return NextResponse.json([], { status: 200 });
+      if (error || !data) {
+        console.error("ADMIN FETCH ERROR:", error);
+        return NextResponse.json([], { status: 200 });
+      }
 
       return NextResponse.json(
-        data.map((a) => ({
+        data.map((a: any) => ({
           id: a.admin_id,
           name: "Admin",
           identifier: a.admin_id,
@@ -30,15 +33,18 @@ export async function GET(req: Request) {
     if (role === "teacher") {
       const { data, error } = await supabase
         .from("stg_teachers")
-        .select("teacher_id, fullname, username");
+        .select("teacher_id, fullname");
 
-      if (error) return NextResponse.json([], { status: 200 });
+      if (error || !data) {
+        console.error("TEACHER FETCH ERROR:", error);
+        return NextResponse.json([], { status: 200 });
+      }
 
       return NextResponse.json(
-        data.map((t) => ({
+        data.map((t: any) => ({
           id: t.teacher_id,
           name: t.fullname,
-          identifier: t.username,
+          identifier: t.teacher_id,
           role: "teacher",
         }))
       );
@@ -48,16 +54,28 @@ export async function GET(req: Request) {
     if (role === "student") {
       const { data, error } = await supabase
         .from("stg_students")
-        .select("student_id, fullname, username");
+        .select(`
+          student_id,
+          fullname,
+          ic_number,
+          class:stg_classes (
+            class_id,
+            class_name
+          )
+        `);
 
-      if (error) return NextResponse.json([], { status: 200 });
+      if (error || !data) {
+        console.error("STUDENT FETCH ERROR:", error);
+        return NextResponse.json([], { status: 200 });
+      }
 
       return NextResponse.json(
-        data.map((s) => ({
-          id: s.student_id,       // IC number
+        data.map((s: any) => ({
+          id: s.student_id,
           name: s.fullname,
-          identifier: s.username,
-          role: "student",
+          identifier: s.ic_number,
+          status: "active",
+          className: s.class?.class_name ?? null,
         }))
       );
     }

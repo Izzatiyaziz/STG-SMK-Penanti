@@ -3,6 +3,18 @@ export type User = {
   name: string;
   identifier: string;
   role: "admin" | "teacher" | "student";
+  class?: {
+    id: string;
+    name: string;
+  } | null;
+};
+
+export type StudentDashboardData = {
+    className: string;
+    classTeacher: string;
+    average: number;
+    position: number;
+    totalStudents: number;
 };
 
 export type ClassItem = {
@@ -15,3 +27,8 @@ export type SubjectItem = {
   name: string;
 };
 
+export type ExamItem = {
+  id: string;
+  name: string;
+  academic_year: string;
+};

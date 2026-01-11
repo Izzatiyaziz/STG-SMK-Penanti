@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Pencil, Trash2, BookOpen } from "lucide-react";
+import { Pencil, Trash2, FileText } from "lucide-react";
 import {
     Table,
     TableBody,
@@ -21,118 +21,120 @@ import {
     DialogTitle,
     DialogTrigger,
 } from "@/components/ui/dialog";
-import { BsFileEarmarkPlus } from "react-icons/bs";
+import { PiCalendarPlusLight } from "react-icons/pi";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { SubjectItem } from "@/app/types";
+import { ExamItem } from "@/app/types";
 
-export default function SubjectsPage() {
-    const [subjects, setSubjects] = useState<SubjectItem[]>([]);
+export default function ExamsPage() {
+    const [exams, setExams] = useState<ExamItem[]>([]);
     const [loading, setLoading] = useState(false);
-    const [editing, setEditing] = useState<SubjectItem | null>(null);
-    const [deleting, setDeleting] = useState<SubjectItem | null>(null);
+    const [editing, setEditing] = useState<ExamItem | null>(null);
+    const [deleting, setDeleting] = useState<ExamItem | null>(null);
 
-    // ================= FETCH SUBJECTS =================
-    async function fetchSubjects() {
+    // ================= FETCH EXAMS =================
+    async function fetchExams() {
         try {
-            const res = await fetch("/api/admin/subjects");
+            const res = await fetch("/api/admin/exams", { cache: "no-store" });
             const data = await res.json();
-            setSubjects(data);
+            setExams(data);
         } catch {
-            toast.error("Gagal memuatkan senarai subjek");
+            toast.error("Gagal memuatkan senarai peperiksaan");
         }
     }
 
     useEffect(() => {
-        fetchSubjects();
+        fetchExams();
     }, []);
 
-    // ================= ADD SUBJECT =================
-    async function handleAddSubject(e: React.FormEvent<HTMLFormElement>) {
+    // ================= ADD EXAM =================
+    async function handleAddExam(e: React.FormEvent<HTMLFormElement>) {
         e.preventDefault();
         setLoading(true);
 
         const formData = new FormData(e.currentTarget);
 
-        const res = await fetch("/api/admin/subjects", {
+        const res = await fetch("/api/admin/exams", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-                subject_name: formData.get("subject_name"),
+                exam_name: formData.get("exam_name"),
+                academic_year: formData.get("academic_year"),
             }),
         });
 
         const data = await res.json();
 
         if (!res.ok) {
-            toast.error(data.message || "Gagal menambah subjek");
+            toast.error(data.message || "Gagal menambah peperiksaan");
             setLoading(false);
             return;
         }
 
-        toast.success("Subjek berjaya ditambah");
+        toast.success("Peperiksaan berjaya ditambah");
         setLoading(false);
-        fetchSubjects();
+        fetchExams();
 
         (
-            document.getElementById("close-subject-dialog") as HTMLButtonElement
+            document.getElementById("close-exam-dialog") as HTMLButtonElement
         )?.click();
     }
 
-    // ================= EDIT SUBJECT =================
-    async function handleEditSubject(e: React.FormEvent<HTMLFormElement>) {
+    // ================= EDIT EXAM =================
+    async function handleEditExam(e: React.FormEvent<HTMLFormElement>) {
         e.preventDefault();
         if (!editing) return;
 
         setLoading(true);
         const formData = new FormData(e.currentTarget);
 
-        const res = await fetch("/api/admin/subjects", {
+        const res = await fetch("/api/admin/exams", {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-                subject_id: editing.id,
-                subject_name: formData.get("subject_name"),
+                exam_id: editing.id,
+                exam_name: formData.get("exam_name"),
+                academic_year: formData.get("academic_year"),
             }),
         });
 
         const data = await res.json();
 
         if (!res.ok) {
-            toast.error(data.message || "Gagal mengemas kini subjek");
+            toast.error(data.message || "Gagal mengemas kini peperiksaan");
             setLoading(false);
             return;
         }
 
-        toast.success("Subjek berjaya dikemas kini");
+        toast.success("Peperiksaan berjaya dikemas kini");
         setEditing(null);
         setLoading(false);
-        fetchSubjects();
+        fetchExams();
     }
 
-    // ================= DELETE SUBJECT =================
-    async function handleDeleteSubject() {
+    // ================= DELETE EXAM =================
+    async function handleDeleteExam() {
         if (!deleting) return;
 
         setLoading(true);
 
         const res = await fetch(
-            `/api/admin/subjects?id=${deleting.id}`,
+            `/api/admin/exams?id=${deleting.id}`,
             { method: "DELETE" }
         );
 
         const data = await res.json();
 
         if (!res.ok) {
-            toast.error(data.message || "Gagal memadam subjek");
+            toast.error(data.message || "Gagal memadam peperiksaan");
             setLoading(false);
             return;
         }
 
-        toast.success("Subjek berjaya dipadam");
+        toast.success("Peperiksaan berjaya dipadam");
         setDeleting(null);
         setLoading(false);
-        fetchSubjects();
+        fetchExams();
     }
 
     return (
@@ -144,46 +146,56 @@ export default function SubjectsPage() {
                     <div className="space-y-1">
                         <div className="flex items-center gap-3">
                             <div className="p-2 rounded-xl bg-primary/10">
-                                <BookOpen className="w-6 h-6 text-primary" />
+                                <FileText className="w-6 h-6 text-primary" />
                             </div>
                             <h1 className="text-3xl font-bold tracking-tight">
-                                Pengurusan Subjek
+                                Pengurusan Peperiksaan
                             </h1>
                         </div>
                         <p className="text-muted-foreground">
-                            Urus maklumat subjek dalam sistem pengurusan sekolah.
+                            Urus maklumat peperiksaan dan tahun akademik dalam
+                            sistem pengurusan sekolah.
                         </p>
                     </div>
 
-                    {/* ADD SUBJECT BUTTON */}
+                    {/* ADD EXAM BUTTON */}
                     <Dialog>
                         <DialogTrigger asChild>
                             <Button className="bg-gradient-to-r from-primary to-primary/90 hover:from-primary/95 hover:to-primary/80 shadow-lg">
-                                <BsFileEarmarkPlus className="w-4 h-4 mr-2" />
-                                Tambah Subjek
+                                <PiCalendarPlusLight className="w-4 h-4 mr-2" />
+                                Tambah Peperiksaan
                             </Button>
                         </DialogTrigger>
 
                         <DialogContent>
                             <DialogHeader>
-                                <DialogTitle>Tambah Subjek Baharu</DialogTitle>
+                                <DialogTitle>Tambah Peperiksaan Baharu</DialogTitle>
                                 <DialogDescription>
-                                    Masukkan nama subjek untuk menambah subjek baharu.
+                                    Masukkan maklumat peperiksaan dan tahun akademik.
                                 </DialogDescription>
                             </DialogHeader>
 
                             <form
-                                onSubmit={handleAddSubject}
+                                onSubmit={handleAddExam}
                                 className="space-y-4"
                             >
                                 <div>
-                                    <Label>Nama Subjek</Label>
-                                    <Input name="subject_name" required />
+                                    <Label>Nama Peperiksaan</Label>
+                                    <Input name="exam_name" required />
+                                </div>
+
+                                <div>
+                                    <Label>Tahun Akademik</Label>
+                                    <Input
+                                        name="academic_year"
+                                        placeholder="2024/2025"
+                                        required
+                                    />
                                 </div>
 
                                 <DialogFooter>
                                     <Button
-                                        id="close-subject-dialog"
+                                        id="close-exam-dialog"
                                         type="button"
                                         variant="outline"
                                     >
@@ -204,33 +216,33 @@ export default function SubjectsPage() {
                         <TableHeader>
                             <TableRow>
                                 <TableHead>No</TableHead>
-                                <TableHead>Nama Subjek</TableHead>
+                                <TableHead>Nama Peperiksaan</TableHead>
+                                <TableHead>Tahun Akademik</TableHead>
                                 <TableHead>Tindakan</TableHead>
                             </TableRow>
                         </TableHeader>
 
                         <TableBody>
-                            {subjects.length === 0 ? (
+                            {exams.length === 0 ? (
                                 <TableRow>
                                     <TableCell
-                                        colSpan={3}
+                                        colSpan={4}
                                         className="text-center text-muted-foreground"
                                     >
-                                        Tiada subjek dijumpai
+                                        Tiada peperiksaan dijumpai
                                     </TableCell>
                                 </TableRow>
                             ) : (
-                                subjects.map((subject, index) => (
-                                    <TableRow key={subject.id}>
+                                exams.map((exam, index) => (
+                                    <TableRow key={exam.id}>
                                         <TableCell>{index + 1}</TableCell>
-                                        <TableCell>{subject.name}</TableCell>
+                                        <TableCell>{exam.name}</TableCell>
+                                        <TableCell>{exam.academic_year}</TableCell>
                                         <TableCell className="flex gap-2">
                                             <Button
                                                 size="icon"
                                                 variant="outline"
-                                                onClick={() =>
-                                                    setEditing(subject)
-                                                }
+                                                onClick={() => setEditing(exam)}
                                             >
                                                 <Pencil className="h-4 w-4" />
                                             </Button>
@@ -238,9 +250,7 @@ export default function SubjectsPage() {
                                             <Button
                                                 size="icon"
                                                 variant="destructive"
-                                                onClick={() =>
-                                                    setDeleting(subject)
-                                                }
+                                                onClick={() => setDeleting(exam)}
                                             >
                                                 <Trash2 className="h-4 w-4" />
                                             </Button>
@@ -256,18 +266,27 @@ export default function SubjectsPage() {
                 <Dialog open={!!editing} onOpenChange={() => setEditing(null)}>
                     <DialogContent>
                         <DialogHeader>
-                            <DialogTitle>Kemas Kini Subjek</DialogTitle>
+                            <DialogTitle>Kemas Kini Peperiksaan</DialogTitle>
                         </DialogHeader>
 
                         <form
-                            onSubmit={handleEditSubject}
+                            onSubmit={handleEditExam}
                             className="space-y-4"
                         >
                             <div>
-                                <Label>Nama Subjek</Label>
+                                <Label>Nama Peperiksaan</Label>
                                 <Input
-                                    name="subject_name"
+                                    name="exam_name"
                                     defaultValue={editing?.name}
+                                    required
+                                />
+                            </div>
+
+                            <div>
+                                <Label>Tahun Akademik</Label>
+                                <Input
+                                    name="academic_year"
+                                    defaultValue={editing?.academic_year}
                                     required
                                 />
                             </div>
@@ -291,9 +310,9 @@ export default function SubjectsPage() {
                 <Dialog open={!!deleting} onOpenChange={() => setDeleting(null)}>
                     <DialogContent>
                         <DialogHeader>
-                            <DialogTitle>Padam Subjek</DialogTitle>
+                            <DialogTitle>Padam Peperiksaan</DialogTitle>
                             <DialogDescription>
-                                Anda pasti ingin memadam subjek{" "}
+                                Anda pasti ingin memadam peperiksaan{" "}
                                 <b>{deleting?.name}</b>? Tindakan ini tidak boleh
                                 dibatalkan.
                             </DialogDescription>
@@ -308,7 +327,7 @@ export default function SubjectsPage() {
                             </Button>
                             <Button
                                 variant="destructive"
-                                onClick={handleDeleteSubject}
+                                onClick={handleDeleteExam}
                                 disabled={loading}
                             >
                                 Padam
