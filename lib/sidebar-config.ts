@@ -13,10 +13,10 @@ import {
 import { LiaChalkboardTeacherSolid } from "react-icons/lia";
 import { PiStudent } from "react-icons/pi";
 
-/* ================= TEACHER ROLES ================= */
+/* ================= PERANAN GURU ================= */
 
 export const teacherRoleConfig = {
-    /* ================= CLASS TEACHER ================= */
+    /* ================= GURU KELAS ================= */
     "class teacher": {
         navMain: [
             {
@@ -25,20 +25,20 @@ export const teacherRoleConfig = {
                 icon: LayoutDashboard,
             },
             {
-                title: "My Class Students",
+                title: "Pelajar Kelas Saya",
                 url: "/teacher/my-class",
                 icon: Users,
             },
             {
-                title: "Report",
-                url: "/teacher/report",
+                title: "Laporan",
+                url: "/teacher/reports",
                 icon: FileText,
             },
         ],
         documents: [],
     },
 
-    /* ================= SUBJECT TEACHER ================= */
+    /* ================= GURU SUBJEK ================= */
     "subject teacher": {
         navMain: [
             {
@@ -47,21 +47,31 @@ export const teacherRoleConfig = {
                 icon: LayoutDashboard,
             },
             {
-                title: "My Subjects",
-                url: "/teacher/subjects",
+                title: "Subjek Saya",
+                url: "/teacher/my-subject",
                 icon: Folder,
             },
-            { title: "OMR Scanning", url: "/teacher/omr", icon: Camera },
             {
-                title: "Reports",
-                url: "/teacher/reports",
+                title: "Imbasan OMR",
+                url: "/teacher/omr",
+                icon: Camera,
+            },
+            {
+                title: "Laporan",
+                url: "/teacher/report",
                 icon: FileText,
             },
         ],
-        documents: [],
+        documents: [
+            {
+                name: "Skema Jawapan",
+                url: "/coordinator/answer-schemes",
+                icon: FileSignature,
+            },
+        ],
     },
 
-    /* ================= SUBJECT COORDINATOR ================= */
+    /* ================= PENYELARAS SUBJEK ================= */
     "subject coordinator": {
         navMain: [
             {
@@ -75,19 +85,19 @@ export const teacherRoleConfig = {
                 icon: ListChecks,
             },
             {
-                title: "Teacher Assignments",
+                title: "Guru",
                 url: "/coordinator/assignments",
                 icon: LiaChalkboardTeacherSolid,
             },
             {
-                title: "Reports",
+                title: "Laporan",
                 url: "/coordinator/reports",
                 icon: FileText,
             },
         ],
         documents: [
             {
-                name: "Answer Schemes",
+                name: "Skema Jawapan",
                 url: "/coordinator/answer-schemes",
                 icon: FileSignature,
             },
@@ -95,7 +105,7 @@ export const teacherRoleConfig = {
     },
 };
 
-/* ================= MAIN SIDEBAR CONFIG ================= */
+/* ================= KONFIGURASI SIDEBAR UTAMA ================= */
 
 export const sidebarConfig = {
     /* ================= ADMIN ================= */
@@ -107,41 +117,36 @@ export const sidebarConfig = {
                 icon: LayoutDashboard,
             },
             {
-                title: "Teachers",
+                title: "Guru",
                 url: "/admin/teacher",
                 icon: LiaChalkboardTeacherSolid,
             },
             {
-                title: "Students",
+                title: "Pelajar",
                 url: "/admin/student",
                 icon: PiStudent,
             },
             {
-                title: "Classes",
+                title: "Kelas",
                 url: "/admin/classes",
                 icon: Database,
             },
             {
-                title: "Subjects",
+                title: "Subjek",
                 url: "/admin/subjects",
                 icon: Folder,
             },
             {
-                title: "Reports",
+                title: "Laporan",
                 url: "/admin/reports",
                 icon: FileText,
             },
         ],
-        documents: [
-            {
-                name: "Answer Schemes",
-                url: "/admin/answer-schemes",
-                icon: FileSignature,
-            },
-        ],
+        documents: [],
+
     },
 
-    /* ================= STUDENT ================= */
+    /* ================= PELAJAR ================= */
     student: {
         navMain: [
             {
@@ -150,12 +155,12 @@ export const sidebarConfig = {
                 icon: LayoutDashboard,
             },
             {
-                title: "My Results",
+                title: "Keputusan Saya",
                 url: "/student/my-results",
                 icon: FileText,
             },
             {
-                title: "Report Card",
+                title: "Kad Laporan",
                 url: "/student/report-card",
                 icon: FileSpreadsheet,
             },
@@ -163,7 +168,7 @@ export const sidebarConfig = {
         documents: [],
     },
 
-    /* ================= PRINCIPAL ================= */
+    /* ================= PENGETUA ================= */
     principal: {
         navMain: [
             {
@@ -172,12 +177,12 @@ export const sidebarConfig = {
                 icon: LayoutDashboard,
             },
             {
-                title: "School Analytics",
+                title: "Analitik Sekolah",
                 url: "/principal/analytics",
                 icon: BarChart3,
             },
             {
-                title: "Reports",
+                title: "Laporan",
                 url: "/principal/reports",
                 icon: FileText,
             },

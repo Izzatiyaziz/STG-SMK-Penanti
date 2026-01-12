@@ -51,7 +51,7 @@ type User = {
     id: string;
     name: string;
     identifier: string;
-    role: string;
+    roles: string[];
     email?: string;
     subjects?: string[];
     lastActive?: string;
@@ -78,7 +78,7 @@ export default function UsersPage() {
     const [loading, setLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState("");
     const [filterRole, setFilterRole] = useState<string>("all");
-    const [sortBy, setSortBy] = useState<"name" | "role" | "date">("name");
+    const [sortBy, setSortBy] = useState<"name" | "roles" | "date">("name");
     const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
 
     async function fetchUsers() {
@@ -107,7 +107,7 @@ export default function UsersPage() {
                 user.identifier.toLowerCase().includes(searchQuery.toLowerCase()) ||
                 user.email?.toLowerCase().includes(searchQuery.toLowerCase());
 
-            const matchesRole = filterRole === "all" || user.role === filterRole;
+            const matchesRole = filterRole === "all" || user.roles.includes(filterRole);
 
             return matchesSearch && matchesRole;
         })
@@ -119,10 +119,11 @@ export default function UsersPage() {
                     compareA = a.name.toLowerCase();
                     compareB = b.name.toLowerCase();
                     break;
-                case "role":
-                    compareA = a.role.toLowerCase();
-                    compareB = b.role.toLowerCase();
+                case "roles":
+                    compareA = a.roles[0]?.toLowerCase() ?? "";
+                    compareB = b.roles[0]?.toLowerCase() ?? "";
                     break;
+
                 case "date":
                     compareA = a.lastActive || "";
                     compareB = b.lastActive || "";
@@ -140,14 +141,14 @@ export default function UsersPage() {
         });
 
     // ================= STATS =================
-    const stats = {
+        const stats = {
         total: users.length,
-        teachers: users.filter(u => u.role === "teacher").length,
-        subjectTeachers: users.filter(u => u.role === "subject teacher").length,
-        admins: users.filter(u => u.role === "admin").length,
-        percentageActive: users.length > 0 ? 
-            (users.filter(u => u.status === "active").length / users.length * 100) : 0
-    };
+        teachers: users.filter(u => u.roles.includes("teacher")).length,
+        subjectTeachers: users.filter(u => u.roles.includes("subject teacher")).length,
+        coordinators: users.filter(u => u.roles.includes("subject coordinator")).length,
+        principals: users.filter(u => u.roles.includes("principal")).length,
+        };
+
 
     // ================= ROLE COLORS =================
     const getRoleColor = (role: string) => {
@@ -215,7 +216,7 @@ export default function UsersPage() {
     };
 
     // ================= TOGGLE SORT =================
-    const toggleSort = (field: "name" | "role" | "date") => {
+    const toggleSort = (field: "name" | "roles" | "date") => {
         if (sortBy === field) {
             setSortOrder(sortOrder === "asc" ? "desc" : "asc");
         } else {
@@ -235,8 +236,9 @@ export default function UsersPage() {
                                 <Users className="w-7 h-7 text-primary" />
                             </div>
                             <div>
-                                <h1 className="text-3xl font-bold font-sans tracking-tight text-foreground">
+                                <h1 className="text-xl font-bold text-foreground flex items-center gap-2">
                                     Pengurusan Guru
+                                    <Filter className="w-5 h-5 text-primary" />
                                 </h1>
                                 <p className="text-muted-foreground font-medium mt-1">
                                     Urus senarai guru dan kebenaran akses sistem dengan cekap
@@ -290,7 +292,7 @@ export default function UsersPage() {
                 </div>
 
                 {/* STATS CARDS */}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
                     <Card className="border-border bg-card shadow-sm hover:shadow-md transition-all duration-300 hover:border-primary/30">
                         <CardContent className="p-5">
                             <div className="flex items-start justify-between">
@@ -299,15 +301,6 @@ export default function UsersPage() {
                                     <h3 className="text-3xl font-bold text-foreground">
                                         {stats.total}
                                     </h3>
-                                    <div className="flex items-center gap-2 mt-2">
-                                        <Progress 
-                                            value={stats.percentageActive} 
-                                            className="h-1.5 bg-muted"
-                                        />
-                                        <span className="text-xs text-muted-foreground">
-                                            {Math.round(stats.percentageActive)}% aktif
-                                        </span>
-                                    </div>
                                 </div>
                                 <div className="p-3 rounded-xl bg-primary/10 border border-primary/20">
                                     <Users className="w-5 h-5 text-primary" />
@@ -339,7 +332,7 @@ export default function UsersPage() {
                         <CardContent className="p-5">
                             <div className="flex items-start justify-between">
                                 <div>
-                                    <p className="text-sm font-medium text-muted-foreground mb-2">Guru Subjek</p>
+                                    <p className="text-sm font-medium text-muted-foreground mb-2">Penyelaras Subjek</p>
                                     <h3 className="text-3xl font-bold text-chart-3">
                                         {stats.subjectTeachers}
                                     </h3>
@@ -349,25 +342,6 @@ export default function UsersPage() {
                                 </div>
                                 <div className="p-3 rounded-xl bg-chart-3/10 border border-chart-3/20">
                                     <BookOpen className="w-5 h-5 text-chart-3" />
-                                </div>
-                            </div>
-                        </CardContent>
-                    </Card>
-
-                    <Card className="border-border bg-card shadow-sm hover:shadow-md transition-all duration-300 hover:border-destructive/30">
-                        <CardContent className="p-5">
-                            <div className="flex items-start justify-between">
-                                <div>
-                                    <p className="text-sm font-medium text-muted-foreground mb-2">Admin Sistem</p>
-                                    <h3 className="text-3xl font-bold text-destructive">
-                                        {stats.admins}
-                                    </h3>
-                                    <p className="text-xs text-muted-foreground mt-2">
-                                        Akses penuh sistem
-                                    </p>
-                                </div>
-                                <div className="p-3 rounded-xl bg-destructive/10 border border-destructive/20">
-                                    <Shield className="w-5 h-5 text-destructive" />
                                 </div>
                             </div>
                         </CardContent>
@@ -435,7 +409,7 @@ export default function UsersPage() {
                                                 </Button>
                                             </TableHead>
                                             <TableHead className="font-semibold text-foreground py-4">
-                                                ID Pengenalan
+                                                ID Guru
                                             </TableHead>
                                             <TableHead className="font-semibold text-foreground py-4">
                                                 Email
@@ -444,11 +418,11 @@ export default function UsersPage() {
                                                 <Button
                                                     variant="ghost"
                                                     size="sm"
-                                                    onClick={() => toggleSort("role")}
+                                                    onClick={() => toggleSort("roles")}
                                                     className="p-0 h-auto font-semibold hover:bg-transparent"
                                                 >
                                                     Peranan
-                                                    {sortBy === "role" && (
+                                                    {sortBy === "roles" && (
                                                         sortOrder === "asc" 
                                                             ? <SortAsc className="w-3.5 h-3.5 ml-1" />
                                                             : <SortDesc className="w-3.5 h-3.5 ml-1" />
@@ -504,7 +478,6 @@ export default function UsersPage() {
                                             </TableRow>
                                         ) : (
                                             filteredUsers.map((user, index) => {
-                                                const roleColors = getRoleColor(user.role);
                                                 return (
                                                     <TableRow
                                                         key={user.id}
@@ -560,19 +533,34 @@ export default function UsersPage() {
                                                         </TableCell>
 
                                                         <TableCell className="py-4">
-                                                            <Badge 
-                                                                className={`px-3 py-1.5 rounded-md font-medium border ${roleColors.bg} ${roleColors.text} ${roleColors.border} hover:${roleColors.bg.replace('10', '20')}`}
-                                                            >
+                                                        <div className="flex flex-wrap gap-2">
+                                                            {user.roles.map((roles) => {
+                                                            const roleColors = getRoleColor(roles);
+
+                                                            return (
+                                                                <Badge
+                                                                key={roles}
+                                                                className={`px-3 py-1.5 rounded-md font-medium border
+                                                                    ${roleColors.bg}
+                                                                    ${roleColors.text}
+                                                                    ${roleColors.border}`}
+                                                                >
                                                                 {roleColors.icon}
-                                                                {user.role === "subject teacher"
+                                                                {roles === "subject teacher"
                                                                     ? "Guru Subjek"
-                                                                    : user.role === "teacher"
+                                                                    : roles === "teacher"
                                                                     ? "Guru Kelas"
-                                                                    : user.role === "admin"
-                                                                    ? "Admin"
-                                                                    : user.role}
-                                                            </Badge>
+                                                                    : roles === "subject coordinator"
+                                                                    ? "Penyelaras Subjek"
+                                                                    : roles === "principal"
+                                                                    ? "Pengetua"
+                                                                    : roles}
+                                                                </Badge>
+                                                            );
+                                                            })}
+                                                        </div>
                                                         </TableCell>
+
 
                                                         <TableCell className="py-4 text-right">
                                                             <DropdownMenu>
@@ -656,7 +644,7 @@ export default function UsersPage() {
                 <div className="text-center pt-6">
                     <div className="inline-flex items-center gap-2 text-sm text-muted-foreground bg-card/50 backdrop-blur-sm px-4 py-2 rounded-full border border-border">
                         <Shield className="w-4 h-4" />
-                        <span>Sistem Management Guru v2.0 • Akses terkawal sepenuhnya</span>
+                        <span>Sistem Pemarkahan Pelajar v2.0 • Akses terkawal sepenuhnya</span>
                     </div>
                 </div>
             </div>

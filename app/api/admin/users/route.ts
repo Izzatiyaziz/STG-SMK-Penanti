@@ -30,10 +30,19 @@ export async function GET(req: Request) {
     }
 
     // ================= TEACHER =================
-    if (role === "teacher") {
+        if (role === "teacher") {
       const { data, error } = await supabase
         .from("stg_teachers")
-        .select("teacher_id, fullname");
+        .select(`
+          teacher_id,
+          fullname,
+          email,
+          stg_teacher_roles (
+            stg_roles (
+              role_name
+            )
+          )
+        `);
 
       if (error || !data) {
         console.error("TEACHER FETCH ERROR:", error);
@@ -45,7 +54,10 @@ export async function GET(req: Request) {
           id: t.teacher_id,
           name: t.fullname,
           identifier: t.teacher_id,
-          role: "teacher",
+          email: t.email,
+          roles: t.stg_teacher_roles.map(
+            (tr: any) => tr.stg_roles.role_name
+          ),
         }))
       );
     }

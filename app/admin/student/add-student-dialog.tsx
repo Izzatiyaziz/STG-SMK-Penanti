@@ -121,7 +121,7 @@ export function AddStudentDialog({
                         <div className="p-2 rounded-xl bg-primary/10">
                             <GraduationCap className="w-6 h-6 text-primary" />
                         </div>
-                        <DialogTitle className="text-2xl font-bold font-serif">
+                        <DialogTitle className="text-xl font-bold text-foreground flex items-center gap-2">
                             Daftar Pelajar Baru
                         </DialogTitle>
                     </div>

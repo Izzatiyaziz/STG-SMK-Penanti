@@ -28,6 +28,8 @@ import {
     Lock,
     BookOpen,
 } from "lucide-react";
+import { RoleItem } from "@/app/types";
+import { useEffect } from "react";
 
 interface AddTeacherDialogProps {
     onSuccess: () => void;
@@ -40,7 +42,24 @@ export function AddTeacherDialog({
 }: AddTeacherDialogProps) {
     const [open, setOpen] = useState(false);
     const [loading, setLoading] = useState(false);
-    const [role, setRole] = useState<string>("");
+    const [roles, setRoles] = useState<RoleItem[]>([]);
+    const [role, setRole] = useState<string>(""); 
+
+        useEffect(() => {
+    if (!open) return;
+
+    const fetchRoles = async () => {
+        try {
+        const res = await fetch("/api/admin/teacher");
+        const data: RoleItem[] = await res.json();
+        setRoles(data);
+        } catch (err) {
+        toast.error("Gagal memuatkan peranan guru");
+        }
+    };
+
+    fetchRoles();
+    }, [open]);
 
     async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
         e.preventDefault();
@@ -55,17 +74,17 @@ export function AddTeacherDialog({
         const formData = new FormData(e.currentTarget);
 
         try {
-            const res = await fetch("/api/admin/users", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    username: formData.get("username"),
-                    password: formData.get("password"),
-                    fullname: formData.get("fullname"),
-                    email: formData.get("email"),
-                    phone_number: formData.get("phone"),
-                    role_name: role,
-                }),
+            const res = await fetch("/api/admin/teacher", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                username: formData.get("username"),
+                password: formData.get("password"),
+                fullname: formData.get("fullname"),
+                email: formData.get("email"),
+                phone_number: formData.get("phone"),
+                role_name: role,
+            }),
             });
 
             const data = await res.json();
@@ -84,20 +103,7 @@ export function AddTeacherDialog({
             setLoading(false);
         }
     }
-
-    const getRoleDescription = (roleValue: string) => {
-        switch (roleValue) {
-            case "class teacher":
-                return "Mengurus kelas dan kehadiran pelajar";
-            case "subject teacher":
-                return "Mengajar subjek dan akses OMR";
-            case "subject coordinator":
-                return "Menyelaras subjek dan kandungan";
-            default:
-                return "";
-        }
-    };
-
+    
     return (
         <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
@@ -117,8 +123,8 @@ export function AddTeacherDialog({
                         <div className="p-2 rounded-xl bg-primary/10">
                             <UserPlus className="w-6 h-6 text-primary" />
                         </div>
-                        <DialogTitle className="text-2xl font-bold font-serif">
-                            Tambah Guru Baru
+                        <DialogTitle className="text-xl font-bold text-foreground flex items-center gap-2">
+                            Daftar Guru Baru
                         </DialogTitle>
                     </div>
                     <p className="text-sm text-muted-foreground">
@@ -182,7 +188,7 @@ export function AddTeacherDialog({
                                         id="email"
                                         name="email"
                                         type="email"
-                                        placeholder="guru@sekolah.edu.my"
+                                        placeholder="guru@penanti.edu.my"
                                         className="rounded-xl border-2 border-border/30 focus:border-primary/50 h-11"
                                     />
                                 </div>
@@ -251,71 +257,22 @@ export function AddTeacherDialog({
                                     <SelectValue placeholder="Pilih peranan..." />
                                 </SelectTrigger>
                                 <SelectContent className="rounded-xl border-2 border-border">
-                                    <SelectItem
-                                        value="class teacher"
-                                        className="rounded-lg"
-                                    >
-                                        <div className="py-1">
-                                            <div className="font-medium">
-                                                Guru Kelas
-                                            </div>
-                                            <div className="text-xs text-muted-foreground">
-                                                Mengurus kelas dan kehadiran
-                                                pelajar
-                                            </div>
-                                        </div>
-                                    </SelectItem>
-                                    <SelectItem
-                                        value="subject teacher"
-                                        className="rounded-lg"
-                                    >
-                                        <div className="py-1">
-                                            <div className="font-medium text-secondary">
-                                                Guru Subjek
-                                            </div>
-                                            <div className="text-xs text-muted-foreground">
-                                                Mengajar subjek dan akses OMR
-                                                scanning
-                                            </div>
-                                        </div>
-                                    </SelectItem>
-                                    <SelectItem
-                                        value="subject coordinator"
-                                        className="rounded-lg"
-                                    >
-                                        <div className="py-1">
-                                            <div className="font-medium text-accent">
-                                                Penyelaras Subjek
-                                            </div>
-                                            <div className="text-xs text-muted-foreground">
-                                                Menyelaras subjek dan kandungan
-                                                akademik
-                                            </div>
-                                        </div>
-                                    </SelectItem>
+                                 {roles.map((r) => (
+                                <SelectItem key={r.role_id} value={r.role_name}>
+                                    {r.role_name === "Guru Kelas"
+                                        ? "Guru Kelas"
+                                        : r.role_name === "Guru Subjek"
+                                        ? "Guru Subjek"
+                                        : r.role_name === "Penyelaras Subjek"
+                                        ? "Penyelaras Subjek"
+                                        : r.role_name === "Pengetua"
+                                        ? "Pengetua"
+                                        : r.role_name}
+                                </SelectItem>
+                                ))}
                                 </SelectContent>
                             </Select>
                         </div>
-
-                        {role && (
-                            <div className="p-3 rounded-lg bg-muted/30 border border-border/30">
-                                <div className="flex items-start gap-2">
-                                    <div className="w-2 h-2 rounded-full bg-primary mt-1.5" />
-                                    <div>
-                                        <p className="text-sm font-medium">
-                                            {role === "class teacher"
-                                                ? "Guru Kelas"
-                                                : role === "subject teacher"
-                                                ? "Guru Subjek"
-                                                : "Penyelaras Subjek"}
-                                        </p>
-                                        <p className="text-xs text-muted-foreground mt-1">
-                                            {getRoleDescription(role)}
-                                        </p>
-                                    </div>
-                                </div>
-                            </div>
-                        )}
                     </div>
 
                     {/* ACTION BUTTONS */}

@@ -32,3 +32,8 @@ export type ExamItem = {
   name: string;
   academic_year: string;
 };
+
+export type RoleItem = {
+  role_id: string;
+  role_name: string;
+}

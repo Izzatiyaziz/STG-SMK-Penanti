@@ -46,6 +46,8 @@ import {
     User,
     SortAsc,
     SortDesc,
+    Save,
+    X,
 } from "lucide-react";
 import { AddStudentDialog } from "./add-student-dialog";
 import { ClassItem } from "@/app/types";
@@ -57,6 +59,15 @@ import {
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Progress } from "@/components/ui/progress";
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
 
 type Student = {
     id: string;
@@ -92,6 +103,16 @@ export default function StudentsPage() {
     const [selectedClass, setSelectedClass] = useState<string>("all");
     const [sortBy, setSortBy] = useState<"name" | "date" | "class">("name");
     const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
+    
+    // State untuk edit dan delete
+    const [editingStudent, setEditingStudent] = useState<Student | null>(null);
+    const [deletingStudent, setDeletingStudent] = useState<Student | null>(null);
+    const [editForm, setEditForm] = useState({
+        name: "",
+        identifier: "",
+        className: "",
+        email: ""
+    });
 
     // ================= FETCH STUDENTS =================
     async function fetchStudents() {
@@ -180,29 +201,81 @@ export default function StudentsPage() {
         });
     };
 
-    // ================= STUDENT ACTIONS =================
-    const handleViewStudent = (student: Student) => {
-        toast.info(`Melihat profil ${student.name}`);
-    };
-
-    const handleEditStudent = (student: Student) => {
-        toast.info(`Mengedit ${student.name}`);
-    };
-
-    const handleDeleteStudent = (student: Student) => {
-        toast.error(`Padam ${student.name}?`, {
-            description: "Tindakan ini tidak boleh dipulihkan",
-            action: {
-                label: "Padam",
-                onClick: () => {
-                    toast.success(`${student.name} telah dipadam`);
-                }
-            },
-            cancel: {
-                label: "Batal",
-                onClick: () => {}
-            }
+    // ================= OPEN EDIT DIALOG =================
+    const handleEditClick = (student: Student) => {
+        setEditingStudent(student);
+        setEditForm({
+            name: student.name,
+            identifier: student.identifier,
+            className: student.className || "",
+            email: student.email || ""
         });
+    };
+
+    // ================= SAVE EDITED STUDENT =================
+    const handleSaveEdit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!editingStudent) return;
+
+        setLoading(true);
+        try {
+            const res = await fetch(`/api/admin/users?id=${editingStudent.id}`, {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    name: editForm.name,
+                    identifier: editForm.identifier,
+                    className: editForm.className || null,
+                    email: editForm.email || null
+                }),
+            });
+
+            const data = await res.json();
+
+            if (!res.ok) {
+                throw new Error(data.message || "Gagal mengemas kini pelajar");
+            }
+
+            toast.success("Pelajar berjaya dikemas kini", {
+                description: `Maklumat ${editForm.name} telah dikemas kini`
+            });
+
+            setEditingStudent(null);
+            fetchStudents();
+        } catch (err: any) {
+            toast.error(err.message || "Gagal mengemas kini pelajar");
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    // ================= DELETE STUDENT =================
+    const handleDeleteStudent = async () => {
+        if (!deletingStudent) return;
+
+        setLoading(true);
+        try {
+            const res = await fetch(`/api/admin/users?id=${deletingStudent.id}`, {
+                method: "DELETE",
+            });
+
+            const data = await res.json();
+
+            if (!res.ok) {
+                throw new Error(data.message || "Gagal memadam pelajar");
+            }
+
+            toast.success("Pelajar berjaya dipadam", {
+                description: `${deletingStudent.name} telah dipadam dari sistem`
+            });
+
+            setDeletingStudent(null);
+            fetchStudents();
+        } catch (err: any) {
+            toast.error(err.message || "Gagal memadam pelajar");
+        } finally {
+            setLoading(false);
+        }
     };
 
     // ================= TOGGLE SORT =================
@@ -226,7 +299,7 @@ export default function StudentsPage() {
                                 <GraduationCap className="w-7 h-7 text-primary" />
                             </div>
                             <div>
-                                <h1 className="text-3xl font-bold font-sans tracking-tight text-foreground">
+                                <h1 className="text-xl font-bold text-foreground flex items-center gap-2">
                                     Pengurusan Pelajar
                                 </h1>
                                 <p className="text-muted-foreground font-medium mt-1">
@@ -467,7 +540,7 @@ export default function StudentsPage() {
                                                 </Button>
                                             </TableHead>
                                             <TableHead className="font-semibold text-foreground py-4">
-                                                No. Kad
+                                                No. Kad Pengenalan
                                             </TableHead>
                                             <TableHead className="font-semibold text-foreground py-4">
                                                 <Button
@@ -562,12 +635,6 @@ export default function StudentsPage() {
                                                                 <div className="font-semibold text-foreground">
                                                                     {student.name}
                                                                 </div>
-                                                                {student.email && (
-                                                                    <div className="text-sm text-muted-foreground flex items-center gap-1">
-                                                                        <Mail className="w-3 h-3" />
-                                                                        {student.email}
-                                                                    </div>
-                                                                )}
                                                             </div>
                                                         </div>
                                                     </TableCell>
@@ -600,34 +667,25 @@ export default function StudentsPage() {
                                                     </TableCell>
 
                                                     <TableCell className="py-4 text-right">
-                                                        <DropdownMenu>
-                                                            <DropdownMenuTrigger asChild>
-                                                                <Button
-                                                                    variant="ghost"
-                                                                    className="h-8 w-8 p-0 opacity-100 group-hover:opacity-100 transition-opacity"
-                                                                >
-                                                                    <MoreVertical className="h-4 w-4" />
-                                                                </Button>
-                                                            </DropdownMenuTrigger>
-                                                            <DropdownMenuContent align="end" className="rounded-lg border-border w-48">
-                                                                <DropdownMenuItem onClick={() => handleViewStudent(student)}>
-                                                                    <Eye className="w-4 h-4 mr-2" />
-                                                                    Lihat Profil
-                                                                </DropdownMenuItem>
-                                                                <DropdownMenuItem onClick={() => handleEditStudent(student)}>
-                                                                    <Edit className="w-4 h-4 mr-2" />
-                                                                    Edit Maklumat
-                                                                </DropdownMenuItem>
-                                                                <DropdownMenuSeparator />
-                                                                <DropdownMenuItem 
-                                                                    onClick={() => handleDeleteStudent(student)}
-                                                                    className="text-destructive focus:text-destructive"
-                                                                >
-                                                                    <Trash2 className="w-4 h-4 mr-2" />
-                                                                    Padam Pelajar
-                                                                </DropdownMenuItem>
-                                                            </DropdownMenuContent>
-                                                        </DropdownMenu>
+                                                        <div className="flex items-center justify-end gap-2">
+                                                            <Button
+                                                                size="sm"
+                                                                variant="outline"
+                                                                onClick={() => handleEditClick(student)}
+                                                                className="border-border hover:bg-accent h-8 w-8 p-0"
+                                                            >
+                                                                <Edit className="h-3.5 w-3.5" />
+                                                            </Button>
+
+                                                            <Button
+                                                                size="sm"
+                                                                variant="destructive"
+                                                                onClick={() => setDeletingStudent(student)}
+                                                                className="h-8 w-8 p-0"
+                                                            >
+                                                                <Trash2 className="h-3.5 w-3.5" />
+                                                            </Button>
+                                                        </div>
                                                     </TableCell>
                                                 </TableRow>
                                             ))
@@ -678,10 +736,153 @@ export default function StudentsPage() {
                 <div className="text-center pt-6">
                     <div className="inline-flex items-center gap-2 text-sm text-muted-foreground bg-card/50 backdrop-blur-sm px-4 py-2 rounded-full border border-border">
                         <Shield className="w-4 h-4" />
-                        <span>Sistem Management Pelajar v2.0 • Data terlindung sepenuhnya</span>
+                        <span>Sistem Pemarkahan Pelajar v2.0 • Data terlindung sepenuhnya</span>
                     </div>
                 </div>
             </div>
+
+            {/* ================= EDIT STUDENT DIALOG ================= */}
+            <Dialog open={!!editingStudent} onOpenChange={(open) => !open && setEditingStudent(null)}>
+                <DialogContent className="rounded-lg border-border sm:max-w-[500px]">
+                    <DialogHeader>
+                        <DialogTitle className="text-lg font-semibold flex items-center gap-2">
+                            <Edit className="w-5 h-5 text-primary" />
+                            Edit Maklumat Pelajar
+                        </DialogTitle>
+                        <DialogDescription className="text-muted-foreground">
+                            Kemas kini maklumat pelajar yang dipilih.
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    <form onSubmit={handleSaveEdit} className="space-y-4 pt-2">
+                        <div className="space-y-3">
+                            <div className="space-y-2">
+                                <Label htmlFor="edit-name" className="font-medium">Nama Pelajar</Label>
+                                <Input
+                                    id="edit-name"
+                                    value={editForm.name}
+                                    onChange={(e) => setEditForm({...editForm, name: e.target.value})}
+                                    placeholder="Masukkan nama penuh"
+                                    className="border-border focus:border-primary"
+                                    required
+                                />
+                            </div>
+
+                            <div className="space-y-2">
+                                <Label htmlFor="edit-identifier" className="font-medium">No. Kad Pengenalan</Label>
+                                <Input
+                                    id="edit-identifier"
+                                    value={editForm.identifier}
+                                    onChange={(e) => setEditForm({...editForm, identifier: e.target.value})}
+                                    placeholder="Contoh: 010101-01-0101"
+                                    className="border-border focus:border-primary font-mono"
+                                    required
+                                />
+                            </div>
+
+                            <div className="space-y-2">
+                                <Label htmlFor="edit-class" className="font-medium">Kelas</Label>
+                                <Select 
+                                    value={editForm.className} 
+                                    onValueChange={(value) => setEditForm({...editForm, className: value})}
+                                >
+                                    <SelectTrigger className="border-border focus:border-primary">
+                                        <SelectValue placeholder="Pilih kelas (pilihan)" />
+                                    </SelectTrigger>
+                                    <SelectContent className="border-border">
+                                        <SelectItem value="">Tiada kelas</SelectItem>
+                                        {classes.map((cls) => (
+                                            <SelectItem key={cls.id} value={cls.name}>
+                                                <div className="flex items-center gap-2">
+                                                    <Building2 className="w-3.5 h-3.5" />
+                                                    {cls.name}
+                                                </div>
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                        </div>
+
+                        <DialogFooter className="pt-4">
+                            <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() => setEditingStudent(null)}
+                                className="border-border hover:bg-accent"
+                            >
+                                <X className="w-4 h-4 mr-2" />
+                                Batal
+                            </Button>
+                            <Button 
+                                type="submit" 
+                                disabled={loading}
+                                className="bg-primary hover:bg-primary/90"
+                            >
+                                {loading ? (
+                                    <>
+                                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                        Menyimpan...
+                                    </>
+                                ) : (
+                                    <>
+                                        <Save className="w-4 h-4 mr-2" />
+                                        Simpan Perubahan
+                                    </>
+                                )}
+                            </Button>
+                        </DialogFooter>
+                    </form>
+                </DialogContent>
+            </Dialog>
+
+            {/* ================= DELETE STUDENT DIALOG ================= */}
+            <Dialog open={!!deletingStudent} onOpenChange={(open) => !open && setDeletingStudent(null)}>
+                <DialogContent className="rounded-lg border-border">
+                    <DialogHeader>
+                        <DialogTitle className="text-lg font-semibold text-destructive flex items-center gap-2">
+                            <Trash2 className="w-5 h-5" />
+                            Padam Pelajar
+                        </DialogTitle>
+                        <DialogDescription className="text-muted-foreground">
+                            Anda pasti ingin memadam pelajar <b className="text-foreground">{deletingStudent?.name}</b>? 
+                            Tindakan ini akan memadam semua data berkaitan dan tidak boleh dibatalkan.
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    <div className="rounded-lg bg-destructive/5 border border-destructive/20 p-4 mt-2">
+                        <div className="flex items-center gap-2 text-destructive text-sm">
+                            <Shield className="w-4 h-4" />
+                            <span className="font-medium">Amaran: Tindakan ini muktamad</span>
+                        </div>
+                        <p className="text-sm text-muted-foreground mt-2">
+                            Semua markah dan data berkaitan akan dipadam.
+                        </p>
+                    </div>
+
+                    <DialogFooter className="pt-4">
+                        <Button
+                            variant="outline"
+                            onClick={() => setDeletingStudent(null)}
+                            className="border-border hover:bg-accent"
+                        >
+                            Batal
+                        </Button>
+                        <Button
+                            variant="destructive"
+                            onClick={handleDeleteStudent}
+                            disabled={loading}
+                        >
+                            {loading ? (
+                                <>
+                                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                    Memadam...
+                                </>
+                            ) : "Ya, Padam Pelajar"}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }
