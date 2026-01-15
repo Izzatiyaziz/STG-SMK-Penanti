@@ -1,44 +1,47 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
-  Trash2,
-  Backpack,
-  Plus,
-  Search,
-  RefreshCw,
-  Loader2,
-  Building2,
-  Filter,
-  SortAsc,
-  SortDesc,
-  Shield,
-  Clock,
-  Eye,
-  UserCheck,
-  Save,
+    Search,
+    RefreshCw,
+    Loader2,
+    Building2,
+    Filter,
+    SortAsc,
+    SortDesc,
+    Shield,
+    Clock,
+    Plus,
+    Backpack,
+    Users,
+    ChevronRight,
+    X,
+    AlertCircle,
+    CheckCircle2,
 } from "lucide-react";
 
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
+    Table,
+    TableBody,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow,
 } from "@/components/ui/table";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+    DialogTrigger,
+    DialogClose,
 } from "@/components/ui/dialog";
 
 import { Label } from "@/components/ui/label";
@@ -46,710 +49,776 @@ import { toast } from "sonner";
 import { ClassItem } from "@/app/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
+import {
+    Tooltip,
+    TooltipContent,
+    TooltipProvider,
+    TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
 } from "@/components/ui/select";
 
 // ======================= TIME COMPONENT =======================
 const LastUpdatedTime = () => {
-  const [time, setTime] = useState<string>("");
+    const [time, setTime] = useState<string>("");
 
-  useEffect(() => {
-    const update = () =>
-      setTime(
-        new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-      );
+    useEffect(() => {
+        const update = () =>
+            setTime(
+                new Date().toLocaleTimeString([], {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                })
+            );
 
-    update();
-    const interval = setInterval(update, 60000);
-    return () => clearInterval(interval);
-  }, []);
+        update();
+        const interval = setInterval(update, 60000);
+        return () => clearInterval(interval);
+    }, []);
 
-  return (
-    <span className="font-medium text-primary">{time || "Loading..."}</span>
-  );
-};
-
-// ======================= DETECT TINGKATAN FROM IC =======================
-const getTingkatanFromIC = (ic: string) => {
-  const clean = (ic || "").replace(/[^0-9]/g, "");
-  if (clean.length < 2) return "Tidak pasti";
-
-  const yy = parseInt(clean.slice(0, 2), 10);
-  if (Number.isNaN(yy)) return "Tidak pasti";
-
-  const currentYear = new Date().getFullYear();
-  const currentYY = currentYear % 100;
-
-  const birthYear = yy <= currentYY ? 2000 + yy : 1900 + yy;
-  const age = currentYear - birthYear;
-
-  const tingkatan = age - 12;
-
-  if (tingkatan >= 1 && tingkatan <= 5) return `Tingkatan ${tingkatan}`;
-  return "Tidak pasti";
+    return (
+        <span className="font-medium text-primary/90">
+            {time || "Loading..."}
+        </span>
+    );
 };
 
 type ClassWithCount = ClassItem & { studentCount?: number };
 
-type TeacherItem = {
-  id: string;
-  name: string;
-  email?: string | null;
-  roles?: string[];
-};
-
 export default function ClassesPage() {
-  const [classes, setClasses] = useState<ClassWithCount[]>([]);
-  const [loading, setLoading] = useState(false);
+    const router = useRouter();
+    const [classes, setClasses] = useState<ClassWithCount[]>([]);
+    const [loading, setLoading] = useState(false);
+    const [isAdding, setIsAdding] = useState(false);
 
-  // ✅ Details modal (Assign + Edit + Delete)
-  const [detailsClass, setDetailsClass] = useState<ClassItem | null>(null);
+    // Filter states
+    const [searchQuery, setSearchQuery] = useState("");
+    const [sortBy, setSortBy] = useState<"name" | "studentCount">("name");
+    const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
+    const [selectedGrade, setSelectedGrade] = useState<number>(1);
+    const [activeTab, setActiveTab] = useState<string>("all");
 
-  const [teachers, setTeachers] = useState<TeacherItem[]>([]);
-  const [loadingTeachers, setLoadingTeachers] = useState(false);
-  const [selectedTeacherId, setSelectedTeacherId] = useState<string>("");
+    // ================= FETCH CLASSES =================
+    async function fetchClasses() {
+        setLoading(true);
+        try {
+            const res = await fetch("/api/admin/classes");
+            const classData: ClassItem[] = await res.json();
 
-  // ✅ edit class name inside modal
-  const [editingName, setEditingName] = useState("");
+            const studentRes = await fetch("/api/admin/users?role=student");
+            const allStudents = await studentRes.json();
 
-  const [searchQuery, setSearchQuery] = useState("");
-  const [sortBy, setSortBy] = useState<"name" | "studentCount">("name");
-  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
+            const updated: ClassWithCount[] = classData
+                .filter((cls) => cls.grade === selectedGrade)
+                .map((cls) => {
+                    const studentCount = (allStudents || []).filter(
+                        (s: any) => s.class_id === cls.id
+                    ).length;
+                    return {
+                        ...cls,
+                        studentCount,
+                    };
+                });
 
-  // ✅ FILTER TINGKATAN
-  const [selectedTingkatan, setSelectedTingkatan] =
-    useState<string>("Tingkatan 5");
-
-  // ================= FETCH CLASSES + STUDENT TALLY =================
-  async function fetchClasses() {
-    setLoading(true);
-
-    try {
-      const res = await fetch("/api/admin/classes");
-      const classData: ClassItem[] = await res.json();
-
-      const studentRes = await fetch("/api/admin/users?role=student");
-      const allStudents = await studentRes.json();
-
-      const updated = classData.map((cls) => {
-        const count = (allStudents || []).filter((s: any) => {
-          const sameClass = s.className === cls.name;
-
-          const tingkatanStudent = getTingkatanFromIC(s.identifier);
-          const sameTingkatan =
-            selectedTingkatan === "Tingkatan 5" ||
-            tingkatanStudent === selectedTingkatan;
-
-          return sameClass && sameTingkatan;
-        }).length;
-
-        return { ...cls, studentCount: count };
-      });
-
-      setClasses(updated);
-    } catch (err) {
-      console.error("FETCH CLASSES ERROR:", err);
-      toast.error("Gagal memuatkan senarai kelas");
-    } finally {
-      setLoading(false);
+            setClasses(updated);
+        } catch (err) {
+            console.error("FETCH CLASSES ERROR:", err);
+            toast.error("Gagal memuatkan senarai kelas", {
+                description: "Sila cuba sebentar lagi",
+            });
+        } finally {
+            setLoading(false);
+        }
     }
-  }
 
-  useEffect(() => {
-    fetchClasses();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    useEffect(() => {
+        fetchClasses();
+    }, [selectedGrade]);
 
-  useEffect(() => {
-    fetchClasses();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedTingkatan]);
+    // ================= FILTER + SORT =================
+    const filteredClasses = useMemo(() => {
+        let filtered = classes.filter((cls) =>
+            cls.name.toLowerCase().includes(searchQuery.toLowerCase())
+        );
 
-  // ================= FILTER + SORT =================
-  const filteredClasses = useMemo(() => {
-    return classes
-      .filter((cls) =>
-        cls.name.toLowerCase().includes(searchQuery.toLowerCase())
-      )
-      .sort((a, b) => {
-        let compareA: any;
-        let compareB: any;
-
-        if (sortBy === "name") {
-          compareA = a.name.toLowerCase();
-          compareB = b.name.toLowerCase();
-        } else {
-          compareA = a.studentCount || 0;
-          compareB = b.studentCount || 0;
+        // Filter by active tab
+        if (activeTab === "withStudents") {
+            filtered = filtered.filter((cls) => (cls.studentCount || 0) > 0);
+        } else if (activeTab === "empty") {
+            filtered = filtered.filter((cls) => (cls.studentCount || 0) === 0);
         }
 
-        if (sortOrder === "asc") return compareA > compareB ? 1 : -1;
-        return compareA < compareB ? 1 : -1;
-      });
-  }, [classes, searchQuery, sortBy, sortOrder]);
+        return filtered.sort((a, b) => {
+            let compareA: any;
+            let compareB: any;
 
-  // ================= ✅ FETCH ONLY CLASS TEACHERS =================
-  async function fetchAllTeachers() {
-    setLoadingTeachers(true);
-    try {
-      const res = await fetch("/api/admin/users?role=teacher");
-      const data = await res.json();
+            if (sortBy === "name") {
+                compareA = a.name.toLowerCase();
+                compareB = b.name.toLowerCase();
+            } else {
+                compareA = a.studentCount || 0;
+                compareB = b.studentCount || 0;
+            }
 
-      if (!res.ok) {
-        toast.error(data?.error || "Gagal memuatkan senarai guru");
-        return;
-      }
+            if (sortOrder === "asc") return compareA > compareB ? 1 : -1;
+            return compareA < compareB ? 1 : -1;
+        });
+    }, [classes, searchQuery, sortBy, sortOrder, activeTab]);
 
-      // ✅ keep only teachers with role "class teacher"
-      const onlyClassTeachers: TeacherItem[] = (data || [])
-        .filter(
-          (t: any) => Array.isArray(t.roles) && t.roles.includes("class teacher")
-        )
-        .map((t: any) => ({
-          id: t.id,
-          name: t.name,
-          email: t.email ?? null,
-          roles: t.roles ?? [],
-        }));
+    // ================= ADD CLASS =================
+    async function handleAddClass(e: React.FormEvent<HTMLFormElement>) {
+        e.preventDefault();
+        setIsAdding(true);
 
-      setTeachers(onlyClassTeachers);
-    } catch {
-      toast.error("Gagal memuatkan senarai guru");
-    } finally {
-      setLoadingTeachers(false);
-    }
-  }
+        const formData = new FormData(e.currentTarget);
+        const className = formData.get("class_name") as string;
+        const trimmedName = className.trim();
 
-  // ================= OPEN DETAILS MODAL =================
-  async function openDetails(cls: ClassItem) {
-    setDetailsClass(cls);
-    setEditingName(cls.name); // ✅ load name into edit input
+        if (!trimmedName) {
+            toast.error("Sila masukkan nama kelas");
+            setIsAdding(false);
+            return;
+        }
 
-    // ✅ load teachers list first
-    await fetchAllTeachers();
+        try {
+            const res = await fetch("/api/admin/classes", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    class_name: trimmedName,
+                }),
+            });
 
-    // ✅ fetch current assignment for this class
-    try {
-      const res = await fetch(`/api/admin/class-teacher?class_id=${cls.id}`);
-      const data = await res.json();
+            const data = await res.json();
 
-      if (data?.teacher_id) {
-        setSelectedTeacherId(data.teacher_id);
-      } else {
-        setSelectedTeacherId("");
-      }
-    } catch {
-      setSelectedTeacherId("");
-    }
-  }
+            if (!res.ok) {
+                toast.error(data.message || "Gagal menambah kelas");
+                return;
+            }
 
-  // ================= ASSIGN CLASS TEACHER =================
-  async function handleAssignClassTeacher() {
-    if (!detailsClass) return;
-
-    if (!selectedTeacherId) {
-      toast.error("Sila pilih guru untuk kelas ini");
-      return;
+            toast.success("Kelas berjaya ditambah", {
+                description: `${trimmedName} telah ditambah ke dalam sistem`,
+                icon: <CheckCircle2 className="h-4 w-4" />,
+            });
+            fetchClasses();
+            (
+                document.getElementById("close-add-dialog") as HTMLButtonElement
+            )?.click();
+            (e.target as HTMLFormElement).reset();
+        } catch {
+            toast.error("Ralat sistem. Sila cuba lagi.");
+        } finally {
+            setIsAdding(false);
+        }
     }
 
-    try {
-      const res = await fetch("/api/admin/class-teacher", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          class_id: detailsClass.id,
-          teacher_id: selectedTeacherId,
-        }),
-      });
+    // ================= TOGGLE SORT =================
+    const toggleSort = (field: "name" | "studentCount") => {
+        if (sortBy === field) {
+            setSortOrder(sortOrder === "asc" ? "desc" : "asc");
+        } else {
+            setSortBy(field);
+            setSortOrder("asc");
+        }
+    };
 
-      const data = await res.json();
+    // Calculate statistics
+    const totalStudents = useMemo(
+        () => classes.reduce((sum, cls) => sum + (cls.studentCount || 0), 0),
+        [classes]
+    );
 
-      if (!res.ok) {
-        toast.error(data?.error || "Gagal lantik guru kelas");
-        return;
-      }
+    const emptyClasses = useMemo(
+        () => classes.filter((cls) => (cls.studentCount || 0) === 0).length,
+        [classes]
+    );
 
-      toast.success("Guru kelas berjaya dilantik ✅");
-    } catch {
-      toast.error("Ralat sistem. Sila cuba lagi");
-    }
-  }
+    return (
+        <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/5 p-4 md:p-6">
+            <div className="max-w-7xl mx-auto space-y-6">
+                {/* HEADER */}
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div className="space-y-2">
+                        <div className="flex items-center gap-3">
+                            <div className="p-2.5 rounded-xl bg-gradient-to-br from-primary/10 to-primary/5 border border-primary/20">
+                                <Backpack className="w-6 h-6 text-primary" />
+                            </div>
+                            <div>
+                                <h1 className="text-2xl font-bold text-foreground tracking-tight">
+                                    Pengurusan Kelas
+                                </h1>
+                                <p className="text-muted-foreground font-medium mt-0.5">
+                                    Urus dan pantau semua kelas dalam sistem
+                                </p>
+                            </div>
+                        </div>
 
-  // ================= ✅ EDIT CLASS NAME (IN MODAL) =================
-  async function handleEditClassInModal() {
-    if (!detailsClass) return;
+                        <div className="flex items-center gap-3 text-sm text-muted-foreground">
+                            <div className="flex items-center gap-1.5">
+                                <Shield className="w-3.5 h-3.5" />
+                                <span>{classes.length} Kelas</span>
+                            </div>
+                            <div className="w-1 h-1 rounded-full bg-muted" />
+                            <div className="flex items-center gap-1.5">
+                                <Users className="w-3.5 h-3.5" />
+                                <span>{totalStudents} Pelajar</span>
+                            </div>
+                            <div className="w-1 h-1 rounded-full bg-muted" />
+                            <div className="flex items-center gap-1.5">
+                                <Clock className="w-3.5 h-3.5" />
+                                <span>
+                                    Kemas kini: <LastUpdatedTime />
+                                </span>
+                            </div>
+                        </div>
+                    </div>
 
-    if (!editingName.trim()) {
-      toast.error("Nama kelas tidak boleh kosong");
-      return;
-    }
+                    <div className="flex items-center gap-2">
+                        <TooltipProvider>
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <Button
+                                        variant="outline"
+                                        size="icon"
+                                        onClick={fetchClasses}
+                                        disabled={loading}
+                                        className="h-10 w-10 border-border/50 hover:bg-muted/50 transition-all duration-200"
+                                    >
+                                        {loading ? (
+                                            <Loader2 className="w-4 h-4 animate-spin" />
+                                        ) : (
+                                            <RefreshCw className="w-4 h-4" />
+                                        )}
+                                    </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                    <p>Refresh data</p>
+                                </TooltipContent>
+                            </Tooltip>
+                        </TooltipProvider>
 
-    try {
-      const res = await fetch("/api/admin/classes", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          class_id: detailsClass.id,
-          class_name: editingName.trim(),
-        }),
-      });
+                        {/* ADD CLASS */}
+                        <Dialog>
+                            <DialogTrigger asChild>
+                                <Button className="h-10 bg-gradient-to-r from-primary to-primary/90 hover:from-primary/90 hover:to-primary text-primary-foreground shadow-md hover:shadow-lg transition-all duration-200 group">
+                                    <Plus className="w-4 h-4 mr-2 group-hover:rotate-90 transition-transform duration-200" />
+                                    Tambah Kelas
+                                </Button>
+                            </DialogTrigger>
 
-      const data = await res.json();
+                            <DialogContent className="rounded-xl border-border/40 bg-card shadow-xl">
+                                <DialogHeader>
+                                    <div className="flex items-center justify-between">
+                                        <div>
+                                            <DialogTitle className="text-xl font-bold text-foreground">
+                                                Tambah Kelas Baharu
+                                            </DialogTitle>
+                                            <DialogDescription className="text-muted-foreground mt-1">
+                                                Masukkan nama kelas untuk
+                                                menambah ke dalam sistem.
+                                            </DialogDescription>
+                                        </div>
+                                        <DialogClose className="rounded-full p-1.5 hover:bg-muted transition-colors">
+                                            <X className="h-4 w-4" />
+                                        </DialogClose>
+                                    </div>
+                                </DialogHeader>
 
-      if (!res.ok) {
-        toast.error(data?.message || "Gagal mengemas kini kelas");
-        return;
-      }
+                                <form
+                                    onSubmit={handleAddClass}
+                                    className="space-y-5 pt-2"
+                                >
+                                    <div className="space-y-3">
+                                        <Label
+                                            htmlFor="class_name"
+                                            className="font-medium text-sm"
+                                        >
+                                            Nama Kelas
+                                        </Label>
+                                        <Input
+                                            id="class_name"
+                                            name="class_name"
+                                            placeholder="Contoh: Ibnu Sina"
+                                            required
+                                            autoFocus
+                                            className="rounded-lg h-11 border-border/60 focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
+                                        />
+                                        <p className="text-xs text-muted-foreground flex items-center gap-1">
+                                            <AlertCircle className="w-3 h-3" />
+                                            Nama kelas akan ditambah ke
+                                            Tingkatan {selectedGrade}
+                                        </p>
+                                    </div>
 
-      toast.success("Kelas berjaya dikemas kini ✅");
+                                    <DialogFooter className="pt-4 border-t border-border/30">
+                                        <DialogClose asChild>
+                                            <Button
+                                                type="button"
+                                                variant="outline"
+                                                className="rounded-lg h-10"
+                                            >
+                                                Batal
+                                            </Button>
+                                        </DialogClose>
+                                        <Button
+                                            type="submit"
+                                            disabled={isAdding}
+                                            className="rounded-lg h-10 bg-primary hover:bg-primary/90 min-w-24"
+                                        >
+                                            {isAdding ? (
+                                                <>
+                                                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                                    Menyimpan...
+                                                </>
+                                            ) : (
+                                                "Simpan Kelas"
+                                            )}
+                                        </Button>
+                                    </DialogFooter>
+                                </form>
+                            </DialogContent>
+                        </Dialog>
+                    </div>
+                </div>
 
-      // ✅ refresh list
-      await fetchClasses();
+                {/* STATS CARDS */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <Card className="border-border/40 bg-gradient-to-br from-card to-card/95 shadow-sm hover:shadow-md transition-shadow duration-300">
+                        <CardContent className="p-6">
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <p className="text-sm font-medium text-muted-foreground mb-1">
+                                        Jumlah Kelas
+                                    </p>
+                                    <p className="text-3xl font-bold text-foreground">
+                                        {classes.length}
+                                    </p>
+                                </div>
+                                <div className="p-3 rounded-full bg-primary/10">
+                                    <Building2 className="w-5 h-5 text-primary" />
+                                </div>
+                            </div>
+                            <Badge
+                                variant="outline"
+                                className="mt-3 border-primary/20 bg-primary/5"
+                            >
+                                Tingkatan {selectedGrade}
+                            </Badge>
+                        </CardContent>
+                    </Card>
 
-      // ✅ update modal current class name
-      setDetailsClass({
-        ...detailsClass,
-        name: editingName.trim(),
-      });
-    } catch {
-      toast.error("Ralat sistem. Sila cuba lagi");
-    }
-  }
+                    <Card className="border-border/40 bg-gradient-to-br from-card to-card/95 shadow-sm hover:shadow-md transition-shadow duration-300">
+                        <CardContent className="p-6">
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <p className="text-sm font-medium text-muted-foreground mb-1">
+                                        Jumlah Pelajar
+                                    </p>
+                                    <p className="text-3xl font-bold text-foreground">
+                                        {totalStudents}
+                                    </p>
+                                </div>
+                                <div className="p-3 rounded-full bg-green-500/10">
+                                    <Users className="w-5 h-5 text-green-600" />
+                                </div>
+                            </div>
+                            <p className="text-xs text-muted-foreground mt-3">
+                                Purata{" "}
+                                {classes.length > 0
+                                    ? Math.round(totalStudents / classes.length)
+                                    : 0}{" "}
+                                pelajar/kelas
+                            </p>
+                        </CardContent>
+                    </Card>
 
-  // ================= ✅ DELETE CLASS (IN MODAL) =================
-  async function handleDeleteClassInModal() {
-    if (!detailsClass) return;
+                    <Card className="border-border/40 bg-gradient-to-br from-card to-card/95 shadow-sm hover:shadow-md transition-shadow duration-300">
+                        <CardContent className="p-6">
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <p className="text-sm font-medium text-muted-foreground mb-1">
+                                        Kelas Kosong
+                                    </p>
+                                    <p className="text-3xl font-bold text-foreground">
+                                        {emptyClasses}
+                                    </p>
+                                </div>
+                                <div className="p-3 rounded-full bg-amber-500/10">
+                                    <AlertCircle className="w-5 h-5 text-amber-600" />
+                                </div>
+                            </div>
+                            <p className="text-xs text-muted-foreground mt-3">
+                                {classes.length > 0
+                                    ? Math.round(
+                                          (emptyClasses / classes.length) * 100
+                                      )
+                                    : 0}
+                                % dari total
+                            </p>
+                        </CardContent>
+                    </Card>
+                </div>
 
-    try {
-      const res = await fetch(`/api/admin/classes?id=${detailsClass.id}`, {
-        method: "DELETE",
-      });
+                {/* MAIN CARD */}
+                <Card className="border-border/40 bg-gradient-to-br from-card to-card/95 rounded-2xl shadow-lg overflow-hidden">
+                    <CardHeader className="border-b border-border/30 bg-gradient-to-r from-card/95 to-card/90 px-6 py-5">
+                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                            <div>
+                                <CardTitle className="text-lg font-bold text-foreground flex items-center gap-2">
+                                    <Filter className="w-4 h-4 text-primary" />
+                                    Senarai Kelas Tingkatan {selectedGrade}
+                                </CardTitle>
+                                <p className="text-sm text-muted-foreground mt-1">
+                                    Klik pada nama kelas untuk melihat butiran
+                                    lanjut
+                                </p>
+                            </div>
 
-      const data = await res.json();
+                            <Badge
+                                variant="outline"
+                                className="border-primary/30 bg-primary/5 text-primary font-medium"
+                            >
+                                {filteredClasses.length} kelas ditemui
+                            </Badge>
+                        </div>
+                    </CardHeader>
 
-      if (!res.ok) {
-        toast.error(data?.message || "Gagal memadam kelas");
-        return;
-      }
+                    <CardContent className="p-6">
+                        {/* FILTERS */}
+                        <div className="space-y-4 mb-6">
+                            <div className="flex flex-col lg:flex-row gap-4">
+                                <div className="flex-1 relative">
+                                    <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                                    <Input
+                                        placeholder="Cari kelas mengikut nama..."
+                                        value={searchQuery}
+                                        onChange={(e) =>
+                                            setSearchQuery(e.target.value)
+                                        }
+                                        className="pl-11 h-11 rounded-lg border-border/60 bg-background focus:border-primary focus:ring-2 focus:ring-primary/20"
+                                    />
+                                    {searchQuery && (
+                                        <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            onClick={() => setSearchQuery("")}
+                                            className="absolute right-2 top-1/2 -translate-y-1/2 h-7 w-7"
+                                        >
+                                            <X className="h-3.5 w-3.5" />
+                                        </Button>
+                                    )}
+                                </div>
 
-      toast.success("Kelas berjaya dipadam ✅");
-      setDetailsClass(null);
-      fetchClasses();
-    } catch {
-      toast.error("Ralat sistem. Sila cuba lagi");
-    }
-  }
+                                <Select
+                                    value={String(selectedGrade)}
+                                    onValueChange={(v) =>
+                                        setSelectedGrade(Number(v))
+                                    }
+                                >
+                                    <SelectTrigger className="h-11 rounded-lg border-border/60 bg-background min-w-[180px]">
+                                        <SelectValue placeholder="Pilih Tingkatan" />
+                                    </SelectTrigger>
+                                    <SelectContent className="rounded-lg border-border/60">
+                                        {[1, 2, 3, 4, 5].map((grade) => (
+                                            <SelectItem
+                                                key={grade}
+                                                value={String(grade)}
+                                                className="focus:bg-primary/10"
+                                            >
+                                                Tingkatan {grade}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
 
-  // ================= ADD CLASS =================
-  async function handleAddClass(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    setLoading(true);
+                            {/* TABS */}
+                            <Tabs
+                                value={activeTab}
+                                onValueChange={setActiveTab}
+                                className="w-full"
+                            >
+                                <TabsList className="inline-flex h-10 items-center justify-center rounded-lg bg-muted/50 p-1">
+                                    <TabsTrigger
+                                        value="all"
+                                        className="rounded-md data-[state=active]:bg-background"
+                                    >
+                                        Semua Kelas
+                                    </TabsTrigger>
+                                    <TabsTrigger
+                                        value="withStudents"
+                                        className="rounded-md data-[state=active]:bg-background"
+                                    >
+                                        Ada Pelajar
+                                    </TabsTrigger>
+                                    <TabsTrigger
+                                        value="empty"
+                                        className="rounded-md data-[state=active]:bg-background"
+                                    >
+                                        Kosong
+                                    </TabsTrigger>
+                                </TabsList>
+                            </Tabs>
+                        </div>
 
-    const formData = new FormData(e.currentTarget);
+                        {/* TABLE */}
+                        <div className="rounded-xl border border-border/60 overflow-hidden shadow-sm">
+                            <div className="overflow-x-auto">
+                                <Table>
+                                    <TableHeader className="bg-gradient-to-r from-muted/20 to-muted/10">
+                                        <TableRow className="hover:bg-transparent border-b border-border/60">
+                                            <TableHead className="w-14 text-center font-semibold text-muted-foreground">
+                                                #
+                                            </TableHead>
 
-    try {
-      const res = await fetch("/api/admin/classes", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          class_name: formData.get("class_name"),
-        }),
-      });
+                                            <TableHead>
+                                                <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    onClick={() =>
+                                                        toggleSort("name")
+                                                    }
+                                                    className="px-3 h-9 font-semibold hover:bg-muted/50 transition-colors rounded-lg"
+                                                >
+                                                    Nama Kelas
+                                                    {sortBy === "name" ? (
+                                                        sortOrder === "asc" ? (
+                                                            <SortAsc className="w-3.5 h-3.5 ml-2" />
+                                                        ) : (
+                                                            <SortDesc className="w-3.5 h-3.5 ml-2" />
+                                                        )
+                                                    ) : (
+                                                        <SortAsc className="w-3.5 h-3.5 ml-2 opacity-30" />
+                                                    )}
+                                                </Button>
+                                            </TableHead>
 
-      const data = await res.json();
+                                            <TableHead>
+                                                <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    onClick={() =>
+                                                        toggleSort(
+                                                            "studentCount"
+                                                        )
+                                                    }
+                                                    className="px-3 h-9 font-semibold hover:bg-muted/50 transition-colors rounded-lg"
+                                                >
+                                                    Bilangan Pelajar
+                                                    {sortBy ===
+                                                    "studentCount" ? (
+                                                        sortOrder === "asc" ? (
+                                                            <SortAsc className="w-3.5 h-3.5 ml-2" />
+                                                        ) : (
+                                                            <SortDesc className="w-3.5 h-3.5 ml-2" />
+                                                        )
+                                                    ) : (
+                                                        <SortAsc className="w-3.5 h-3.5 ml-2 opacity-30" />
+                                                    )}
+                                                </Button>
+                                            </TableHead>
 
-      if (!res.ok) {
-        toast.error(data.message || "Gagal menambah kelas");
-        return;
-      }
+                                            <TableHead className="w-24 text-center font-semibold text-muted-foreground">
+                                                Tindakan
+                                            </TableHead>
+                                        </TableRow>
+                                    </TableHeader>
 
-      toast.success("Kelas berjaya ditambah ✅");
-      fetchClasses();
+                                    <TableBody>
+                                        {loading ? (
+                                            <TableRow>
+                                                <TableCell
+                                                    colSpan={4}
+                                                    className="py-12 text-center"
+                                                >
+                                                    <div className="flex flex-col items-center gap-4">
+                                                        <div className="relative">
+                                                            <div className="h-12 w-12 rounded-full border-2 border-primary/20"></div>
+                                                            <Loader2 className="w-12 h-12 animate-spin text-primary absolute inset-0 m-auto" />
+                                                        </div>
+                                                        <div className="space-y-1">
+                                                            <p className="font-medium text-foreground">
+                                                                Memuatkan
+                                                                senarai kelas...
+                                                            </p>
+                                                            <p className="text-sm text-muted-foreground">
+                                                                Sila tunggu
+                                                                sebentar
+                                                            </p>
+                                                        </div>
+                                                    </div>
+                                                </TableCell>
+                                            </TableRow>
+                                        ) : filteredClasses.length === 0 ? (
+                                            <TableRow>
+                                                <TableCell
+                                                    colSpan={4}
+                                                    className="py-12 text-center"
+                                                >
+                                                    <div className="flex flex-col items-center gap-4 max-w-sm mx-auto">
+                                                        <div className="p-4 rounded-full bg-muted/30">
+                                                            <Search className="w-8 h-8 text-muted-foreground" />
+                                                        </div>
+                                                        <div className="space-y-1">
+                                                            <p className="font-medium text-foreground">
+                                                                Tiada kelas
+                                                                dijumpai
+                                                            </p>
+                                                            <p className="text-sm text-muted-foreground">
+                                                                {searchQuery
+                                                                    ? `Tiada hasil untuk "${searchQuery}" dalam tingkatan ${selectedGrade}`
+                                                                    : activeTab ===
+                                                                      "empty"
+                                                                    ? "Tiada kelas kosong dalam tingkatan ini"
+                                                                    : "Tiada kelas dalam tingkatan ini"}
+                                                            </p>
+                                                        </div>
+                                                        {(searchQuery ||
+                                                            activeTab !==
+                                                                "all") && (
+                                                            <Button
+                                                                variant="outline"
+                                                                onClick={() => {
+                                                                    setSearchQuery(
+                                                                        ""
+                                                                    );
+                                                                    setActiveTab(
+                                                                        "all"
+                                                                    );
+                                                                }}
+                                                                className="mt-2"
+                                                            >
+                                                                <X className="w-3.5 h-3.5 mr-2" />
+                                                                Padam semua
+                                                                penapis
+                                                            </Button>
+                                                        )}
+                                                    </div>
+                                                </TableCell>
+                                            </TableRow>
+                                        ) : (
+                                            filteredClasses.map(
+                                                (cls, index) => (
+                                                    <TableRow
+                                                        key={cls.id}
+                                                        className="group hover:bg-gradient-to-r hover:from-primary/5 hover:to-primary/2 transition-all duration-200 border-border/40"
+                                                    >
+                                                        <TableCell className="text-center font-medium text-muted-foreground">
+                                                            {index + 1}
+                                                        </TableCell>
 
-      (document.getElementById("close-add-dialog") as HTMLButtonElement)?.click();
-    } catch {
-      toast.error("Ralat sistem. Sila cuba lagi.");
-    } finally {
-      setLoading(false);
-    }
-  }
+                                                        <TableCell>
+                                                            <div className="flex items-center gap-3">
+                                                                <div className="p-2 rounded-lg bg-gradient-to-br from-primary/10 to-primary/5 border border-primary/20">
+                                                                    <Building2 className="w-4 h-4 text-primary" />
+                                                                </div>
+                                                                <div className="flex flex-col">
+                                                                    <button
+                                                                        onClick={() =>
+                                                                            router.push(
+                                                                                `/admin/classes/${cls.id}`
+                                                                            )
+                                                                        }
+                                                                        className="font-semibold text-foreground hover:text-primary transition-colors text-left flex items-center gap-2 group/btn"
+                                                                    >
+                                                                        {
+                                                                            cls.name
+                                                                        }
+                                                                        <ChevronRight className="w-3.5 h-3.5 opacity-0 group-hover/btn:opacity-100 translate-x-[-4px] group-hover/btn:translate-x-0 transition-all" />
+                                                                    </button>
+                                                                    <Badge
+                                                                        variant="outline"
+                                                                        className="mt-1 w-fit text-xs rounded-full border-primary/20 bg-primary/5"
+                                                                    >
+                                                                        Tingkatan{" "}
+                                                                        {
+                                                                            cls.grade
+                                                                        }
+                                                                    </Badge>
+                                                                </div>
+                                                            </div>
+                                                        </TableCell>
 
-  // ================= TOGGLE SORT =================
-  const toggleSort = (field: "name" | "studentCount") => {
-    if (sortBy === field) {
-      setSortOrder(sortOrder === "asc" ? "desc" : "asc");
-    } else {
-      setSortBy(field);
-      setSortOrder("asc");
-    }
-  };
+                                                        <TableCell>
+                                                            <div className="flex items-center gap-3">
+                                                                <div
+                                                                    className={`px-3 py-1.5 rounded-lg ${
+                                                                        cls.studentCount &&
+                                                                        cls.studentCount >
+                                                                            0
+                                                                            ? "bg-green-500/10 text-green-700"
+                                                                            : "bg-amber-500/10 text-amber-700"
+                                                                    }`}
+                                                                >
+                                                                    <div className="flex items-center gap-2">
+                                                                        <Users className="w-3.5 h-3.5" />
+                                                                        <span className="font-semibold">
+                                                                            {cls.studentCount ||
+                                                                                0}
+                                                                        </span>
+                                                                    </div>
+                                                                </div>
+                                                                <span className="text-sm text-muted-foreground">
+                                                                    pelajar
+                                                                </span>
+                                                            </div>
+                                                        </TableCell>
 
-  return (
-    <div className="min-h-screen bg-background p-4 md:p-6">
-      <div className="max-w-7xl mx-auto space-y-8">
-        {/* HEADER */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
-          <div className="space-y-3">
-            <div className="flex items-center gap-4">
-              <div className="p-3 rounded-2xl bg-gradient-to-br from-primary/10 to-primary/5 border border-primary/20 shadow-sm">
-                <Backpack className="w-7 h-7 text-primary" />
-              </div>
-              <div>
-                <h1 className="text-xl font-bold text-foreground">
-                  Pengurusan Kelas
-                </h1>
-                <p className="text-muted-foreground font-medium mt-1">
-                  Klik nama kelas untuk lantik guru kelas / edit / delete.
-                </p>
-              </div>
+                                                        <TableCell>
+                                                            <div className="flex justify-center">
+                                                                <Button
+                                                                    variant="ghost"
+                                                                    size="sm"
+                                                                    onClick={() =>
+                                                                        router.push(
+                                                                            `/admin/classes/${cls.id}`
+                                                                        )
+                                                                    }
+                                                                    className="h-8 px-3 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200"
+                                                                >
+                                                                    Lihat
+                                                                </Button>
+                                                            </div>
+                                                        </TableCell>
+                                                    </TableRow>
+                                                )
+                                            )
+                                        )}
+                                    </TableBody>
+                                </Table>
+                            </div>
+                        </div>
+
+                        {/* FOOTER INFO */}
+                        {filteredClasses.length > 0 && (
+                            <div className="mt-6 pt-4 border-t border-border/40 flex items-center justify-between text-sm text-muted-foreground">
+                                <p>
+                                    Menunjukkan{" "}
+                                    <span className="font-medium text-foreground">
+                                        {filteredClasses.length}
+                                    </span>{" "}
+                                    dari{" "}
+                                    <span className="font-medium text-foreground">
+                                        {classes.length}
+                                    </span>{" "}
+                                    kelas
+                                </p>
+                                <p className="flex items-center gap-1">
+                                    <Clock className="w-3.5 h-3.5" />
+                                    Dikemaskini: <LastUpdatedTime />
+                                </p>
+                            </div>
+                        )}
+                    </CardContent>
+                </Card>
             </div>
-
-            <div className="flex items-center gap-3 text-sm text-muted-foreground">
-              <Shield className="w-3.5 h-3.5" />
-              <span>Data Terurus</span>
-              <div className="w-1 h-1 rounded-full bg-muted" />
-              <Clock className="w-3.5 h-3.5" />
-              <span>
-                Kemas kini: <LastUpdatedTime />
-              </span>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <Button
-              variant="outline"
-              onClick={fetchClasses}
-              disabled={loading}
-              className="border-border hover:bg-accent"
-            >
-              {loading ? (
-                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-              ) : (
-                <RefreshCw className="w-4 h-4 mr-2" />
-              )}
-              Refresh
-            </Button>
-
-            {/* ADD CLASS */}
-            <Dialog>
-              <DialogTrigger asChild>
-                <Button className="bg-primary hover:bg-primary/90 text-primary-foreground">
-                  <Plus className="w-4 h-4 mr-2" />
-                  Tambah Kelas
-                </Button>
-              </DialogTrigger>
-
-              <DialogContent className="rounded-lg border-border">
-                <DialogHeader>
-                  <DialogTitle className="text-lg font-semibold">
-                    Tambah Kelas Baharu
-                  </DialogTitle>
-                  <DialogDescription className="text-muted-foreground">
-                    Masukkan nama kelas untuk menambah kelas baharu dalam sistem.
-                  </DialogDescription>
-                </DialogHeader>
-
-                <form onSubmit={handleAddClass} className="space-y-4 pt-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="class_name" className="font-medium">
-                      Nama Kelas
-                    </Label>
-                    <Input
-                      id="class_name"
-                      name="class_name"
-                      placeholder="Contoh: Ibnu Sina"
-                      required
-                    />
-                  </div>
-
-                  <DialogFooter className="pt-4">
-                    <Button
-                      id="close-add-dialog"
-                      type="button"
-                      variant="outline"
-                    >
-                      Batal
-                    </Button>
-                    <Button type="submit" disabled={loading}>
-                      {loading ? "Menyimpan..." : "Simpan"}
-                    </Button>
-                  </DialogFooter>
-                </form>
-              </DialogContent>
-            </Dialog>
-          </div>
         </div>
-
-        {/* MAIN CARD */}
-        <Card className="border-border bg-card shadow-md rounded-xl overflow-hidden">
-          <CardHeader className="border-b border-border bg-gradient-to-r from-card to-card/80 px-6 py-5">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-              <div>
-                <CardTitle className="text-xl font-bold text-foreground flex items-center gap-2">
-                  <Filter className="w-5 h-5 text-primary" />
-                  Senarai Kelas
-                </CardTitle>
-                <p className="text-sm text-muted-foreground mt-1">
-                  Paparan pelajar mengikut tingkatan yang dipilih.
-                </p>
-              </div>
-
-              <Badge
-                variant="outline"
-                className="border-primary/30 bg-primary/5 text-primary font-medium"
-              >
-                {filteredClasses.length} kelas ditemui
-              </Badge>
-            </div>
-          </CardHeader>
-
-          <CardContent className="p-6">
-            {/* SEARCH + FILTER */}
-            <div className="flex flex-col lg:flex-row gap-4 mb-6">
-              <div className="flex-1 relative">
-                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input
-                  placeholder="Cari kelas..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-10 h-11 rounded-lg border-border bg-background"
-                />
-              </div>
-
-              <Select
-                value={selectedTingkatan}
-                onValueChange={setSelectedTingkatan}
-              >
-                <SelectTrigger className="h-11 rounded-lg border-border bg-background w-full sm:w-[220px]">
-                  <SelectValue placeholder="Pilih Tingkatan" />
-                </SelectTrigger>
-                <SelectContent className="rounded-lg border-border">
-                  <SelectItem value="Tingkatan 1">Tingkatan 1</SelectItem>
-                  <SelectItem value="Tingkatan 2">Tingkatan 2</SelectItem>
-                  <SelectItem value="Tingkatan 3">Tingkatan 3</SelectItem>
-                  <SelectItem value="Tingkatan 4">Tingkatan 4</SelectItem>
-                  <SelectItem value="Tingkatan 5">Tingkatan 5</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* TABLE */}
-            <div className="rounded-lg border border-border overflow-hidden">
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader className="bg-muted/30">
-                    <TableRow className="hover:bg-transparent border-b border-border">
-                      <TableHead className="w-16 text-center">#</TableHead>
-
-                      <TableHead>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => toggleSort("name")}
-                          className="p-0 h-auto font-semibold hover:bg-transparent"
-                        >
-                          Nama Kelas
-                          {sortBy === "name" &&
-                            (sortOrder === "asc" ? (
-                              <SortAsc className="w-3.5 h-3.5 ml-1" />
-                            ) : (
-                              <SortDesc className="w-3.5 h-3.5 ml-1" />
-                            ))}
-                        </Button>
-                      </TableHead>
-
-                      <TableHead>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => toggleSort("studentCount")}
-                          className="p-0 h-auto font-semibold hover:bg-transparent"
-                        >
-                          Bilangan Pelajar
-                          {sortBy === "studentCount" &&
-                            (sortOrder === "asc" ? (
-                              <SortAsc className="w-3.5 h-3.5 ml-1" />
-                            ) : (
-                              <SortDesc className="w-3.5 h-3.5 ml-1" />
-                            ))}
-                        </Button>
-                      </TableHead>
-                    </TableRow>
-                  </TableHeader>
-
-                  <TableBody>
-                    {loading ? (
-                      <TableRow>
-                        <TableCell colSpan={3} className="py-16 text-center">
-                          <Loader2 className="w-8 h-8 animate-spin text-primary inline" />
-                        </TableCell>
-                      </TableRow>
-                    ) : filteredClasses.length === 0 ? (
-                      <TableRow>
-                        <TableCell colSpan={3} className="py-16 text-center">
-                          Tiada kelas dijumpai
-                        </TableCell>
-                      </TableRow>
-                    ) : (
-                      filteredClasses.map((cls, index) => (
-                        <TableRow key={cls.id} className="hover:bg-muted/50">
-                          <TableCell className="text-center">
-                            {index + 1}
-                          </TableCell>
-
-                          <TableCell
-                            className="font-semibold text-primary cursor-pointer hover:underline"
-                            onClick={() => openDetails(cls)}
-                          >
-                            <div className="flex items-center gap-2">
-                              <Building2 className="w-4 h-4" />
-                              {cls.name}
-                            </div>
-                          </TableCell>
-
-                          <TableCell>
-                            <div className="flex items-center gap-3">
-                              <div className="text-foreground font-semibold">
-                                {cls.studentCount || 0}
-                              </div>
-                              <div className="w-24">
-                                <Progress
-                                  value={(cls.studentCount || 0) * 3.33}
-                                  className="h-1.5 bg-muted"
-                                />
-                              </div>
-                              <span className="text-xs text-muted-foreground">
-                                pelajar
-                              </span>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      ))
-                    )}
-                  </TableBody>
-                </Table>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* ✅ DETAILS MODAL (ASSIGN + EDIT + DELETE) */}
-        <Dialog
-          open={!!detailsClass}
-          onOpenChange={(open) => {
-            if (!open) setDetailsClass(null);
-          }}
-        >
-          <DialogContent className="rounded-xl max-w-lg">
-            <DialogHeader>
-              <DialogTitle className="text-lg font-bold flex items-center gap-2">
-                <Eye className="w-5 h-5 text-primary" />
-                Maklumat Kelas
-              </DialogTitle>
-              <DialogDescription>
-                Anda boleh lantik guru kelas, edit nama kelas atau padam kelas.
-              </DialogDescription>
-            </DialogHeader>
-
-            <div className="space-y-5">
-              {/* CLASS NAME (EDITABLE) */}
-              <div className="space-y-2">
-                <Label className="text-sm font-medium">Nama Kelas</Label>
-                <Input
-                  value={editingName}
-                  onChange={(e) => setEditingName(e.target.value)}
-                />
-                <Button
-                  variant="outline"
-                  className="w-full gap-2"
-                  onClick={handleEditClassInModal}
-                >
-                  <Save className="w-4 h-4" />
-                  Simpan Nama Kelas
-                </Button>
-              </div>
-
-              {/* ASSIGN CLASS TEACHER */}
-              <div className="space-y-2">
-                <Label className="text-sm font-medium">
-                  Guru Kelas (Role: class teacher sahaja)
-                </Label>
-
-                <Select
-                  value={selectedTeacherId}
-                  onValueChange={setSelectedTeacherId}
-                >
-                  <SelectTrigger>
-                    <SelectValue
-                      placeholder={
-                        loadingTeachers ? "Memuatkan guru..." : "Pilih guru..."
-                      }
-                    />
-                  </SelectTrigger>
-
-                  <SelectContent>
-                    {loadingTeachers ? (
-                      <SelectItem value="__loading__" disabled>
-                        Memuatkan...
-                      </SelectItem>
-                    ) : teachers.length === 0 ? (
-                      <SelectItem value="__empty__" disabled>
-                        Tiada guru dengan role "class teacher"
-                      </SelectItem>
-                    ) : (
-                      teachers.map((t) => (
-                        <SelectItem key={t.id} value={t.id}>
-                          {t.name}
-                        </SelectItem>
-                      ))
-                    )}
-                  </SelectContent>
-                </Select>
-
-                <Button
-                  className="w-full gap-2"
-                  onClick={handleAssignClassTeacher}
-                >
-                  <UserCheck className="w-4 h-4" />
-                  Lantik Guru Kelas
-                </Button>
-              </div>
-
-              {/* DELETE */}
-              <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4">
-                <p className="text-sm font-semibold text-destructive">
-                  Padam Kelas
-                </p>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Tindakan ini tidak boleh dibatalkan.
-                </p>
-
-                <Button
-                  variant="destructive"
-                  className="w-full mt-3 gap-2"
-                  onClick={handleDeleteClassInModal}
-                >
-                  <Trash2 className="w-4 h-4" />
-                  Padam Kelas Ini
-                </Button>
-              </div>
-            </div>
-
-            <DialogFooter className="mt-4">
-              <Button variant="outline" onClick={() => setDetailsClass(null)}>
-                Tutup
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-      </div>
-    </div>
-  );
+    );
 }
