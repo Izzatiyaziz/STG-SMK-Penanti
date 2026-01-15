@@ -6,13 +6,12 @@ export const runtime = "nodejs";
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
-    const role = searchParams.get("role");
+    const role = searchParams.get("role"); 
+    // role can be: admin, student, teacher OR any role_name (principal, subject coordinator...)
 
     // ================= ADMIN =================
     if (role === "admin") {
-      const { data, error } = await supabase
-        .from("stg_admins")
-        .select("admin_id");
+      const { data, error } = await supabase.from("stg_admins").select("admin_id");
 
       if (error || !data) {
         console.error("ADMIN FETCH ERROR:", error);
@@ -29,44 +28,12 @@ export async function GET(req: Request) {
       );
     }
 
-    // ================= TEACHER =================
-        if (role === "teacher") {
-      const { data, error } = await supabase
-        .from("stg_teachers")
-        .select(`
-          teacher_id,
-          fullname,
-          email,
-          stg_teacher_roles (
-            stg_roles (
-              role_name
-            )
-          )
-        `);
-
-      if (error || !data) {
-        console.error("TEACHER FETCH ERROR:", error);
-        return NextResponse.json([], { status: 200 });
-      }
-
-      return NextResponse.json(
-        data.map((t: any) => ({
-          id: t.teacher_id,
-          name: t.fullname,
-          identifier: t.teacher_id,
-          email: t.email,
-          roles: t.stg_teacher_roles.map(
-            (tr: any) => tr.stg_roles.role_name
-          ),
-        }))
-      );
-    }
-
     // ================= STUDENT =================
     if (role === "student") {
       const { data, error } = await supabase
         .from("stg_students")
-        .select(`
+        .select(
+          `
           student_id,
           fullname,
           ic_number,
@@ -74,7 +41,8 @@ export async function GET(req: Request) {
             class_id,
             class_name
           )
-        `);
+        `
+        );
 
       if (error || !data) {
         console.error("STUDENT FETCH ERROR:", error);
@@ -90,6 +58,52 @@ export async function GET(req: Request) {
           className: s.class?.class_name ?? null,
         }))
       );
+    }
+
+    // ================= TEACHER (ALL or FILTER BY ROLE NAME) =================
+    // ✅ allow:
+    // role=teacher -> all teachers
+    // role=subject coordinator -> only coordinator teachers
+    // role=principal / class teacher / subject teacher -> filtered
+    if (role === "teacher" || role === "principal" || role === "class teacher" || role === "subject teacher" || role === "subject coordinator") {
+      const { data, error } = await supabase
+        .from("stg_teachers")
+        .select(
+          `
+          teacher_id,
+          fullname,
+          email,
+          stg_teacher_roles (
+            stg_roles (
+              role_name
+            )
+          )
+        `
+        );
+
+      if (error || !data) {
+        console.error("TEACHER FETCH ERROR:", error);
+        return NextResponse.json([], { status: 200 });
+      }
+
+      // ✅ format response (same as your existing)
+      let teachers = data.map((t: any) => ({
+        id: t.teacher_id,
+        name: t.fullname,
+        identifier: t.teacher_id,
+        email: t.email,
+        roles: (t.stg_teacher_roles || []).map(
+          (tr: any) => tr?.stg_roles?.role_name
+        ),
+      }));
+
+      // ✅ if role=teacher -> return all teachers (no filter)
+      if (role !== "teacher") {
+        // ✅ filter teacher by exact role name
+        teachers = teachers.filter((t: any) => t.roles.includes(role));
+      }
+
+      return NextResponse.json(teachers, { status: 200 });
     }
 
     return NextResponse.json([], { status: 200 });

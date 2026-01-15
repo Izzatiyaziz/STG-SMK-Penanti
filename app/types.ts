@@ -9,6 +9,15 @@ export type User = {
   } | null;
 };
 
+export interface TeacherItem {
+  id: string;
+  name: string;
+  email: string;
+  identifier: string;
+  phone?: string;
+  roles: string[];
+}
+
 export type StudentDashboardData = {
     className: string;
     classTeacher: string;
@@ -20,6 +29,7 @@ export type StudentDashboardData = {
 export type ClassItem = {
   id: string;
   name: string;
+  studentCount?: number;
 };
 
 export type SubjectItem = {
@@ -37,3 +47,9 @@ export type RoleItem = {
   role_id: string;
   role_name: string;
 }
+
+export type TeacherRoleItem = {
+  idx: number;
+  role_id: string;
+  role_name: string;
+};

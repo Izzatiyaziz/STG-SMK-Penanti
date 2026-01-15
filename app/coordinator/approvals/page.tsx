@@ -32,7 +32,7 @@ const submissions = [
     id: 1,
     subject: "Matematik",
     className: "2 Ibnu Majah",
-    teacher: "Cikgu Ali",
+    teacher: "Encik Ali bin Abu",
     submittedAt: "12 Jan 2026",
     status: "Pending",
     marks: [
@@ -45,7 +45,7 @@ const submissions = [
     id: 2,
     subject: "Matematik",
     className: "2 Ibnu Sina",
-    teacher: "Encik Tan",
+    teacher: "Encik Tan Bon Hong",
     submittedAt: "12 Jan 2026",
     status: "Pending",
     marks: [
@@ -57,7 +57,7 @@ const submissions = [
     id: 3,
     subject: "Matematik",
     className: "2 Ibnu Khaldun",
-    teacher: "Cikgu Siti",
+    teacher: "Pn. Siti Yusmiza binti Abdullah",
     submittedAt: "13 Jan 2026",
     status: "Pending",
     marks: [
@@ -70,7 +70,7 @@ const submissions = [
     id: 4,
     subject: "Matematik",
     className: "3 Ibnu Arif",
-    teacher: "Cikgu Ali",
+    teacher: "Encik Tan Bon Hong",
     submittedAt: "13 Jan 2026",
     status: "Approved",
     marks: [
@@ -82,7 +82,7 @@ const submissions = [
     id: 5,
     subject: "Matematik",
     className: "3 Ibnu Khaldun",
-    teacher: "Encik Tan",
+    teacher: "Pn. Siti Yusmiza binti Abdullah",
     submittedAt: "14 Jan 2026",
     status: "Rejected",
     marks: [

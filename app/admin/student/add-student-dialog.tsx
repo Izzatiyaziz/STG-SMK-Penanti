@@ -47,8 +47,6 @@ export function AddStudentDialog({
     const [formData, setFormData] = useState({
         fullname: "",
         ic_number: "",
-        password: "",
-        dob: "",
     });
 
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -63,8 +61,6 @@ export function AddStudentDialog({
         const payload = {
             fullname: formData.fullname,
             ic_number: formData.ic_number,
-            password: formData.password,
-            dob: formData.dob || null,
             class_id: selectedClass === "none" ? null : selectedClass,
         };
 
@@ -89,8 +85,6 @@ export function AddStudentDialog({
             setFormData({
                 fullname: "",
                 ic_number: "",
-                password: "",
-                dob: "",
             });
             setSelectedClass("none");
 
@@ -179,24 +173,6 @@ export function AddStudentDialog({
                                         className="rounded-xl border-2 border-border/30 focus:border-primary/50 h-11"
                                     />
                                 </div>
-
-                                <div className="space-y-2">
-                                    <Label
-                                        htmlFor="dob"
-                                        className="text-sm font-medium flex items-center gap-1"
-                                    >
-                                        <Calendar className="w-3 h-3" />
-                                        Tarikh Lahir
-                                    </Label>
-                                    <Input
-                                        id="dob"
-                                        name="dob"
-                                        type="date"
-                                        value={formData.dob}
-                                        onChange={handleInputChange}
-                                        className="rounded-xl border-2 border-border/30 focus:border-primary/50 h-11"
-                                    />
-                                </div>
                             </div>
                         </div>
                     </div>
@@ -233,9 +209,6 @@ export function AddStudentDialog({
                                             <div className="font-medium">
                                                 Belum Ditetapkan
                                             </div>
-                                            <div className="text-xs text-muted-foreground">
-                                                Boleh ditetapkan kemudian
-                                            </div>
                                         </div>
                                     </SelectItem>
                                     {classes.map((cls) => (
@@ -248,32 +221,27 @@ export function AddStudentDialog({
                                                 <div className="font-medium">
                                                     {cls.name}
                                                 </div>
-                                                <div className="text-xs text-muted-foreground">
-                                                    Kelas {cls.name}
-                                                </div>
                                             </div>
                                         </SelectItem>
                                     ))}
                                 </SelectContent>
                             </Select>
 
-                            {selectedClass !== "none" &&
-                                classes.find((c) => c.id === selectedClass) && (
-                                    <div className="mt-2 p-2 rounded-lg bg-secondary/10 border border-secondary/20">
-                                        <p className="text-xs text-secondary">
-                                            📍 Kelas terpilih:{" "}
-                                            <span className="font-semibold">
-                                                {
-                                                    classes.find(
-                                                        (c) =>
-                                                            c.id ===
-                                                            selectedClass
-                                                    )?.name
-                                                }
-                                            </span>
-                                        </p>
-                                    </div>
-                                )}
+                          {selectedClass !== "none" &&
+                            classes.find((c) => c.id === selectedClass) && (
+                                <div className="mt-2 p-2 rounded-lg bg-secondary/10 border border-secondary/20">
+                                <p className="text-xs">
+                                    <span className="text-foreground">
+                                    📍 Kelas terpilih:{" "}
+                                    </span>
+
+                                    <span className="font-semibold text-primary">
+                                    {classes.find((c) => c.id === selectedClass)?.name}
+                                    </span>
+                                </p>
+                                </div>
+                            )}
+
                         </div>
                     </div>
 
@@ -287,8 +255,6 @@ export function AddStudentDialog({
                                 setFormData({
                                     fullname: "",
                                     ic_number: "",
-                                    password: "",
-                                    dob: "",
                                 });
                                 setSelectedClass("none");
                             }}

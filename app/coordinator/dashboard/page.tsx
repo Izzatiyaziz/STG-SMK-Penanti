@@ -106,8 +106,7 @@ export default function SubjectCoordinatorDashboard() {
         </div>
 
         {/* ================= SUMMARY ================= */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <SummaryCard title="Jumlah Kelas" value={summary.totalClasses} />
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <SummaryCard title="Guru Subjek" value={summary.totalTeachers} />
           <SummaryCard
             title="Prestasi Subjek"

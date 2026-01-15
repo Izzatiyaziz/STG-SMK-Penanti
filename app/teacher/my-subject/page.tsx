@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
+
 import {
   Card,
   CardContent,
@@ -25,12 +27,14 @@ import {
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+
 import {
   ClipboardList,
   Users,
   BookOpen,
   Save,
   Send,
+  Camera,
 } from "lucide-react";
 
 /* ================= DUMMY DATA ================= */
@@ -39,18 +43,20 @@ const subjects = ["English", "Bahasa Melayu"];
 const classes = ["2 Ibnu Majah", "2 Ibnu Sina"];
 
 const studentsData = [
-  { id: 1, name: "Siti Aminah", omr: 35 },
+  { id: 1, name: "Siti Aminah binti Wahab", omr: 35 },
   { id: 2, name: "Chong Wei Ling", omr: 35 },
-  { id: 3, name: "Ravi Muthusamy", omr: 35 },
-  { id: 4, name: "Nurul Izzah", omr: 35 },
+  { id: 3, name: "Ravi Muthusamy a/l Pariami", omr: 35 },
+  { id: 4, name: "Nurul Izzah binti Suhainizam", omr: 35 },
   { id: 5, name: "Lim Hock Seng", omr: 35 },
-  { id: 6, name: "Fatimah Zahra", omr: 35 },
+  { id: 6, name: "Nur Izzati binti Mohd Yaziz", omr: 35 },
   { id: 7, name: "Tan Boon Keong", omr: 35 },
-  { id: 8, name: "Mariam Ahmad", omr: 35 },
-  { id: 9, name: "Azlan Shah", omr: 35 },
+  { id: 8, name: "Mariam binti Ahmad", omr: 35 },
+  { id: 9, name: "Azlan bin Shah", omr: 35 },
 ];
 
 export default function SubjectTeacherPage() {
+  const router = useRouter();
+
   const [selectedSubject, setSelectedSubject] = useState("English");
   const [selectedClass, setSelectedClass] = useState("2 Ibnu Majah");
 
@@ -79,12 +85,8 @@ export default function SubjectTeacherPage() {
           <Card className="shadow-lg border border-border/50">
             <CardContent className="p-6 flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground">
-                  Subjek
-                </p>
-                <h3 className="font-semibold mt-2">
-                  {selectedSubject}
-                </h3>
+                <p className="text-sm text-muted-foreground">Subjek</p>
+                <h3 className="font-semibold mt-2">{selectedSubject}</h3>
               </div>
               <div className="p-3 rounded-full bg-primary/10">
                 <BookOpen className="w-6 h-6 text-primary" />
@@ -95,12 +97,8 @@ export default function SubjectTeacherPage() {
           <Card className="shadow-lg border border-border/50">
             <CardContent className="p-6 flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground">
-                  Kelas
-                </p>
-                <h3 className="font-semibold mt-2">
-                  {selectedClass}
-                </h3>
+                <p className="text-sm text-muted-foreground">Kelas</p>
+                <h3 className="font-semibold mt-2">{selectedClass}</h3>
               </div>
               <div className="p-3 rounded-full bg-secondary/10">
                 <Users className="w-6 h-6 text-secondary" />
@@ -111,9 +109,7 @@ export default function SubjectTeacherPage() {
           <Card className="shadow-lg border border-border/50">
             <CardContent className="p-6 flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground">
-                  Jumlah Pelajar
-                </p>
+                <p className="text-sm text-muted-foreground">Jumlah Pelajar</p>
                 <h3 className="text-2xl font-bold mt-2 text-primary">
                   {studentsData.length}
                 </h3>
@@ -179,6 +175,10 @@ export default function SubjectTeacherPage() {
                   <TableHead className="text-center">
                     Jumlah Markah
                   </TableHead>
+                       <TableHead className="text-center">
+                    Gred
+                  </TableHead>
+                  
                 </TableRow>
               </TableHeader>
 
@@ -189,10 +189,27 @@ export default function SubjectTeacherPage() {
                       {student.name}
                     </TableCell>
 
+                    {/* ===== OMR SCORE + CAMERA ICON ===== */}
                     <TableCell className="text-center">
-                      <Badge variant="outline">
-                        {student.omr}/40
-                      </Badge>
+                      <div className="flex items-center justify-center gap-2">
+                        <Badge variant="outline">
+                          {student.omr}/40
+                        </Badge>
+
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8"
+                          title="Imbas OMR"
+                          onClick={() =>
+                            router.push(
+                              `/teacher/omr?student=${student.id}&class=${selectedClass}&subject=${selectedSubject}`
+                            )
+                          }
+                        >
+                          <Camera className="h-4 w-4 text-primary" />
+                        </Button>
+                      </div>
                     </TableCell>
 
                     <TableCell className="text-center">
@@ -223,7 +240,7 @@ export default function SubjectTeacherPage() {
           </Button>
           <Button>
             <Send className="w-4 h-4 mr-2" />
-            Hantar Muktamad
+            Hantar
           </Button>
         </div>
 

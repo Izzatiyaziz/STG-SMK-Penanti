@@ -33,7 +33,7 @@ export async function POST(req: Request) {
 
     if (!subject_name) {
       return NextResponse.json(
-        { message: "Subject name is required" },
+        { message: "Nama subject diperlukan" },
         { status: 400 }
       );
     }
@@ -47,7 +47,7 @@ export async function POST(req: Request) {
 
       if (error.code === "23505") {
         return NextResponse.json(
-          { message: "Subject already exists" },
+          { message: "Subjek sudah ada" },
           { status: 409 }
         );
       }
@@ -59,7 +59,7 @@ export async function POST(req: Request) {
     }
 
     return NextResponse.json(
-      { message: "Subject added successfully" },
+      { message: "Subjek berjaya ditambah" },
       { status: 201 }
     );
   } catch {
@@ -77,7 +77,7 @@ export async function PUT(req: Request) {
 
     if (!subject_id || !subject_name) {
       return NextResponse.json(
-        { message: "Subject ID and name are required" },
+        { message: "Subject ID dan nama subjek diperlukan" },
         { status: 400 }
       );
     }
@@ -95,7 +95,7 @@ export async function PUT(req: Request) {
       );
     }
 
-    return NextResponse.json({ message: "Subject updated successfully" });
+    return NextResponse.json({ message: "Subjek berjaya dikemas kini" });
   } catch {
     return NextResponse.json(
       { message: "Server error" },
@@ -111,7 +111,7 @@ export async function DELETE(req: Request) {
 
     if (!subject_id) {
       return NextResponse.json(
-        { message: "Subject ID is required" },
+        { message: "ID Subjek diperlukan" },
         { status: 400 }
       );
     }
@@ -129,7 +129,7 @@ export async function DELETE(req: Request) {
       );
     }
 
-    return NextResponse.json({ message: "Subject deleted successfully" });
+    return NextResponse.json({ message: "Subjek berjaya dipadam" });
   } catch {
     return NextResponse.json(
       { message: "Server error" },

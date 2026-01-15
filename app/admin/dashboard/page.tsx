@@ -24,6 +24,7 @@ import {
   GraduationCap,
   UserCheck,
   Activity,
+  ClipboardList,
 } from "lucide-react";
 import { toast } from "sonner";
 import { User } from "@/app/types";
@@ -55,6 +56,7 @@ const data7Days = data3Months.slice(-3);
 const usageLogs = [
   {
     id: 1,
+    nama: "Ahmad bin Ali",
     role: "Pelajar",
     action: "Akses Keputusan Peperiksaan",
     date: "20/06/2025",
@@ -62,6 +64,7 @@ const usageLogs = [
   },
   {
     id: 2,
+    nama: "Aisyah binti Mohd",
     role: "Pelajar",
     action: "Muat Turun Slip Keputusan",
     date: "20/06/2025",
@@ -69,6 +72,7 @@ const usageLogs = [
   },
   {
     id: 3,
+    nama: "Ahmad bin Ali",
     role: "Guru",
     action: "Kemas Kini Markah Peperiksaan",
     date: "19/06/2025",
@@ -76,6 +80,7 @@ const usageLogs = [
   },
   {
     id: 4,
+    nama: "Zainal bin Abidin",
     role: "Pentadbir",
     action: "Menjana Laporan Peperiksaan",
     date: "18/06/2025",
@@ -83,6 +88,7 @@ const usageLogs = [
   },
   {
     id: 5,
+    nama: "Fauziah binti Rashid",
     role: "Pelajar",
     action: "Log Masuk Sistem",
     date: "18/06/2025",
@@ -150,60 +156,25 @@ export default function AdminDashboardPage() {
           />
         </div>
 
-        {/* ================= GRAF PENGGUNAAN SISTEM ================= */}
-        <Card className="border border-border/50 shadow-lg">
-          <CardContent className="p-6 space-y-4">
-            <div className="flex justify-between items-center">
-              <h2 className="text-lg font-semibold flex items-center gap-2">
-                <Activity className="w-5 h-5 text-primary" />
-                Penggunaan Sistem
+      {/* ================= LOG PENGGUNAAN SISTEM ================= */}
+        <Card className="border border-border/50 shadow-lg overflow-hidden">
+          {/* HEADER */}
+          <div className="flex items-center justify-between px-6 py-4 border-b bg-muted/30">
+            <div className="flex items-center gap-2">
+              <ClipboardList className="w-5 h-5 text-primary" />
+              <h2 className="text-lg font-semibold">
+                Log Penggunaan Sistem
               </h2>
-
-              <div className="flex gap-2">
-                <Button size="sm" variant={range === "3m" ? "default" : "outline"} onClick={() => setRange("3m")}>
-                  Last 3 months
-                </Button>
-                <Button size="sm" variant={range === "30d" ? "default" : "outline"} onClick={() => setRange("30d")}>
-                  Last 30 days
-                </Button>
-                <Button size="sm" variant={range === "7d" ? "default" : "outline"} onClick={() => setRange("7d")}>
-                  Last 7 days
-                </Button>
-              </div>
             </div>
+          </div>
 
-            <div className="h-[300px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={chartData}>
-                  <defs>
-                    <linearGradient id="usageGradient" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#6366f1" stopOpacity={0.4} />
-                      <stop offset="100%" stopColor="#6366f1" stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <XAxis dataKey="date" />
-                  <YAxis />
-                  <Tooltip />
-                  <Area
-                    type="monotone"
-                    dataKey="value"
-                    stroke="#6366f1"
-                    fill="url(#usageGradient)"
-                    strokeWidth={2}
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* ================= LOG PENGGUNAAN SISTEM ================= */}
-        <Card className="border border-border/50 shadow-lg">
-          <CardContent className="p-0">
+          {/* TABLE */}
+          <div className="overflow-x-auto">
             <Table>
-              <TableHeader>
+              <TableHeader className="bg-background">
                 <TableRow>
-                  <TableHead className="w-16 text-center">No</TableHead>
+                  <TableHead className="w-14 text-center">No</TableHead>
+                   <TableHead>Nama</TableHead>
                   <TableHead>Peranan</TableHead>
                   <TableHead>Aktiviti</TableHead>
                   <TableHead>Tarikh</TableHead>
@@ -213,47 +184,73 @@ export default function AdminDashboardPage() {
 
               <TableBody>
                 {usageLogs.map((log, index) => (
-                  <TableRow key={log.id}>
-                    <TableCell className="text-center">{index + 1}</TableCell>
-                    <TableCell>{log.role}</TableCell>
-                    <TableCell>{log.action}</TableCell>
-                    <TableCell>{log.date}</TableCell>
-                    <TableCell>{log.time}</TableCell>
+                  <TableRow
+                    key={log.id}
+                    className="odd:bg-muted/20 hover:bg-muted/40 transition"
+                  >
+                    <TableCell className="text-center font-medium">
+                      {index + 1}
+                    </TableCell>
+
+                    <TableCell>
+                      <span className="inline-flex items-center rounded-md bg-primary/10 px-2 py-1 text-xs font-medium text-primary">
+                        {log.nama}
+                      </span>
+                    </TableCell>
+
+                    <TableCell>
+                      <span className="inline-flex items-center rounded-md bg-primary/10 px-2 py-1 text-xs font-medium text-primary">
+                        {log.role}
+                      </span>
+                    </TableCell>
+
+                    <TableCell className="font-medium">
+                      {log.action}
+                    </TableCell>
+
+                    <TableCell className="text-muted-foreground">
+                      {log.date}
+                    </TableCell>
+
+                    <TableCell className="text-muted-foreground">
+                      {log.time}
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
             </Table>
-          </CardContent>
+          </div>
         </Card>
 
-      </div>
-    </div>
-  );
-}
 
-/* ===============================
-   REUSABLE STAT CARD
-================================ */
-function StatCard({
-  title,
-  value,
-  icon: Icon,
-}: {
-  title: string;
-  value: number;
-  icon: React.ElementType;
-}) {
-  return (
-    <Card className="shadow-lg border border-border/50">
-      <CardContent className="p-6 flex items-center justify-between">
-        <div>
-          <p className="text-sm text-muted-foreground">{title}</p>
-          <h2 className="text-3xl font-bold mt-2">{value}</h2>
-        </div>
-        <div className="p-3 rounded-full bg-primary/10">
-          <Icon className="w-6 h-6 text-primary" />
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
+              </div>
+            </div>
+          );
+        }
+
+        /* ===============================
+          REUSABLE STAT CARD
+        ================================ */
+        function StatCard({
+          title,
+          value,
+          icon: Icon,
+        }: {
+          title: string;
+          value: number;
+          icon: React.ElementType;
+        }) {
+          return (
+            <Card className="shadow-lg border border-border/50">
+              <CardContent className="p-6 flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-muted-foreground">{title}</p>
+                  <h2 className="text-3xl font-bold mt-2">{value}</h2>
+                </div>
+                <div className="p-3 rounded-full bg-primary/10">
+                  <Icon className="w-6 h-6 text-primary" />
+                </div>
+              </CardContent>
+            </Card>
+          );
+        }

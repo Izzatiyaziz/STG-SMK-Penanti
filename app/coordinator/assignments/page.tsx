@@ -42,18 +42,18 @@ const teacherAssignments = [
   },
   {
     id: "T001",
-    name: "Encik Ali",
-    classes: ["2 Ibnu Sina", "3 Ibnu Arif"],
+    name: "Encik Ali bin Abu",
+    classes: ["2 Ibnu Sina", "3 Ibnu Sina"],
   },
   {
     id: "T002",
-    name: "Encik Siti",
-    classes: ["4 Ibnu Maju", "5 Ibnu Sains"],
+    name: "Pn. Siti Yusmiza binti Abdullah",
+    classes: ["4 Ibnu Khaldun", "5 Ibnu Majah"],
   },
   {
     id: "T003",
-    name: "Encik Tan",
-    classes: ["1 Ibnu Pintar", "2 Ibnu Pintar", "3 Ibnu Pintar"],
+    name: "Encik Tan Bon Hong",
+    classes: ["1 Ibnu Qayyum", "2 Ibnu Majah", "3 Ibnu Pintar"],
   },
 ];
 
@@ -69,7 +69,7 @@ export default function SubjectCoordinatorAssignmentsPage() {
               <ClipboardList className="w-6 h-6 text-primary" />
             </div>
             <h1 className="text-3xl font-bold tracking-tight">
-              Senarai Teachers
+              Senarai Guru
             </h1>
           </div>
           <p className="text-muted-foreground">

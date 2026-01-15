@@ -136,11 +136,11 @@ export const sidebarConfig = {
                 url: "/admin/subjects",
                 icon: Folder,
             },
-            {
+        /*    {
                 title: "Laporan",
                 url: "/admin/reports",
                 icon: FileText,
-            },
+            },*/
         ],
         documents: [],
 
@@ -154,11 +154,11 @@ export const sidebarConfig = {
                 url: "/student/dashboard",
                 icon: LayoutDashboard,
             },
-            {
+           /* {
                 title: "Keputusan Saya",
                 url: "/student/my-results",
                 icon: FileText,
-            },
+            },*/
             {
                 title: "Kad Laporan",
                 url: "/student/report-card",

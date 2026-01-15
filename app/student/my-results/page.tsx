@@ -19,7 +19,6 @@ import {
     Trophy,
 } from "lucide-react";
 import Link from "next/link";
-import PerformanceTrendChart from "./performance-trend-chart";
 
 type SubjectResult = {
     subject: string;
@@ -61,7 +60,7 @@ export default function MyResultsPage() {
                             <BarChart3 className="w-6 h-6 text-primary" />
                         </div>
                         <h1 className="text-3xl font-bold tracking-tight">
-                            My Results
+                            Dashboard Pelajar
                         </h1>
                     </div>
                     <p className="text-muted-foreground">

@@ -34,6 +34,13 @@ import {
     Building2,
     CheckCircle,
 } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -45,7 +52,7 @@ import {
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
-import { Progress } from "@/components/ui/progress";
+import { EditTeacherDialog } from "./edit-teacher-dialog";
 
 type User = {
     id: string;
@@ -80,6 +87,8 @@ export default function UsersPage() {
     const [filterRole, setFilterRole] = useState<string>("all");
     const [sortBy, setSortBy] = useState<"name" | "roles" | "date">("name");
     const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
+    const [editOpen, setEditOpen] = useState(false);
+    const [selectedUser, setSelectedUser] = useState<User | null>(null);
 
     async function fetchUsers() {
         setLoading(true);
@@ -143,46 +152,73 @@ export default function UsersPage() {
     // ================= STATS =================
         const stats = {
         total: users.length,
-        teachers: users.filter(u => u.roles.includes("teacher")).length,
-        subjectTeachers: users.filter(u => u.roles.includes("subject teacher")).length,
-        coordinators: users.filter(u => u.roles.includes("subject coordinator")).length,
-        principals: users.filter(u => u.roles.includes("principal")).length,
+        classTeachers: users.filter((u) => u.roles.includes("class teacher")).length,
+        subjectTeachers: users.filter((u) => u.roles.includes("subject teacher")).length,
+        coordinators: users.filter((u) => u.roles.includes("subject coordinator")).length,
+        principals: users.filter((u) => u.roles.includes("principal")).length,
         };
 
-
     // ================= ROLE COLORS =================
-    const getRoleColor = (role: string) => {
+        const getRoleColor = (role: string) => {
         switch (role) {
             case "admin":
-                return {
-                    bg: "bg-destructive/10",
-                    text: "text-destructive",
-                    border: "border-destructive/20",
-                    icon: <Shield className="w-3 h-3 mr-1" />
-                };
-            case "teacher":
-                return {
-                    bg: "bg-primary/10",
-                    text: "text-primary",
-                    border: "border-primary/20",
-                    icon: <Users className="w-3 h-3 mr-1" />
-                };
+            return {
+                bg: "bg-red-100",
+                text: "text-red-700",
+                border: "border-red-200",
+                icon: <Shield className="w-3 h-3 mr-1" />,
+            };
+
+            case "principal":
+            return {
+                bg: "bg-yellow-100",
+                text: "text-yellow-700",
+                border: "border-yellow-200",
+                icon: <CheckCircle className="w-3 h-3 mr-1" />,
+            };
+
+            case "class teacher":
+            return {
+                bg: "bg-blue-100",
+                text: "text-blue-700",
+                border: "border-blue-200",
+                icon: <Building2 className="w-3 h-3 mr-1" />,
+            };
+
             case "subject teacher":
-                return {
-                    bg: "bg-chart-3/10",
-                    text: "text-chart-3",
-                    border: "border-chart-3/20",
-                    icon: <BookOpen className="w-3 h-3 mr-1" />
-                };
+            return {
+                bg: "bg-emerald-100",
+                text: "text-emerald-700",
+                border: "border-emerald-200",
+                icon: <BookOpen className="w-3 h-3 mr-1" />,
+            };
+
+            case "subject coordinator":
+            return {
+                bg: "bg-orange-100",
+                text: "text-orange-700",
+                border: "border-orange-200",
+                icon: <Award className="w-3 h-3 mr-1" />,
+            };
+
+            // fallback teacher biasa (kalau ada)
+            case "teacher":
+            return {
+                bg: "bg-slate-100",
+                text: "text-slate-700",
+                border: "border-slate-200",
+                icon: <Users className="w-3 h-3 mr-1" />,
+            };
+
             default:
-                return {
-                    bg: "bg-muted/50",
-                    text: "text-muted-foreground",
-                    border: "border-muted/30",
-                    icon: <Users className="w-3 h-3 mr-1" />
-                };
+            return {
+                bg: "bg-gray-100",
+                text: "text-gray-700",
+                border: "border-gray-200",
+                icon: <Users className="w-3 h-3 mr-1" />,
+            };
         }
-    };
+        };
 
     // ================= ACTIONS =================
     const handleExport = () => {
@@ -196,8 +232,10 @@ export default function UsersPage() {
     };
 
     const handleEditUser = (user: User) => {
-        toast.info(`Mengedit ${user.name}`);
+    setSelectedUser(user);
+    setEditOpen(true);
     };
+
 
     const handleDeleteUser = (user: User) => {
         toast.error(`Padam ${user.name}?`, {
@@ -238,7 +276,6 @@ export default function UsersPage() {
                             <div>
                                 <h1 className="text-xl font-bold text-foreground flex items-center gap-2">
                                     Pengurusan Guru
-                                    <Filter className="w-5 h-5 text-primary" />
                                 </h1>
                                 <p className="text-muted-foreground font-medium mt-1">
                                     Urus senarai guru dan kebenaran akses sistem dengan cekap
@@ -315,11 +352,8 @@ export default function UsersPage() {
                                 <div>
                                     <p className="text-sm font-medium text-muted-foreground mb-2">Guru Kelas</p>
                                     <h3 className="text-3xl font-bold text-chart-2">
-                                        {stats.teachers}
+                                        {stats.classTeachers}
                                     </h3>
-                                    <p className="text-xs text-muted-foreground mt-2">
-                                        Bertanggungjawab mengurus kelas
-                                    </p>
                                 </div>
                                 <div className="p-3 rounded-xl bg-chart-2/10 border border-chart-2/20">
                                     <Building2 className="w-5 h-5 text-chart-2" />
@@ -334,11 +368,8 @@ export default function UsersPage() {
                                 <div>
                                     <p className="text-sm font-medium text-muted-foreground mb-2">Penyelaras Subjek</p>
                                     <h3 className="text-3xl font-bold text-chart-3">
-                                        {stats.subjectTeachers}
+                                        {stats.coordinators}
                                     </h3>
-                                    <p className="text-xs text-muted-foreground mt-2">
-                                        Mengajar subjek khusus
-                                    </p>
                                 </div>
                                 <div className="p-3 rounded-xl bg-chart-3/10 border border-chart-3/20">
                                     <BookOpen className="w-5 h-5 text-chart-3" />
@@ -373,16 +404,79 @@ export default function UsersPage() {
                     <CardContent className="p-6">
                         {/* FILTER AND SEARCH SECTION */}
                         <div className="flex flex-col lg:flex-row gap-4 mb-6">
-                            <div className="flex-1 relative">
-                                <Search className="absolute left-3.5 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                                <Input
-                                    placeholder="Cari guru, ID atau email..."
-                                    value={searchQuery}
-                                    onChange={(e) => setSearchQuery(e.target.value)}
-                                    className="pl-10 h-11 rounded-lg border-border bg-background focus:border-primary focus:ring-primary/20"
-                                />
-                            </div>
+                        {/* SEARCH */}
+                        <div className="flex-1 relative">
+                            <Search className="absolute left-3.5 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                            <Input
+                            placeholder="Cari guru, ID atau email..."
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            className="pl-10 h-11 rounded-lg border-border bg-background focus:border-primary focus:ring-primary/20"
+                            />
                         </div>
+
+                        {/* ROLE FILTER + RESET */}
+                        <div className="flex flex-col sm:flex-row gap-3">
+                            <div className="w-full sm:w-[220px]">
+                            <Select value={filterRole} onValueChange={setFilterRole}>
+                                <SelectTrigger className="h-11 rounded-lg border-border bg-background">
+                                <SelectValue placeholder="Pilih Peranan" />
+                                </SelectTrigger>
+
+                                <SelectContent className="rounded-lg border-border">
+                                <SelectItem value="all">
+                                    <div className="flex items-center gap-2">
+                                    <Users className="w-4 h-4" />
+                                    Semua Peranan
+                                    </div>
+                                </SelectItem>
+
+                                <SelectItem value="principal">
+                                    <div className="flex items-center gap-2">
+                                    <CheckCircle className="w-4 h-4 text-yellow-600" />
+                                    Pengetua
+                                    </div>
+                                </SelectItem>
+
+                                <SelectItem value="class teacher">
+                                    <div className="flex items-center gap-2">
+                                    <Building2 className="w-4 h-4 text-blue-600" />
+                                    Guru Kelas
+                                    </div>
+                                </SelectItem>
+
+                                <SelectItem value="subject teacher">
+                                    <div className="flex items-center gap-2">
+                                    <BookOpen className="w-4 h-4 text-emerald-600" />
+                                    Guru Subjek
+                                    </div>
+                                </SelectItem>
+
+                                <SelectItem value="subject coordinator">
+                                    <div className="flex items-center gap-2">
+                                    <Award className="w-4 h-4 text-orange-600" />
+                                    Penyelaras Subjek
+                                    </div>
+                                </SelectItem>
+                                </SelectContent>
+                            </Select>
+                            </div>
+
+                            <Button
+                            variant="outline"
+                            onClick={() => {
+                                setSearchQuery("");
+                                setFilterRole("all");
+                                setSortBy("name");
+                                setSortOrder("asc");
+                            }}
+                            className="h-11 rounded-lg border-border hover:bg-accent hover:text-accent-foreground"
+                            >
+                            Reset
+                            </Button>
+                        </div>
+                        </div>
+
 
                         {/* TABLE SECTION */}
                         <div className="rounded-lg border border-border overflow-hidden">
@@ -429,9 +523,6 @@ export default function UsersPage() {
                                                     )}
                                                 </Button>
                                             </TableHead>
-                                            <TableHead className="font-semibold text-foreground py-4 text-right">
-                                                Tindakan
-                                            </TableHead>
                                         </TableRow>
                                     </TableHeader>
 
@@ -477,124 +568,104 @@ export default function UsersPage() {
                                                 </TableCell>
                                             </TableRow>
                                         ) : (
-                                            filteredUsers.map((user, index) => {
-                                                return (
-                                                    <TableRow
-                                                        key={user.id}
-                                                        className="hover:bg-muted/50 transition-colors border-b border-border last:border-0 group"
-                                                    >
-                                                        <TableCell className="py-4 text-center">
-                                                            <div className="font-medium text-muted-foreground">
-                                                                {index + 1}
-                                                            </div>
-                                                        </TableCell>
+                                           filteredUsers.map((user, index) => {
+  return (
+    <TableRow
+      key={user.id}
+      className="hover:bg-muted/50 transition-colors border-b border-border last:border-0 group"
+    >
+      {/* # Column (Clickable) */}
+      <TableCell
+        className="py-4 text-center cursor-pointer"
+        onClick={() => handleEditUser(user)}
+      >
+        <div className="font-medium text-muted-foreground hover:text-primary transition-colors">
+          {index + 1}
+        </div>
+      </TableCell>
 
-                                                        <TableCell className="py-4">
-                                                            <div className="flex items-center gap-3">
-                                                                <div className="relative">
-                                                                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary/20 to-primary/10 border border-primary/20 flex items-center justify-center shadow-xs">
-                                                                        <span className="font-semibold text-primary text-sm">
-                                                                            {user.name.charAt(0)}
-                                                                        </span>
-                                                                    </div>
-                                                                </div>
-                                                                <div>
-                                                                    <div className="font-semibold text-foreground">
-                                                                        {user.name}
-                                                                    </div>
-                                                                    {user.subjects && user.subjects.length > 0 && (
-                                                                        <div className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
-                                                                            <BookOpen className="w-3 h-3" />
-                                                                            {user.subjects.slice(0, 2).join(", ")}
-                                                                            {user.subjects.length > 2 && "..."}
-                                                                        </div>
-                                                                    )}
-                                                                </div>
-                                                            </div>
-                                                        </TableCell>
+      {/* Nama Guru (Clickable) */}
+      <TableCell
+        className="py-4 cursor-pointer"
+        onClick={() => handleEditUser(user)}
+      >
+        <div className="flex items-center gap-3">
+          <div className="relative">
+            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary/20 to-primary/10 border border-primary/20 flex items-center justify-center shadow-xs">
+              <span className="font-semibold text-primary text-sm">
+                {user.name.charAt(0)}
+              </span>
+            </div>
+          </div>
+          <div>
+            <div className="font-semibold text-foreground hover:text-primary transition-colors">
+              {user.name}
+            </div>
+            {user.subjects && user.subjects.length > 0 && (
+              <div className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
+                <BookOpen className="w-3 h-3" />
+                {user.subjects.slice(0, 2).join(", ")}
+                {user.subjects.length > 2 && "..."}
+              </div>
+            )}
+          </div>
+        </div>
+      </TableCell>
 
-                                                        <TableCell className="py-4">
-                                                            <div className="font-mono bg-muted/30 px-3 py-1.5 rounded-md text-foreground border border-border">
-                                                                {user.identifier}
-                                                            </div>
-                                                        </TableCell>
+      {/* ID Guru */}
+      <TableCell className="py-4">
+        <div className="font-mono bg-muted/30 px-3 py-1.5 rounded-md text-foreground border border-border">
+          {user.identifier}
+        </div>
+      </TableCell>
 
-                                                        <TableCell className="py-4">
-                                                            <div className="flex items-center gap-2 text-muted-foreground">
-                                                                {user.email ? (
-                                                                    <>
-                                                                        <Mail className="w-3.5 h-3.5 flex-shrink-0" />
-                                                                        <span className="truncate">{user.email}</span>
-                                                                    </>
-                                                                ) : (
-                                                                    <span className="text-muted-foreground/70">-</span>
-                                                                )}
-                                                            </div>
-                                                        </TableCell>
+      {/* Email */}
+      <TableCell className="py-4">
+        <div className="flex items-center gap-2 text-muted-foreground">
+          {user.email ? (
+            <>
+              <Mail className="w-3.5 h-3.5 flex-shrink-0" />
+              <span className="truncate">{user.email}</span>
+            </>
+          ) : (
+            <span className="text-muted-foreground/70">-</span>
+          )}
+        </div>
+      </TableCell>
 
-                                                        <TableCell className="py-4">
-                                                        <div className="flex flex-wrap gap-2">
-                                                            {user.roles.map((roles) => {
-                                                            const roleColors = getRoleColor(roles);
+      {/* Peranan */}
+      <TableCell className="py-4">
+        <div className="flex flex-wrap gap-2">
+          {user.roles.map((roles) => {
+            const roleColors = getRoleColor(roles);
 
-                                                            return (
-                                                                <Badge
-                                                                key={roles}
-                                                                className={`px-3 py-1.5 rounded-md font-medium border
-                                                                    ${roleColors.bg}
-                                                                    ${roleColors.text}
-                                                                    ${roleColors.border}`}
-                                                                >
-                                                                {roleColors.icon}
-                                                                {roles === "subject teacher"
-                                                                    ? "Guru Subjek"
-                                                                    : roles === "teacher"
-                                                                    ? "Guru Kelas"
-                                                                    : roles === "subject coordinator"
-                                                                    ? "Penyelaras Subjek"
-                                                                    : roles === "principal"
-                                                                    ? "Pengetua"
-                                                                    : roles}
-                                                                </Badge>
-                                                            );
-                                                            })}
-                                                        </div>
-                                                        </TableCell>
+            return (
+              <Badge
+                key={roles}
+                className={`px-3 py-1.5 rounded-md font-medium border
+                  ${roleColors.bg}
+                  ${roleColors.text}
+                  ${roleColors.border}`}
+              >
+                {roleColors.icon}
+                {roles === "subject teacher"
+                  ? "Guru Subjek"
+                  : roles === "class teacher"
+                  ? "Guru Kelas"
+                  : roles === "subject coordinator"
+                  ? "Penyelaras Subjek"
+                  : roles === "principal"
+                  ? "Pengetua"
+                  : roles}
+              </Badge>
+            );
+          })}
+        </div>
+      </TableCell>
+    </TableRow>
+  );
+})
 
-
-                                                        <TableCell className="py-4 text-right">
-                                                            <DropdownMenu>
-                                                                <DropdownMenuTrigger asChild>
-                                                                    <Button
-                                                                        variant="ghost"
-                                                                        className="h-8 w-8 p-0 opacity-100 group-hover:opacity-100 transition-opacity"
-                                                                    >
-                                                                        <MoreVertical className="h-4 w-4" />
-                                                                    </Button>
-                                                                </DropdownMenuTrigger>
-                                                                <DropdownMenuContent align="end" className="rounded-lg border-border w-48">
-                                                                    <DropdownMenuItem onClick={() => handleViewUser(user)}>
-                                                                        <Eye className="w-4 h-4 mr-2" />
-                                                                        Lihat Profil
-                                                                    </DropdownMenuItem>
-                                                                    <DropdownMenuItem onClick={() => handleEditUser(user)}>
-                                                                        <Edit className="w-4 h-4 mr-2" />
-                                                                        Edit Maklumat
-                                                                    </DropdownMenuItem>
-                                                                    <DropdownMenuSeparator />
-                                                                    <DropdownMenuItem 
-                                                                        onClick={() => handleDeleteUser(user)}
-                                                                        className="text-destructive focus:text-destructive"
-                                                                    >
-                                                                        <Trash2 className="w-4 h-4 mr-2" />
-                                                                        Padam Guru
-                                                                    </DropdownMenuItem>
-                                                                </DropdownMenuContent>
-                                                            </DropdownMenu>
-                                                        </TableCell>
-                                                    </TableRow>
-                                                );
-                                            })
                                         )}
                                     </TableBody>
                                 </Table>
@@ -647,6 +718,13 @@ export default function UsersPage() {
                         <span>Sistem Pemarkahan Pelajar v2.0 • Akses terkawal sepenuhnya</span>
                     </div>
                 </div>
+                <EditTeacherDialog
+                    open={editOpen}
+                    onOpenChange={setEditOpen}
+                    user={selectedUser}
+                    onSuccess={fetchUsers}
+                    />
+
             </div>
         </div>
     );

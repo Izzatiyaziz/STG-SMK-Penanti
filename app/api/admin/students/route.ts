@@ -3,204 +3,362 @@ import supabase from "@/lib/supabase";
 
 export const runtime = "nodejs";
 
-// GET - Fetch all students or single student
+// SIMPLE GET - hanya return data basic
 export async function GET(req: Request) {
+  console.log("API: GET /api/admin/students called");
+  
   try {
     const { searchParams } = new URL(req.url);
     const id = searchParams.get("id");
-
-    // If ID is provided, get single student
+    
+    console.log("API: Request ID:", id);
+    
+    // Jika mahu single student
     if (id) {
-      const { data, error } = await supabase
+      console.log("API: Fetching single student");
+      
+      // Simple query tanpa complex logic
+      const { data: student, error } = await supabase
         .from("stg_students")
-        .select("*, stg_classes(name)")
+        .select("*")
         .eq("id", id)
         .single();
-
-      if (error) throw error;
-
+      
+      if (error) {
+        console.log("API: Student not found by id, trying student_id");
+        // Try dengan student_id
+        const { data: student2, error: error2 } = await supabase
+          .from("stg_students")
+          .select("*")
+          .eq("student_id", id)
+          .single();
+        
+        if (error2) {
+          console.log("API: Student not found at all");
+          return NextResponse.json({
+            success: false,
+            message: "Student not found",
+            id: id
+          }, { status: 404 });
+        }
+        
+        // Format response untuk student2
+        const response = {
+          success: true,
+          data: {
+            id: student2.student_id,
+            name: student2.fullname,
+            identifier: student2.ic_number,
+            class_id: student2.class_id,
+            className: "", // Will be filled if needed
+            status: student2.status || "active",
+            created_at: student2.created_at
+          }
+        };
+        
+        console.log("API: Returning student data (found by student_id)");
+        return NextResponse.json(response);
+      }
+      
+      // Format response untuk student
+      const response = {
+        success: true,
+        data: {
+          id: student.id,
+          name: student.fullname,
+          identifier: student.ic_number,
+          class_id: student.class_id,
+          className: "", // Will be filled if needed
+          status: student.status || "active",
+          created_at: student.created_at
+        }
+      };
+      
+      console.log("API: Returning student data (found by id)");
+      return NextResponse.json(response);
+    }
+    
+    // Get all students - SIMPLE VERSION
+    console.log("API: Fetching all students");
+    
+    const { data: students, error } = await supabase
+      .from("stg_students")
+      .select("*")
+      .order("fullname", { ascending: true });
+    
+    if (error) {
+      console.error("API: Error fetching students:", error);
       return NextResponse.json({
-        id: data.id,
-        fullname: data.fullname,
-        ic_number: data.ic_number,
-        email: data.email,
-        class_id: data.class_id,
-        class_name: data.stg_classes?.name,
-        created_at: data.created_at
+        success: true,
+        data: [],
+        message: "No students found"
       });
     }
-
-    // Get all students
-    const { data, error } = await supabase
-      .from("stg_students")
-      .select("*, stg_classes(name)")
-      .order("fullname", { ascending: true });
-
-    if (error) throw error;
-
-    const formattedStudents = data.map((student: any) => ({
-      id: student.id,
-      name: student.fullname,
-      identifier: student.ic_number,
-      email: student.email || "",
+    
+    console.log(`API: Found ${students?.length || 0} students`);
+    
+    // Get classes untuk mapping
+    let classMap = {};
+    try {
+      const { data: classes } = await supabase
+        .from("stg_classes")
+        .select("id, name");
+      
+      if (classes) {
+        classes.forEach(cls => {
+          classMap[cls.id] = cls.name;
+        });
+        console.log(`API: Loaded ${classes.length} classes`);
+      }
+    } catch (classError) {
+      console.log("API: Could not load classes, using empty map");
+    }
+    
+    // Simple format students
+    const formattedStudents = students?.map(student => ({
+      id: student.id || student.student_id || "unknown",
+      name: student.fullname || "",
+      identifier: student.ic_number || "",
       class_id: student.class_id,
-      className: student.stg_classes?.name,
-      status: "active",
+      className: student.class_id ? (classMap[student.class_id] || "") : "",
+      status: student.status || "active",
       created_at: student.created_at
-    }));
-
-    return NextResponse.json(formattedStudents);
-  } catch (error) {
-    console.error("GET STUDENTS ERROR:", error);
-    return NextResponse.json(
-      { message: "Server error" },
-      { status: 500 }
-    );
+    })) || [];
+    
+    console.log("API: Successfully formatted students");
+    
+    const response = {
+      success: true,
+      data: formattedStudents,
+      count: formattedStudents.length
+    };
+    
+    return NextResponse.json(response);
+    
+  } catch (error: any) {
+    console.error("API: Unhandled error in GET:", error);
+    console.error("API: Error stack:", error.stack);
+    
+    // Return minimal error response
+    return NextResponse.json({
+      success: false,
+      message: "Internal server error",
+      error: error.message || "Unknown error"
+    }, { status: 500 });
   }
 }
 
-// POST - Create new student
+// SIMPLE POST
 export async function POST(req: Request) {
+  console.log("API: POST /api/admin/students called");
+  
   try {
     const body = await req.json();
+    console.log("API: Request body:", body);
+    
     const { ic_number, fullname, class_id } = body;
-
+    
     if (!ic_number || !fullname) {
-      return NextResponse.json(
-        { message: "IC number dan nama penuh diperlukan" },
-        { status: 400 }
-      );
+      return NextResponse.json({
+        success: false,
+        message: "IC number and full name required"
+      }, { status: 400 });
     }
-
-    const { error } = await supabase.from("stg_students").insert({
-      ic_number,
-      fullname,
-      class_id,
-    });
-
+    
+    const { data, error } = await supabase
+      .from("stg_students")
+      .insert({
+        ic_number,
+        fullname,
+        class_id: class_id || null,
+        status: "active",
+        created_at: new Date().toISOString()
+      })
+      .select()
+      .single();
+    
     if (error) {
-      console.error("ADD STUDENT ERROR:", error);
-      return NextResponse.json(
-        { message: "Pelajar sudah wujud atau ralat berlaku" },
-        { status: 400 }
-      );
+      console.error("API: Create error:", error);
+      return NextResponse.json({
+        success: false,
+        message: "Failed to create student",
+        error: error.message
+      }, { status: 400 });
     }
-
-    return NextResponse.json({ 
-      message: "Pelajar berjaya dicipta" 
+    
+    return NextResponse.json({
+      success: true,
+      message: "Student created successfully",
+      data: {
+        id: data.id || data.student_id,
+        name: data.fullname
+      }
     });
-  } catch (error) {
-    console.error("ADD STUDENT SERVER ERROR:", error);
-    return NextResponse.json(
-      { message: "Server error" },
-      { status: 500 }
-    );
+    
+  } catch (error: any) {
+    console.error("API: Unhandled error in POST:", error);
+    return NextResponse.json({
+      success: false,
+      message: "Server error",
+      error: error.message
+    }, { status: 500 });
   }
 }
 
-// PUT - Update student
+// SIMPLE PUT
 export async function PUT(req: Request) {
+  console.log("API: PUT /api/admin/students called");
+  
   try {
     const { searchParams } = new URL(req.url);
     const id = searchParams.get("id");
-
+    
+    console.log("API: Update ID:", id);
+    
     if (!id) {
-      return NextResponse.json(
-        { message: "ID Pelajar diperlukan" },
-        { status: 400 }
-      );
+      return NextResponse.json({
+        success: false,
+        message: "Student ID required"
+      }, { status: 400 });
     }
-
+    
     const body = await req.json();
-    const { fullname, ic_number, class_id, email } = body;
-
+    console.log("API: Update body:", body);
+    
+    const { name: fullname, identifier: ic_number, className } = body;
+    
     if (!fullname || !ic_number) {
-      return NextResponse.json(
-        { message: "Nama dan IC number diperlukan" },
-        { status: 400 }
-      );
+      return NextResponse.json({
+        success: false,
+        message: "Name and IC number required"
+      }, { status: 400 });
     }
-
-    const { error } = await supabase
+    
+    // Find student
+    const { data: student, error: findError } = await supabase
+      .from("stg_students")
+      .select("*")
+      .or(`id.eq.${id},student_id.eq.${id}`)
+      .single();
+    
+    if (findError || !student) {
+      return NextResponse.json({
+        success: false,
+        message: "Student not found"
+      }, { status: 404 });
+    }
+    
+    // Get class_id from className
+    let class_id = null;
+    if (className && className !== "none") {
+      const { data: classData } = await supabase
+        .from("stg_classes")
+        .select("id")
+        .eq("name", className)
+        .single();
+      
+      if (classData) {
+        class_id = classData.id;
+      }
+    }
+    
+    // Update based on what field we found the student with
+    const updateField = student.id ? 'id' : 'student_id';
+    const updateValue = student.id || student.student_id;
+    
+    const { error: updateError } = await supabase
       .from("stg_students")
       .update({
         fullname,
         ic_number,
-        class_id: class_id || null,
-        email: email || null,
+        class_id,
         updated_at: new Date().toISOString()
       })
-      .eq("id", id);
-
-    if (error) {
-      console.error("UPDATE STUDENT ERROR:", error);
-      return NextResponse.json(
-        { message: "Gagal mengemas kini pelajar" },
-        { status: 400 }
-      );
+      .eq(updateField, updateValue);
+    
+    if (updateError) {
+      console.error("API: Update error:", updateError);
+      return NextResponse.json({
+        success: false,
+        message: "Failed to update student"
+      }, { status: 400 });
     }
-
-    return NextResponse.json({ 
-      message: "Pelajar berjaya dikemas kini" 
+    
+    return NextResponse.json({
+      success: true,
+      message: "Student updated successfully"
     });
-  } catch (error) {
-    console.error("UPDATE STUDENT SERVER ERROR:", error);
-    return NextResponse.json(
-      { message: "Server error" },
-      { status: 500 }
-    );
+    
+  } catch (error: any) {
+    console.error("API: Unhandled error in PUT:", error);
+    return NextResponse.json({
+      success: false,
+      message: "Server error",
+      error: error.message
+    }, { status: 500 });
   }
 }
 
-// DELETE - Delete student
+// SIMPLE DELETE
 export async function DELETE(req: Request) {
+  console.log("API: DELETE /api/admin/students called");
+  
   try {
     const { searchParams } = new URL(req.url);
     const id = searchParams.get("id");
-
+    
+    console.log("API: Delete ID:", id);
+    
     if (!id) {
-      return NextResponse.json(
-        { message: "ID Pelajar diperlukan" },
-        { status: 400 }
-      );
+      return NextResponse.json({
+        success: false,
+        message: "Student ID required"
+      }, { status: 400 });
     }
-
-    // First, check if student exists
-    const { data: student, error: fetchError } = await supabase
+    
+    // Find student
+    const { data: student, error: findError } = await supabase
       .from("stg_students")
-      .select("id, fullname")
-      .eq("id", id)
+      .select("*")
+      .or(`id.eq.${id},student_id.eq.${id}`)
       .single();
-
-    if (fetchError || !student) {
-      return NextResponse.json(
-        { message: "Pelajar tidak dijumpai" },
-        { status: 404 }
-      );
+    
+    if (findError || !student) {
+      return NextResponse.json({
+        success: false,
+        message: "Student not found"
+      }, { status: 404 });
     }
-
-    // Delete the student
-    const { error } = await supabase
+    
+    // Delete based on what field we found the student with
+    const deleteField = student.id ? 'id' : 'student_id';
+    const deleteValue = student.id || student.student_id;
+    
+    const { error: deleteError } = await supabase
       .from("stg_students")
       .delete()
-      .eq("id", id);
-
-    if (error) {
-      console.error("DELETE STUDENT ERROR:", error);
-      return NextResponse.json(
-        { message: "Gagal memadam pelajar" },
-        { status: 400 }
-      );
+      .eq(deleteField, deleteValue);
+    
+    if (deleteError) {
+      console.error("API: Delete error:", deleteError);
+      return NextResponse.json({
+        success: false,
+        message: "Failed to delete student"
+      }, { status: 400 });
     }
-
-    return NextResponse.json({ 
-      message: "Pelajar berjaya dipadam" 
+    
+    return NextResponse.json({
+      success: true,
+      message: "Student deleted successfully",
+      deleted_name: student.fullname
     });
-  } catch (error) {
-    console.error("DELETE STUDENT SERVER ERROR:", error);
-    return NextResponse.json(
-      { message: "Server error" },
-      { status: 500 }
-    );
+    
+  } catch (error: any) {
+    console.error("API: Unhandled error in DELETE:", error);
+    return NextResponse.json({
+      success: false,
+      message: "Server error",
+      error: error.message
+    }, { status: 500 });
   }
 }
