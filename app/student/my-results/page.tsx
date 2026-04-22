@@ -19,6 +19,7 @@ import {
     Trophy,
 } from "lucide-react";
 import Link from "next/link";
+import PerformanceTrendChart from "./performance-trend-chart";
 
 type SubjectResult = {
     subject: string;
@@ -45,14 +46,12 @@ export default function MyResultsPage() {
     const aiInsight = {
         strength: "Pendidikan Islam dan Bahasa Melayu",
         weakness: "Matematik",
-        advice:
-            "Prestasi keseluruhan adalah sederhana. Pelajar disarankan memberi tumpuan kepada subjek Matematik melalui latihan berterusan dan bimbingan tambahan.",
+        advice: "Prestasi keseluruhan adalah sederhana. Pelajar disarankan memberi tumpuan kepada subjek Matematik melalui latihan berterusan dan bimbingan tambahan.",
     };
 
     return (
         <div className="min-h-screen bg-gradient-to-b from-background to-muted/20 p-4 md:p-6">
             <div className="max-w-7xl mx-auto space-y-6">
-
                 {/* ================= HEADER ================= */}
                 <div className="space-y-1">
                     <div className="flex items-center gap-3">
@@ -64,13 +63,13 @@ export default function MyResultsPage() {
                         </h1>
                     </div>
                     <p className="text-muted-foreground">
-                        Paparan ringkas keputusan peperiksaan dan analisis prestasi.
+                        Paparan ringkas keputusan peperiksaan dan analisis
+                        prestasi.
                     </p>
                 </div>
 
                 {/* ================= SUMMARY CARDS (DENGAN ICON) ================= */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-
                     {/* Peperiksaan */}
                     <Card className="shadow-lg border border-border/50">
                         <CardContent className="p-6 flex items-center justify-between">
@@ -121,7 +120,6 @@ export default function MyResultsPage() {
                             </div>
                         </CardContent>
                     </Card>
-
                 </div>
 
                 {/* ================= TREND GRAPH ================= */}
@@ -131,7 +129,8 @@ export default function MyResultsPage() {
                             Trend Prestasi Akademik
                         </h2>
                         <p className="text-sm text-muted-foreground mb-4">
-                            Perbandingan peratus pencapaian bagi setiap peperiksaan.
+                            Perbandingan peratus pencapaian bagi setiap
+                            peperiksaan.
                         </p>
                         <PerformanceTrendChart />
                     </CardContent>
@@ -199,7 +198,6 @@ export default function MyResultsPage() {
                         </Button>
                     </Link>
                 </div>
-
             </div>
         </div>
     );

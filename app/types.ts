@@ -1,21 +1,21 @@
 export type User = {
-  id: string;
-  name: string;
-  identifier: string;
-  role: "admin" | "teacher" | "student";
-  class?: {
     id: string;
     name: string;
-  } | null;
+    identifier: string;
+    role: "admin" | "teacher" | "student";
+    class?: {
+        id: string;
+        name: string;
+    } | null;
 };
 
 export interface TeacherItem {
-  id: string;
-  name: string;
-  email: string;
-  identifier: string;
-  phone?: string;
-  roles: string[];
+    id: string;
+    name: string;
+    email: string;
+    identifier: string;
+    phone?: string;
+    roles: string[];
 }
 
 type Student = {
@@ -53,29 +53,44 @@ export type StudentDashboardData = {
 };
 
 export type ClassItem = {
-  id: string;
-  name: string;
-  studentCount?: number;
+    id: string;
+    name: string;
+    grade: number;
+    studentCount?: number;
 };
 
 export type SubjectItem = {
-  id: string;
-  name: string;
+    id: string;
+    name: string;
+    coordinator?: {
+        id: string;
+        name: string;
+    } | null;
 };
 
 export type ExamItem = {
-  id: string;
-  name: string;
-  academic_year: string;
+    id: string;
+    name: string;
+    academic_year: string;
 };
 
 export type RoleItem = {
-  role_id: string;
-  role_name: string;
-}
+    role_id: string;
+    role_name: string;
+};
 
 export type TeacherRoleItem = {
-  idx: number;
-  role_id: string;
-  role_name: string;
+    idx: number;
+    role_id: string;
+    role_name: string;
+};
+
+export type Student = {
+    id: string;
+    name: string;
+    identifier: string;
+    classId?: string | null; // 🔑 penting
+    className?: string; // display only
+    status: string;
+    email?: string;
 };
