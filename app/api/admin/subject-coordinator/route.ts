@@ -56,6 +56,7 @@ export async function POST(req: Request) {
         { status: 400 }
       );
     }
+    
 
     // ✅ Check existing coordinator for this subject
     const { data: existingRow, error: existingErr } = await supabase
@@ -117,6 +118,7 @@ export async function POST(req: Request) {
     console.error("POST subject-coordinator FAILED:", err);
     return NextResponse.json({ error: "Server error" }, { status: 500 });
   }
+  
 }
 
 /* =========================

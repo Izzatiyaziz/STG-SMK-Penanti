@@ -24,44 +24,80 @@ import {
     UserPlus,
     User,
     IdCard,
-    Building2,
-    Lock,
     GraduationCap,
     Calendar,
+    Layers,
 } from "lucide-react";
 
 interface AddStudentDialogProps {
     onSuccess: () => void;
-    classes: Array<{ id: string; name: string }>;
+    classes: Array<{ id: string; name: string }>; // Kekalkan props untuk elakkan ralat pada parent component
     children?: ReactNode;
 }
 
 export function AddStudentDialog({
     onSuccess,
-    classes,
     children,
 }: AddStudentDialogProps) {
     const [open, setOpen] = useState(false);
     const [loading, setLoading] = useState(false);
-    const [selectedClass, setSelectedClass] = useState<string>("none");
+    
+    // State untuk Tingkatan (Level)
+    const [selectedLevel, setSelectedLevel] = useState<string>("");
+    const today = new Date().toISOString().split('T')[0];
+    
     const [formData, setFormData] = useState({
         fullname: "",
         ic_number: "",
+        enrollment_date: today,
     });
+
+    // Fungsi Logik Auto-Detect Tingkatan
+    const autoDetectLevel = (ic: string) => {
+        if (ic.length < 2) return;
+
+        const yearPart = ic.substring(0, 2);
+        const birthYear = parseInt(yearPart) > 30 ? 1900 + parseInt(yearPart) : 2000 + parseInt(yearPart);
+        const currentYear = new Date().getFullYear();
+        const age = currentYear - birthYear;
+
+        let detected = "";
+        if (age === 13) detected = "1";
+        else if (age === 14) detected = "2";
+        else if (age === 15) detected = "3";
+        else if (age === 16) detected = "4";
+        else if (age === 17) detected = "5";
+
+        if (detected) {
+            setSelectedLevel(detected);
+        }
+    };
 
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const { name, value } = e.target;
         setFormData((prev) => ({ ...prev, [name]: value }));
+
+        if (name === "ic_number") {
+            autoDetectLevel(value);
+        }
     };
 
     async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
         e.preventDefault();
+        
+        if (!selectedLevel) {
+            toast.error("Sila pilih tingkatan pelajar");
+            return;
+        }
+
         setLoading(true);
 
         const payload = {
             fullname: formData.fullname,
             ic_number: formData.ic_number,
-            class_id: selectedClass === "none" ? null : selectedClass,
+            enrollment_date: formData.enrollment_date,
+            level: selectedLevel,
+            class_id: null, // Setkan null kerana Guru Kelas akan uruskan penempatan kemudian
         };
 
         try {
@@ -85,8 +121,9 @@ export function AddStudentDialog({
             setFormData({
                 fullname: "",
                 ic_number: "",
+                enrollment_date: today,
             });
-            setSelectedClass("none");
+            setSelectedLevel("");
 
             onSuccess();
         } catch {
@@ -120,7 +157,7 @@ export function AddStudentDialog({
                         </DialogTitle>
                     </div>
                     <p className="text-sm text-muted-foreground">
-                        Isi maklumat pelajar untuk pendaftaran sistem
+                        Isi maklumat asas. Penempatan kelas akan dilakukan oleh Guru Kelas.
                     </p>
                 </DialogHeader>
 
@@ -136,10 +173,7 @@ export function AddStudentDialog({
 
                         <div className="grid gap-4">
                             <div className="space-y-2">
-                                <Label
-                                    htmlFor="fullname"
-                                    className="text-sm font-medium flex items-center gap-1"
-                                >
+                                <Label htmlFor="fullname" className="text-sm font-medium flex items-center gap-1">
                                     <User className="w-3 h-3" />
                                     Nama Penuh *
                                 </Label>
@@ -156,10 +190,7 @@ export function AddStudentDialog({
 
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="space-y-2">
-                                    <Label
-                                        htmlFor="ic_number"
-                                        className="text-sm font-medium flex items-center gap-1"
-                                    >
+                                    <Label htmlFor="ic_number" className="text-sm font-medium flex items-center gap-1">
                                         <IdCard className="w-3 h-3" />
                                         No. Kad Pengenalan *
                                     </Label>
@@ -173,75 +204,52 @@ export function AddStudentDialog({
                                         className="rounded-xl border-2 border-border/30 focus:border-primary/50 h-11"
                                     />
                                 </div>
+                                <div className="space-y-2">
+                                    <Label htmlFor="enrollment_date" className="text-sm font-medium flex items-center gap-1">
+                                        <Calendar className="w-3 h-3" />
+                                        Tarikh Daftar *
+                                    </Label>
+                                    <Input
+                                        id="enrollment_date"
+                                        name="enrollment_date"
+                                        type="date"
+                                        max={today}
+                                        value={formData.enrollment_date}
+                                        onChange={handleInputChange}
+                                        required
+                                        className="rounded-xl border-2 border-border/30 focus:border-primary/50 h-11"
+                                    />
+                                </div>
                             </div>
                         </div>
                     </div>
 
-                    {/* CLASS ASSIGNMENT SECTION */}
+                    {/* ACADEMIC SECTION */}
                     <div className="space-y-4">
                         <div className="flex items-center gap-2 mb-2">
-                            <Building2 className="w-4 h-4 text-secondary" />
+                            <Layers className="w-4 h-4 text-secondary" />
                             <h3 className="font-semibold text-foreground">
-                                Penempatan Kelas
+                                Maklumat Akademik
                             </h3>
                         </div>
 
                         <div className="space-y-2">
-                            <Label
-                                htmlFor="class_id"
-                                className="text-sm font-medium"
-                            >
-                                Pilih Kelas
+                            <Label className="text-sm font-medium flex items-center gap-1">
+                                <GraduationCap className="w-3 h-3" />
+                                Tingkatan *
                             </Label>
-                            <Select
-                                value={selectedClass}
-                                onValueChange={setSelectedClass}
-                            >
+                            <Select value={selectedLevel} onValueChange={setSelectedLevel} required>
                                 <SelectTrigger className="w-full rounded-xl border-2 border-border/30 focus:border-primary/50 h-11">
-                                    <SelectValue placeholder="Pilih kelas pelajar..." />
+                                    <SelectValue placeholder="Pilih tingkatan..." />
                                 </SelectTrigger>
                                 <SelectContent className="rounded-xl border-2 border-border">
-                                    <SelectItem
-                                        value="none"
-                                        className="rounded-lg"
-                                    >
-                                        <div className="py-1">
-                                            <div className="font-medium">
-                                                Belum Ditetapkan
-                                            </div>
-                                        </div>
-                                    </SelectItem>
-                                    {classes.map((cls) => (
-                                        <SelectItem
-                                            key={cls.id}
-                                            value={cls.id}
-                                            className="rounded-lg"
-                                        >
-                                            <div className="py-1">
-                                                <div className="font-medium">
-                                                    {cls.name}
-                                                </div>
-                                            </div>
+                                    {[1, 2, 3, 4, 5].map((lvl) => (
+                                        <SelectItem key={lvl} value={lvl.toString()} className="rounded-lg">
+                                            Tingkatan {lvl}
                                         </SelectItem>
                                     ))}
                                 </SelectContent>
                             </Select>
-
-                          {selectedClass !== "none" &&
-                            classes.find((c) => c.id === selectedClass) && (
-                                <div className="mt-2 p-2 rounded-lg bg-secondary/10 border border-secondary/20">
-                                <p className="text-xs">
-                                    <span className="text-foreground">
-                                    📍 Kelas terpilih:{" "}
-                                    </span>
-
-                                    <span className="font-semibold text-primary">
-                                    {classes.find((c) => c.id === selectedClass)?.name}
-                                    </span>
-                                </p>
-                                </div>
-                            )}
-
                         </div>
                     </div>
 
@@ -255,8 +263,9 @@ export function AddStudentDialog({
                                 setFormData({
                                     fullname: "",
                                     ic_number: "",
+                                    enrollment_date: today,
                                 });
-                                setSelectedClass("none");
+                                setSelectedLevel("");
                             }}
                             className="flex-1 rounded-xl border-2 border-border/30 h-11 hover:bg-muted/50"
                             disabled={loading}
@@ -280,25 +289,6 @@ export function AddStudentDialog({
                                 </>
                             )}
                         </Button>
-                    </div>
-
-                    {/* FOOTER NOTES */}
-                    <div className="pt-4 border-t border-border/20">
-                        <div className="space-y-2">
-                            <div className="flex items-start gap-2 text-xs text-muted-foreground">
-                                <div className="w-2 h-2 rounded-full bg-primary/50 mt-1"></div>
-                                <p>
-                                    ID pelajar akan dijana automatik oleh sistem
-                                </p>
-                            </div>
-                            <div className="flex items-start gap-2 text-xs text-muted-foreground">
-                                <div className="w-2 h-2 rounded-full bg-primary/50 mt-1"></div>
-                                <p>
-                                    Semua maklumat disimpan dengan selamat dan
-                                    boleh dikemas kini
-                                </p>
-                            </div>
-                        </div>
                     </div>
                 </form>
             </DialogContent>

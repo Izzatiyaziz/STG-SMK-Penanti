@@ -1,43 +1,46 @@
 import { NextResponse } from "next/server";
-import supabase from "@/lib/supabase";
 import bcrypt from "bcryptjs";
+import nodemailer from "nodemailer";
+import supabase from "@/lib/supabase";
 
-/* ================= GET: ROLES ================= */
-export async function GET() {
-  const { data, error } = await supabase
-    .from("stg_roles")
-    .select("role_id, role_name")
-    .order("role_id");
-
-  if (error) {
-    return NextResponse.json([], { status: 500 });
-  }
-
-  return NextResponse.json(data);
-}
-
-/* ================= POST: ADD TEACHER ================= */
 export async function POST(req: Request) {
   try {
     const {
       username,
-      password,
       fullname,
       email,
       phone_number,
       role_name,
     } = await req.json();
 
-    if (!username || !password || !fullname || !role_name) {
+    if (!username || !fullname || !role_name) {
       return NextResponse.json(
-        { message: "Missing required fields" },
+        { message: "Data tidak lengkap" },
         { status: 400 }
       );
     }
 
-    const hashedPassword = await bcrypt.hash(password, 10);
+    // 1️⃣ CHECK ROLE
+    const { data: role, error: roleError } = await supabase
+      .from("stg_roles")
+      .select("role_id")
+      .eq("role_name", role_name)
+      .single();
 
-    // 1️⃣ insert teacher
+    if (roleError || !role) {
+      return NextResponse.json(
+        { message: "Role tidak sah" },
+        { status: 400 }
+      );
+    }
+
+    // GENERATE TEMP PASSWORD
+    const tempPassword = Math.random().toString(36).slice(-8);
+
+    // 2️⃣ HASH PASSWORD
+    const hashedPassword = await bcrypt.hash(tempPassword, 10);
+
+    // 3️⃣ INSERT TEACHER
     const { data: teacher, error: teacherError } = await supabase
       .from("stg_teachers")
       .insert({
@@ -57,21 +60,7 @@ export async function POST(req: Request) {
       );
     }
 
-    // 2️⃣ get role_id
-    const { data: role, error: roleError } = await supabase
-      .from("stg_roles")
-      .select("role_id")
-      .eq("role_name", role_name)
-      .single();
-
-    if (roleError || !role) {
-      return NextResponse.json(
-        { message: "Invalid role" },
-        { status: 400 }
-      );
-    }
-
-    // 3️⃣ assign role
+    // 4️⃣ ASSIGN ROLE
     const { error: assignError } = await supabase
       .from("stg_teacher_roles")
       .insert({
@@ -86,13 +75,40 @@ export async function POST(req: Request) {
       );
     }
 
-    return NextResponse.json({ message: "Teacher added successfully" });
+    // 5️⃣ SEND EMAIL
+    if (email) {
+      const transporter = nodemailer.createTransport({
+        service: "gmail",
+        auth: {
+          user: process.env.EMAIL_USER,
+          pass: process.env.EMAIL_PASS,
+        },
+      });
+
+      await transporter.sendMail({
+        from: `"STG System" <${process.env.EMAIL_USER}>`,
+        to: email,
+        subject: "Akaun Sistem STG",
+        html: `
+          <h3>Maklumat Akaun Anda</h3>
+          <p><b>Username:</b> ${username}</p>
+          <p><b>Password sementara:</b> ${tempPassword}</p>
+          <br/>
+          <p>Sila login dan tukar password anda selepas login pertama.</p>
+        `,
+      });
+    }
+
+    return NextResponse.json({
+      message: "Guru berjaya ditambah & email dihantar",
+    });
+
   } catch (err) {
-    console.error("ADD TEACHER ERROR:", err);
+    console.error("ERROR:", err);
+
     return NextResponse.json(
       { message: "Server error" },
       { status: 500 }
     );
   }
 }
-

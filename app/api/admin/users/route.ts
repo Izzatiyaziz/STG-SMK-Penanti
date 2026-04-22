@@ -68,9 +68,7 @@ export async function GET(req: Request) {
     if (role === "teacher" || role === "principal" || role === "class teacher" || role === "subject teacher" || role === "subject coordinator") {
       const { data, error } = await supabase
         .from("stg_teachers")
-        .select(
-          `
-          teacher_id,
+        .select(` teacher_id,
           fullname,
           email,
           stg_teacher_roles (

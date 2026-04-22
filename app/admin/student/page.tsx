@@ -44,6 +44,7 @@ import {
 } from "lucide-react";
 import { AddStudentDialog } from "./add-student-dialog";
 import { ClassItem } from "@/app/types";
+import { StudentPage } from "@/app/types";
 import {
   Dialog,
   DialogContent,
@@ -53,18 +54,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-
-/* ================= TYPES ================= */
-type Student = {
-  id: string;
-  name: string;
-  identifier: string; // <-- IC number awak
-  email?: string;
-  className?: string;
-  status: string;
-  lastActive?: string;
-  createdAt?: string;
-};
 
 /* ================= LAST UPDATED TIME ================= */
 const LastUpdatedTime = () => {
@@ -152,7 +141,7 @@ const estimateFormFromIC = (ic: string) => {
 };
 
 export default function StudentsPage() {
-  const [students, setStudents] = useState<Student[]>([]);
+  const [students, setStudents] = useState<StudentPage[]>([]);
   const [classes, setClasses] = useState<ClassItem[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -164,13 +153,14 @@ export default function StudentsPage() {
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
 
   // edit & delete
-  const [editingStudent, setEditingStudent] = useState<Student | null>(null);
-  const [deletingStudent, setDeletingStudent] = useState<Student | null>(null);
+  const [editingStudent, setEditingStudent] = useState<StudentPage | null>(null);
+  const [deletingStudent, setDeletingStudent] = useState<StudentPage | null>(null);
   const [editForm, setEditForm] = useState({
     name: "",
     identifier: "",
     className: "",
-    email: "",
+    level: "",           // Pastikan ini ada
+    enrollment_date: "",
   });
 
   /* ================= FETCH STUDENTS ================= */
@@ -269,13 +259,14 @@ export default function StudentsPage() {
   };
 
   /* ================= EDIT ================= */
-  const handleEditClick = (student: Student) => {
+  const handleEditClick = (student: StudentPage) => {
     setEditingStudent(student);
     setEditForm({
       name: student.name,
       identifier: student.identifier,
       className: student.className || "",
-      email: student.email || "",
+      level: student.level || "",
+      enrollment_date: student.enrollment_date || "",
     });
   };
 
@@ -285,14 +276,15 @@ export default function StudentsPage() {
 
     setLoading(true);
     try {
-      const res = await fetch(`/api/admin/users?id=${editingStudent.id}`, {
+        const res = await fetch(`/api/admin/students?id=${editingStudent.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: editForm.name,
           identifier: editForm.identifier,
           className: editForm.className || null,
-          email: editForm.email || null,
+          level: editingStudent.level, 
+          enrollment_date: editingStudent.enrollment_date
         }),
       });
 
@@ -321,7 +313,7 @@ export default function StudentsPage() {
 
     setLoading(true);
     try {
-      const res = await fetch(`/api/admin/users?id=${deletingStudent.id}`, {
+      const res = await fetch(`/api/admin/?id=${deletingStudent.id}`, {
         method: "DELETE",
       });
 
@@ -330,7 +322,6 @@ export default function StudentsPage() {
       if (!res.ok) {
         throw new Error(data.message || "Gagal memadam pelajar");
       }
-
       toast.success("Pelajar berjaya dipadam", {
         description: `${deletingStudent.name} telah dipadam dari sistem`,
       });

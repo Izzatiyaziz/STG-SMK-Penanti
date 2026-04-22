@@ -3,11 +3,22 @@ import supabase from "@/lib/supabase";
 
 export const runtime = "nodejs";
 
-export async function GET() {
+// ✅ GET: Sokong filter mengikut grade
+export async function GET(req: Request) {
   try {
-    const { data, error } = await supabase
+    const { searchParams } = new URL(req.url);
+    const grade = searchParams.get("grade");
+
+    let query = supabase
       .from("stg_classes")
-      .select("class_id, class_name");
+      .select("class_id, class_name, grade");
+
+    // Jika ada grade dalam URL, tapis data
+    if (grade) {
+      query = query.eq("grade", parseInt(grade));
+    }
+
+    const { data, error } = await query;
 
     if (error) {
       console.error("CLASS FETCH ERROR:", error);
@@ -17,6 +28,7 @@ export async function GET() {
     const classes = (data ?? []).map((c) => ({
       id: c.class_id,
       name: c.class_name,
+      grade: c.grade,
     }));
 
     return NextResponse.json(classes);
@@ -26,50 +38,44 @@ export async function GET() {
   }
 }
 
+// ✅ POST: Simpan nama kelas DAN grade
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { class_name } = body;
+    const { class_name, grade } = body;
 
-    if (!class_name) {
+    if (!class_name || !grade) {
       return NextResponse.json(
-        { message: "Class name is required" },
+        { message: "Nama kelas dan tingkatan (grade) diperlukan" },
         { status: 400 }
       );
     }
 
     const { error } = await supabase
       .from("stg_classes")
-      .insert({ class_name });
+      .insert({ 
+        class_name, 
+        grade: parseInt(grade) 
+      });
 
     if (error) {
       console.error("ADD CLASS ERROR:", error);
-
       if (error.code === "23505") {
         return NextResponse.json(
-          { message: "Class already exists" },
+          { message: "Kelas ini sudah wujud untuk tingkatan ini" },
           { status: 409 }
         );
       }
-
-      return NextResponse.json(
-        { message: error.message },
-        { status: 500 }
-      );
+      return NextResponse.json({ message: error.message }, { status: 500 });
     }
 
-    return NextResponse.json(
-      { message: "Class added successfully" },
-      { status: 201 }
-    );
+    return NextResponse.json({ message: "Kelas berjaya ditambah" }, { status: 201 });
   } catch {
-    return NextResponse.json(
-      { message: "Server error" },
-      { status: 500 }
-    );
+    return NextResponse.json({ message: "Server error" }, { status: 500 });
   }
 }
 
+// ✅ PUT: Kemaskini nama kelas
 export async function PUT(req: Request) {
   try {
     const body = await req.json();
@@ -89,31 +95,23 @@ export async function PUT(req: Request) {
 
     if (error) {
       console.error("UPDATE CLASS ERROR:", error);
-      return NextResponse.json(
-        { message: error.message },
-        { status: 500 }
-      );
+      return NextResponse.json({ message: error.message }, { status: 500 });
     }
 
     return NextResponse.json({ message: "Class updated successfully" });
   } catch {
-    return NextResponse.json(
-      { message: "Server error" },
-      { status: 500 }
-    );
+    return NextResponse.json({ message: "Server error" }, { status: 500 });
   }
 }
 
+// ✅ DELETE: Padam rekod spesifik berdasarkan ID
 export async function DELETE(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
     const class_id = searchParams.get("id");
 
     if (!class_id) {
-      return NextResponse.json(
-        { message: "Class ID is required" },
-        { status: 400 }
-      );
+      return NextResponse.json({ message: "Class ID is required" }, { status: 400 });
     }
 
     const { error } = await supabase
@@ -123,17 +121,11 @@ export async function DELETE(req: Request) {
 
     if (error) {
       console.error("DELETE CLASS ERROR:", error);
-      return NextResponse.json(
-        { message: error.message },
-        { status: 500 }
-      );
+      return NextResponse.json({ message: error.message }, { status: 500 });
     }
 
     return NextResponse.json({ message: "Class deleted successfully" });
   } catch {
-    return NextResponse.json(
-      { message: "Server error" },
-      { status: 500 }
-    );
+    return NextResponse.json({ message: "Server error" }, { status: 500 });
   }
 }

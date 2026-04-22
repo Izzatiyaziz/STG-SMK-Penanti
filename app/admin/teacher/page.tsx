@@ -427,7 +427,7 @@ export default function UsersPage() {
                                 <SelectItem value="all">
                                     <div className="flex items-center gap-2">
                                     <Users className="w-4 h-4" />
-                                    Semua Peranan
+                                    Semua Jawatan
                                     </div>
                                 </SelectItem>
 

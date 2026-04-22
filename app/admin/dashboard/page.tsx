@@ -2,14 +2,6 @@
 
 import { useEffect, useState } from "react";
 import {
-  AreaChart,
-  Area,
-  XAxis,
-  YAxis,
-  Tooltip,
-  ResponsiveContainer,
-} from "recharts";
-import {
   Table,
   TableBody,
   TableCell,
@@ -17,101 +9,63 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import {
-  Users,
-  GraduationCap,
-  UserCheck,
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { 
+  Users, 
+  GraduationCap, 
+  UserCheck, 
+  ClipboardList, 
   Activity,
-  ClipboardList,
+  ShieldCheck,
+  Clock,
+  Loader2,
+  Building2,
+  BarChart3
 } from "lucide-react";
 import { toast } from "sonner";
 import { User } from "@/app/types";
+import { Badge } from "@/components/ui/badge";
 
-/* ===============================
-   DUMMY DATA – PENGGUNAAN SISTEM
-================================ */
-const data3Months = [
-  { date: "Apr 6", value: 120 },
-  { date: "Apr 13", value: 160 },
-  { date: "Apr 21", value: 140 },
-  { date: "Apr 29", value: 190 },
-  { date: "May 6", value: 240 },
-  { date: "May 13", value: 220 },
-  { date: "May 21", value: 170 },
-  { date: "May 29", value: 230 },
-  { date: "Jun 5", value: 250 },
-  { date: "Jun 12", value: 270 },
-  { date: "Jun 20", value: 290 },
-  { date: "Jun 30", value: 260 },
-];
+interface SessionLog {
+  session_id: string;
+  user_id: string;
+  user_name: string;
+  role: string;
+  action: string;
+  login_time: string;
+  logout_time: string | null;
+}
 
-const data30Days = data3Months.slice(-6);
-const data7Days = data3Months.slice(-3);
-
-/* ===============================
-   DUMMY LOG PENGGUNAAN SISTEM
-================================ */
-const usageLogs = [
-  {
-    id: 1,
-    nama: "Ahmad bin Ali",
-    role: "Pelajar",
-    action: "Akses Keputusan Peperiksaan",
-    date: "20/06/2025",
-    time: "10:32 AM",
-  },
-  {
-    id: 2,
-    nama: "Aisyah binti Mohd",
-    role: "Pelajar",
-    action: "Muat Turun Slip Keputusan",
-    date: "20/06/2025",
-    time: "10:35 AM",
-  },
-  {
-    id: 3,
-    nama: "Ahmad bin Ali",
-    role: "Guru",
-    action: "Kemas Kini Markah Peperiksaan",
-    date: "19/06/2025",
-    time: "3:15 PM",
-  },
-  {
-    id: 4,
-    nama: "Zainal bin Abidin",
-    role: "Pentadbir",
-    action: "Menjana Laporan Peperiksaan",
-    date: "18/06/2025",
-    time: "9:05 AM",
-  },
-  {
-    id: 5,
-    nama: "Fauziah binti Rashid",
-    role: "Pelajar",
-    action: "Log Masuk Sistem",
-    date: "18/06/2025",
-    time: "8:40 AM",
-  },
-];
+const LastUpdatedTime = () => {
+  const [time, setTime] = useState<string>("");
+  useEffect(() => {
+    const update = () => setTime(new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }));
+    update();
+    const interval = setInterval(update, 60000);
+    return () => clearInterval(interval);
+  }, []);
+  return <span className="font-medium text-primary">{time || "Loading..."}</span>;
+};
 
 export default function AdminDashboardPage() {
   const [students, setStudents] = useState<User[]>([]);
   const [teachers, setTeachers] = useState<User[]>([]);
+  const [sessions, setSessions] = useState<SessionLog[]>([]);
   const [loading, setLoading] = useState(false);
-  const [range, setRange] = useState<"3m" | "30d" | "7d">("3m");
 
   async function fetchDashboardData() {
     setLoading(true);
     try {
-      const [studentRes, teacherRes] = await Promise.all([
+      const [studentRes, teacherRes, sessionRes] = await Promise.all([
         fetch("/api/admin/users?role=student"),
         fetch("/api/admin/users?role=teacher"),
+        fetch("/api/admin/sessions"),
       ]);
 
-      setStudents(await studentRes.json());
-      setTeachers(await teacherRes.json());
+      if (studentRes.ok) setStudents(await studentRes.json());
+      if (teacherRes.ok) setTeachers(await teacherRes.json());
+      if (sessionRes.ok) setSessions(await sessionRes.json());
+      
     } catch (error) {
       toast.error("Gagal memuatkan data dashboard");
     } finally {
@@ -123,134 +77,179 @@ export default function AdminDashboardPage() {
     fetchDashboardData();
   }, []);
 
-  const chartData =
-    range === "7d" ? data7Days : range === "30d" ? data30Days : data3Months;
-
   return (
-    <div className="min-h-screen bg-gradient-to-b from-background to-muted/20 p-4 md:p-6">
+    <div className="min-h-screen bg-background p-4 md:p-6">
       <div className="max-w-7xl mx-auto space-y-8">
 
         {/* ================= HEADER ================= */}
-        <div className="space-y-2">
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-xl bg-primary/10">
-              <Users className="w-6 h-6 text-primary" />
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+          <div className="space-y-3">
+            <div className="flex items-center gap-4">
+              <div className="p-3 rounded-2xl bg-gradient-to-br from-primary/10 to-primary/5 border border-primary/20 shadow-sm">
+                <Activity className="w-7 h-7 text-primary" />
+              </div>
+              <div>
+                <h1 className="text-xl font-bold text-foreground">Dashboard Utama</h1>
+                <p className="text-muted-foreground font-medium mt-1">Ringkasan statistik dan log aktiviti sistem terkini</p>
+              </div>
             </div>
-            <h1 className="text-3xl font-bold tracking-tight">
-              Admin Dashboard
-            </h1>
+            <div className="flex items-center gap-3 text-sm text-muted-foreground">
+              <div className="flex items-center gap-1"><ShieldCheck className="w-3.5 h-3.5" /><span>Sistem Dilindungi</span></div>
+              <div className="w-1 h-1 rounded-full bg-muted" />
+              <div className="flex items-center gap-1">
+                <Clock className="w-3.5 h-3.5" />
+                <span>Kemas kini: <LastUpdatedTime /></span>
+              </div>
+            </div>
           </div>
-          <p className="text-muted-foreground">
-            Pemantauan statistik dan penggunaan sistem sekolah.
-          </p>
         </div>
 
-        {/* ================= STAT CARDS ================= */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <StatCard title="Jumlah Pelajar" value={students.length} icon={GraduationCap} />
-          <StatCard title="Jumlah Guru" value={teachers.length} icon={UserCheck} />
-          <StatCard
-            title="Jumlah Warga Sekolah"
-            value={students.length + teachers.length}
-            icon={Users}
+        {/* ================= STAT CARDS GAYA STUDENT PAGE ================= */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+          <StatCard 
+            title="Jumlah Pelajar" 
+            value={students.length} 
+            icon={GraduationCap} 
+            variant="primary"
+          />
+          <StatCard 
+            title="Jumlah Guru" 
+            value={teachers.length} 
+            icon={UserCheck} 
+            variant="chart2"
+          />
+          <StatCard 
+            title="Warga Sekolah" 
+            value={students.length + teachers.length} 
+            icon={Users} 
+            variant="chart3"
           />
         </div>
 
-      {/* ================= LOG PENGGUNAAN SISTEM ================= */}
-        <Card className="border border-border/50 shadow-lg overflow-hidden">
-          {/* HEADER */}
-          <div className="flex items-center justify-between px-6 py-4 border-b bg-muted/30">
-            <div className="flex items-center gap-2">
-              <ClipboardList className="w-5 h-5 text-primary" />
-              <h2 className="text-lg font-semibold">
-                Log Penggunaan Sistem
-              </h2>
+        {/* ================= TABLE LOG SISTEM ================= */}
+        <Card className="border-border bg-card shadow-md rounded-xl overflow-hidden">
+          <CardHeader className="border-b border-border bg-gradient-to-r from-card to-card/80 px-6 py-5">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div>
+                <CardTitle className="text-xl font-bold text-foreground flex items-center gap-2">
+                  <ClipboardList className="w-5 h-5 text-primary" />
+                  Log Penggunaan Sistem
+                </CardTitle>
+                <p className="text-sm text-muted-foreground mt-1">Memantau aktiviti log masuk dan log keluar pengguna</p>
+              </div>
+              <Badge variant="outline" className="border-primary/30 bg-primary/5 text-primary font-medium">
+                {sessions.length} Sesi Terkumpul
+              </Badge>
             </div>
-          </div>
+          </CardHeader>
 
-          {/* TABLE */}
           <div className="overflow-x-auto">
             <Table>
-              <TableHeader className="bg-background">
-                <TableRow>
-                  <TableHead className="w-14 text-center">No</TableHead>
-                   <TableHead>Nama</TableHead>
-                  <TableHead>Peranan</TableHead>
-                  <TableHead>Aktiviti</TableHead>
-                  <TableHead>Tarikh</TableHead>
-                  <TableHead>Masa</TableHead>
+              <TableHeader className="bg-muted/30">
+                <TableRow className="hover:bg-transparent border-b border-border">
+                  <TableHead className="font-semibold text-foreground py-4 w-16 text-center">#</TableHead>
+                  <TableHead className="font-semibold text-foreground">ID Pengguna</TableHead>
+                  <TableHead className="font-semibold text-foreground">Peranan</TableHead>
+                  <TableHead className="font-semibold text-foreground">Aktiviti</TableHead>
+                  <TableHead className="font-semibold text-foreground">Waktu Log Masuk</TableHead>
+                  <TableHead className="font-semibold text-foreground text-right pr-6">Status / Log Keluar</TableHead>
                 </TableRow>
               </TableHeader>
 
               <TableBody>
-                {usageLogs.map((log, index) => (
-                  <TableRow
-                    key={log.id}
-                    className="odd:bg-muted/20 hover:bg-muted/40 transition"
-                  >
-                    <TableCell className="text-center font-medium">
-                      {index + 1}
-                    </TableCell>
-
-                    <TableCell>
-                      <span className="inline-flex items-center rounded-md bg-primary/10 px-2 py-1 text-xs font-medium text-primary">
-                        {log.nama}
-                      </span>
-                    </TableCell>
-
-                    <TableCell>
-                      <span className="inline-flex items-center rounded-md bg-primary/10 px-2 py-1 text-xs font-medium text-primary">
-                        {log.role}
-                      </span>
-                    </TableCell>
-
-                    <TableCell className="font-medium">
-                      {log.action}
-                    </TableCell>
-
-                    <TableCell className="text-muted-foreground">
-                      {log.date}
-                    </TableCell>
-
-                    <TableCell className="text-muted-foreground">
-                      {log.time}
+                {loading ? (
+                  <TableRow>
+                    <TableCell colSpan={6} className="py-16 text-center">
+                      <Loader2 className="w-8 h-8 animate-spin text-primary inline" />
                     </TableCell>
                   </TableRow>
-                ))}
+                ) : sessions.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={6} className="py-16 text-center text-muted-foreground">
+                      Tiada rekod log ditemui.
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  sessions.map((log, index) => {
+                    const loginDate = new Date(log.login_time);
+                    const formattedLogin = `${loginDate.toLocaleDateString("ms-MY")} ${loginDate.toLocaleTimeString("ms-MY", { hour: '2-digit', minute: '2-digit' })}`;
+                    
+                    return (
+                      <TableRow key={log.session_id} className="hover:bg-muted/50 transition-colors border-b border-border/50 last:border-0">
+                        <TableCell className="text-center font-medium text-muted-foreground">{index + 1}</TableCell>
+                        <TableCell className="font-bold text-foreground uppercase">{log.user_id}</TableCell>
+                        <TableCell>
+                          <Badge variant="secondary" className="bg-blue-50 text-blue-700 border-blue-100 font-medium capitalize">
+                            {log.role}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-slate-600 font-medium">{log.action}</TableCell>
+                        <TableCell className="text-muted-foreground tabular-nums text-sm">{formattedLogin}</TableCell>
+                        <TableCell className="text-right pr-6 tabular-nums text-sm">
+                          {log.logout_time ? (
+                            <span className="text-muted-foreground">
+                              {new Date(log.logout_time).toLocaleDateString("ms-MY")} {new Date(log.logout_time).toLocaleTimeString("ms-MY", { hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                          ) : (
+                            <Badge className="bg-emerald-500/10 text-emerald-600 border-emerald-200 animate-pulse">
+                              Sedang Aktif
+                            </Badge>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })
+                )}
               </TableBody>
             </Table>
           </div>
         </Card>
+      </div>
+    </div>
+  );
+}
 
+// ✅ StatCard yang diubah suai mengikut gaya Student Page
+function StatCard({ title, value, icon: Icon, variant }: { title: string, value: number, icon: any, variant: 'primary' | 'chart2' | 'chart3' }) {
+  const styles = {
+    primary: {
+      border: "hover:border-primary/30",
+      bg: "bg-primary/10",
+      iconBorder: "border-primary/20",
+      text: "text-primary",
+      valText: "text-foreground"
+    },
+    chart2: {
+      border: "hover:border-chart-2/30",
+      bg: "bg-chart-2/10",
+      iconBorder: "border-chart-2/20",
+      text: "text-chart-2",
+      valText: "text-chart-2"
+    },
+    chart3: {
+      border: "hover:border-chart-3/30",
+      bg: "bg-chart-3/10",
+      iconBorder: "border-chart-3/20",
+      text: "text-chart-3",
+      valText: "text-foreground"
+    }
+  }[variant];
 
-              </div>
-            </div>
-          );
-        }
-
-        /* ===============================
-          REUSABLE STAT CARD
-        ================================ */
-        function StatCard({
-          title,
-          value,
-          icon: Icon,
-        }: {
-          title: string;
-          value: number;
-          icon: React.ElementType;
-        }) {
-          return (
-            <Card className="shadow-lg border border-border/50">
-              <CardContent className="p-6 flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-muted-foreground">{title}</p>
-                  <h2 className="text-3xl font-bold mt-2">{value}</h2>
-                </div>
-                <div className="p-3 rounded-full bg-primary/10">
-                  <Icon className="w-6 h-6 text-primary" />
-                </div>
-              </CardContent>
-            </Card>
-          );
-        }
+  return (
+    <Card className={`border-border bg-card shadow-sm hover:shadow-md transition-all duration-300 ${styles.border}`}>
+      <CardContent className="p-5">
+        <div className="flex items-start justify-between">
+          <div>
+            <p className="text-sm font-medium text-muted-foreground mb-2">
+              {title}
+            </p>
+            <h3 className={`text-3xl font-bold ${styles.valText}`}>{value}</h3>
+          </div>
+          <div className={`p-3 rounded-xl ${styles.bg} border ${styles.iconBorder}`}>
+            <Icon className={`w-5 h-5 ${styles.text}`} />
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}

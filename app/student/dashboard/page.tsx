@@ -58,10 +58,10 @@ export default function StudentDashboardPage() {
   /* ================= DUMMY DATA ================= */
 
   const performanceData = [
-    { exam: "UPSA", average: 65 },
-    { exam: "Percubaan", average: 68 },
-    { exam: "UASA", average: 72 },
-    { exam: "Akhir Tahun", average: 75 },
+    { exam: "UPSA 2025", average: 65 },
+    { exam: "UASA 2025", average: 68 },
+    { exam: "UPSA 2026", average: 72 },
+    { exam: "UASA 2026", average: 75 },
   ];
 
   const summary = {
@@ -206,7 +206,7 @@ export default function StudentDashboardPage() {
             <div className="flex items-center gap-2">
               <TrendingUp className="w-5 h-5 text-primary" />
               <h2 className="text-lg font-semibold">
-                AI Performance Insight
+                Performance Insight
               </h2>
             </div>
             <p><b>Kekuatan:</b> {aiInsight.strength}</p>

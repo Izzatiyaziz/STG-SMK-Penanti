@@ -26,12 +26,13 @@ import {
 import {
   UserPlus,
   Loader2,
+  User,
   Mail,
   Phone,
-  User,
-  Lock,
   BookOpen,
-} from "lucide-react";
+  RefreshCw,
+  Copy,
+} from "lucide-react"; //
 
 interface AddTeacherDialogProps {
   onSuccess: () => void;
@@ -53,52 +54,70 @@ const ROLE_OPTIONS: { value: TeacherRoleName; label: string }[] = [
 
 function generateTeacherUsername() {
   const code = Math.random().toString(16).slice(2, 8).toUpperCase();
-  return `TCH-${code}`; // example: TCH-8F3A12
+  return `PNT-${code}`; // example: PNT-8F3A12
+}
+
+function generatePassword() {
+  return Math.random().toString(36).slice(-4) +
+         Math.random().toString(36).slice(-4).toUpperCase() +
+         "@1";
 }
 
 export function AddTeacherDialog({ onSuccess, children }: AddTeacherDialogProps) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
-
+  const [generatedId, setGeneratedId] = useState("");
+  const [generatedPwd, setGeneratedPwd] = useState("");
   const [role, setRole] = useState<TeacherRoleName | "">("");
+
+  
+  // ✅ COPY FUNCTION
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text);
+    toast.success("Berjaya disalin!");
+  };
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
 
     if (!role) {
-      toast.error("Sila pilih peranan guru");
+      toast.error("Sila pilih jawatan guru");
+      return;
+    }
+    if (!generatedId || !generatedPwd) {
+      toast.error("ID atau password belum dijana");
       return;
     }
 
     setLoading(true);
 
     const formData = new FormData(e.currentTarget);
-
     const fullname = String(formData.get("fullname") || "").trim();
     const email = String(formData.get("email") || "").trim();
     const phone = String(formData.get("phone") || "").trim();
-    const password = String(formData.get("password") || "").trim();
 
-    if (!fullname || !password) {
-      toast.error("Sila lengkapkan semua maklumat wajib");
+    if (!fullname) {
+      toast.error("Nama penuh wajib diisi");
       setLoading(false);
       return;
     }
 
     // ✅ Auto-create username for database
-    const username = generateTeacherUsername();
+    //const username = generateTeacherUsername();
+    //const username = generatedId;
 
     try {
       const res = await fetch("/api/admin/teacher", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          username, // ✅ auto generated (hidden)
-          password,
+          username: generatedId,
+          password: generatedPwd,
           fullname,
-          email: email ? email : null,
-          phone_number: phone ? phone : null,
+          email: email || null,
+          phone_number: phone || null,
           role_name: role,
+          is_first_login: true, // ✅ IMPORTANT
         }),
       });
 
@@ -109,7 +128,11 @@ export function AddTeacherDialog({ onSuccess, children }: AddTeacherDialogProps)
         return;
       }
 
-      toast.success("Guru berjaya ditambah ✅");
+      // ✅ SHOW staff ID + temp password
+      toast.success("Akaun berjaya dibuat", {
+       // description: `ID Staff: ${generatedId} | Password: ${generatedPwd}`,
+      });
+
       setOpen(false);
       onSuccess?.();
     } catch (error) {
@@ -120,7 +143,17 @@ export function AddTeacherDialog({ onSuccess, children }: AddTeacherDialogProps)
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} 
+    onOpenChange={(val) => {
+        setOpen(val);
+
+        // ✅ GENERATE staff ID bila buka dialog
+        if (val) {
+          setGeneratedId(generateTeacherUsername());
+          setGeneratedPwd(generatePassword());
+        }
+      }}
+    >
       <DialogTrigger asChild>
         {children ? (
           children
@@ -149,6 +182,42 @@ export function AddTeacherDialog({ onSuccess, children }: AddTeacherDialogProps)
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-5">
+            {/* ✅ NEW: STAFF ID DISPLAY */}
+<div className="grid grid-cols-2 gap-4 p-4 bg-muted rounded-xl">
+            <div>
+              <Label className="text-xs">Staff ID</Label>
+              <div className="font-mono font-bold text-primary">
+                {generatedId}
+              </div>
+            </div>
+
+            <div>
+              <Label className="text-xs">Password</Label>
+
+              <div className="flex items-center gap-2">
+                <code className="font-mono font-bold text-primary">
+                  {generatedPwd}
+                </code>
+
+                {/* COPY */}
+                <button
+                  type="button"
+                  onClick={() => copyToClipboard(generatedPwd)}
+                >
+                  <Copy className="w-4 h-4" />
+                </button>
+
+                {/* REGENERATE */}
+                <button
+                  type="button"
+                  onClick={() => setGeneratedPwd(generatePassword())}
+                >
+                  <RefreshCw className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          </div>
+
           {/* PERSONAL INFO */}
           <div className="space-y-4">
             <div className="flex items-center gap-2 mb-2">
@@ -203,46 +272,17 @@ export function AddTeacherDialog({ onSuccess, children }: AddTeacherDialogProps)
             </div>
           </div>
 
-          {/* SECURITY */}
-          <div className="space-y-4">
-            <div className="flex items-center gap-2 mb-2">
-              <Lock className="w-4 h-4 text-secondary" />
-              <h3 className="font-semibold text-foreground">
-                Maklumat Keselamatan
-              </h3>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="password" className="text-sm font-medium">
-                Kata Laluan Awal
-              </Label>
-              <Input
-                id="password"
-                name="password"
-                type="password"
-                placeholder="Minimum 8 aksara"
-                required
-                className="rounded-xl border-2 border-border/30 focus:border-primary/50 h-11"
-              />
-            </div>
-          </div>
-
           {/* ROLE */}
           <div className="space-y-4">
-            <div className="flex items-center gap-2 mb-2">
-              <BookOpen className="w-4 h-4 text-accent" />
-              <h3 className="font-semibold text-foreground">Peranan Sistem</h3>
-            </div>
-
             <div className="space-y-2">
-              <Label className="text-sm font-medium">Jenis Guru</Label>
+              <Label className="text-sm font-medium">Jawatan</Label>
 
               <Select
                 value={role}
                 onValueChange={(val) => setRole(val as TeacherRoleName)}
               >
                 <SelectTrigger className="w-full rounded-xl border-2 border-border/30 focus:border-primary/50 h-11">
-                  <SelectValue placeholder="Pilih peranan..." />
+                  <SelectValue placeholder="Pilih jawatan..." />
                 </SelectTrigger>
 
                 <SelectContent className="rounded-xl border-2 border-border">
