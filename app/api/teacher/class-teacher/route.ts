@@ -1,65 +1,145 @@
-import { createServerClient, type CookieOptions } from "@supabase/ssr";
-import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
+import supabase from "@/lib/supabase";
 
-export async function POST(request: Request) {
-  try {
-    // Di Next.js 16, cookies() mesti di-await
-    const cookieStore = await cookies();
+export const runtime = "nodejs";
 
-    // Inisialisasi Supabase Server Client (Cara baru SSR)
-    const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          get(name: string) {
-            return cookieStore.get(name)?.value;
-          },
-          set(name: string, value: string, options: CookieOptions) {
-            cookieStore.set({ name, value, ...options });
-          },
-          remove(name: string, options: CookieOptions) {
-            cookieStore.set({ name, value: "", ...options });
-          },
-        },
-      }
-    );
+// GET: fetch class assigned to this class teacher + current students
+export async function GET(req: Request) {
+    try {
+        const { searchParams } = new URL(req.url);
+        const teacher_id = String(searchParams.get("teacher_id") ?? "").trim();
 
-    // Ambil data daripada frontend
-    const { class_id, teacher_id } = await request.json();
+        if (!teacher_id) {
+            return NextResponse.json(
+                { error: "teacher_id diperlukan" },
+                { status: 400 }
+            );
+        }
 
-    if (!class_id || !teacher_id) {
-      return NextResponse.json(
-        { error: "Maklumat kelas atau guru tidak lengkap." },
-        { status: 400 }
-      );
+        const { data: assignment, error: aErr } = await supabase
+            .from("stg_class_teachers")
+            .select("class_id")
+            .eq("teacher_id", teacher_id)
+            .maybeSingle();
+
+        if (aErr) {
+            return NextResponse.json({ error: aErr.message }, { status: 500 });
+        }
+
+        if (!assignment?.class_id) {
+            return NextResponse.json(
+                { error: "Guru ini belum dilantik sebagai guru kelas" },
+                { status: 404 }
+            );
+        }
+
+        const { data: cls } = await supabase
+            .from("stg_classes")
+            .select("class_id, class_name, grade")
+            .eq("class_id", assignment.class_id)
+            .single();
+
+        const { data: students, error: sErr } = await supabase
+            .from("stg_students")
+            .select("student_id, fullname, ic_number")
+            .eq("class_id", assignment.class_id)
+            .order("fullname", { ascending: true });
+
+        if (sErr) {
+            return NextResponse.json({ error: sErr.message }, { status: 500 });
+        }
+
+        return NextResponse.json({
+            class: cls
+                ? { id: cls.class_id, name: cls.class_name, grade: String(cls.grade) }
+                : { id: assignment.class_id, name: "", grade: "" },
+            students: (students ?? []).map((s: any) => ({
+                id: s.student_id,
+                name: s.fullname,
+                identifier: s.ic_number,
+            })),
+        });
+    } catch (err) {
+        console.error("GET teacher/class-teacher FAILED:", err);
+        return NextResponse.json({ error: "Server error" }, { status: 500 });
     }
+}
 
-    // Kemaskini table 'classes'. 
-    // Pastikan nama column dalam DB anda adalah 'teacher_id'
-    const { error } = await supabase
-      .from("classes")
-      .update({ teacher_id: teacher_id })
-      .eq("id", class_id);
+// POST: upsert class teacher assignment (same logic as admin)
+export async function POST(req: Request) {
+    try {
+        const body = await req.json();
+        const class_id = String(body?.class_id ?? "").trim();
+        const teacher_id = String(body?.teacher_id ?? "").trim();
 
-    if (error) {
-      return NextResponse.json(
-        { error: error.message },
-        { status: 500 }
-      );
+        if (!class_id || !teacher_id) {
+            return NextResponse.json(
+                { error: "class_id dan teacher_id diperlukan" },
+                { status: 400 }
+            );
+        }
+
+        const { data: existingRow, error: existingErr } = await supabase
+            .from("stg_class_teachers")
+            .select("class_teacher_id, class_id, teacher_id")
+            .eq("class_id", class_id)
+            .maybeSingle();
+
+        if (existingErr) {
+            return NextResponse.json(
+                { error: existingErr.message },
+                { status: 500 }
+            );
+        }
+
+        if (existingRow) {
+            const { data: updatedRow, error: updateErr } = await supabase
+                .from("stg_class_teachers")
+                .update({ teacher_id })
+                .eq("class_id", class_id)
+                .select("class_teacher_id, class_id, teacher_id, created_at")
+                .single();
+
+            if (updateErr) {
+                return NextResponse.json(
+                    { error: updateErr.message },
+                    { status: 500 }
+                );
+            }
+
+            return NextResponse.json(
+                {
+                    success: true,
+                    message: "Guru kelas berjaya dikemaskini",
+                    assignment: updatedRow,
+                },
+                { status: 200 }
+            );
+        }
+
+        const { data: insertedRow, error: insertErr } = await supabase
+            .from("stg_class_teachers")
+            .insert({ class_id, teacher_id })
+            .select("class_teacher_id, class_id, teacher_id, created_at")
+            .single();
+
+        if (insertErr) {
+            return NextResponse.json(
+                { error: insertErr.message },
+                { status: 500 }
+            );
+        }
+
+        return NextResponse.json(
+            {
+                success: true,
+                message: "Guru kelas berjaya dilantik",
+                assignment: insertedRow,
+            },
+            { status: 201 }
+        );
+    } catch (err) {
+        console.error("POST teacher/class-teacher FAILED:", err);
+        return NextResponse.json({ error: "Server error" }, { status: 500 });
     }
-
-    return NextResponse.json(
-      { message: "Lantikan guru kelas berjaya! ✅" },
-      { status: 200 }
-    );
-
-  } catch (err) {
-    console.error("API Error:", err);
-    return NextResponse.json(
-      { error: "Ralat dalaman server." },
-      { status: 500 }
-    );
-  }
 }

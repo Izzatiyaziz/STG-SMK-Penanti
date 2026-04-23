@@ -9,9 +9,9 @@ import {
     FileSpreadsheet,
     FileSignature,
     Camera,
+    FileCheck2,
 } from "lucide-react";
 import { LiaChalkboardTeacherSolid } from "react-icons/lia";
-import { PiStudent } from "react-icons/pi";
 
 /* ================= PERANAN GURU ================= */
 
@@ -85,9 +85,14 @@ export const teacherRoleConfig = {
                 icon: ListChecks,
             },
             {
-                title: "Guru",
+                title: "Pengurusan Guru",
                 url: "/coordinator/assignments",
                 icon: LiaChalkboardTeacherSolid,
+            },
+            {
+                title: "Imbasan OMR",
+                url: "/teacher/omr",
+                icon: Camera,
             },
             {
                 title: "Laporan",
@@ -117,14 +122,9 @@ export const sidebarConfig = {
                 icon: LayoutDashboard,
             },
             {
-                title: "Guru",
-                url: "/admin/teacher",
-                icon: LiaChalkboardTeacherSolid,
-            },
-            {
-                title: "Pelajar",
-                url: "/admin/student",
-                icon: PiStudent,
+                title: "Pengurusan Pengguna",
+                url: "/admin/users",
+                icon: Users,
             },
             {
                 title: "Kelas",
@@ -136,11 +136,21 @@ export const sidebarConfig = {
                 url: "/admin/subjects",
                 icon: Folder,
             },
-        /*    {
-                title: "Laporan",
-                url: "/admin/reports",
-                icon: FileText,
-            },*/
+            {
+                title: "Peperiksaan",
+                url: "/admin/exams",
+                icon: FileCheck2,
+            },
+            // {
+            //     title: "Assign Guru",
+            //     url: "/admin/assignments",
+            //     icon: FileSignature,
+            // },
+            // {
+            //     title: "Laporan",
+            //     url: "/admin/reports",
+            //     icon: FileText,
+            // },
         ],
         documents: [],
 

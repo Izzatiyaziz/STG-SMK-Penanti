@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
     Table,
     TableBody,
@@ -9,6 +9,15 @@ import {
     TableHeader,
     TableRow,
 } from "@/components/ui/table";
+import {
+    Pagination,
+    PaginationContent,
+    PaginationEllipsis,
+    PaginationItem,
+    PaginationLink,
+    PaginationNext,
+    PaginationPrevious,
+} from "@/components/ui/pagination";
 import { Badge } from "@/components/ui/badge";
 import { AddTeacherDialog } from "./add-teacher-dialog";
 import {
@@ -81,12 +90,14 @@ const LastUpdatedTime = () => {
 };
 
 export default function UsersPage() {
+    const PAGE_SIZE = 8;
     const [users, setUsers] = useState<User[]>([]);
     const [loading, setLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState("");
     const [filterRole, setFilterRole] = useState<string>("all");
     const [sortBy, setSortBy] = useState<"name" | "roles" | "date">("name");
     const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
+    const [currentPage, setCurrentPage] = useState(1);
     const [editOpen, setEditOpen] = useState(false);
     const [selectedUser, setSelectedUser] = useState<User | null>(null);
 
@@ -148,6 +159,39 @@ export default function UsersPage() {
                 return compareB.localeCompare(compareA);
             }
         });
+
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [searchQuery, filterRole, sortBy, sortOrder]);
+
+    useEffect(() => {
+        const totalPages = Math.max(1, Math.ceil(filteredUsers.length / PAGE_SIZE));
+        if (currentPage > totalPages) {
+            setCurrentPage(totalPages);
+        }
+    }, [currentPage, filteredUsers.length]);
+
+    const totalPages = Math.max(1, Math.ceil(filteredUsers.length / PAGE_SIZE));
+    const paginatedUsers = useMemo(() => {
+        const startIndex = (currentPage - 1) * PAGE_SIZE;
+        return filteredUsers.slice(startIndex, startIndex + PAGE_SIZE);
+    }, [currentPage, filteredUsers]);
+
+    const paginationItems = useMemo(() => {
+        if (totalPages <= 5) {
+            return Array.from({ length: totalPages }, (_, index) => index + 1);
+        }
+
+        if (currentPage <= 3) {
+            return [1, 2, 3, 4, "ellipsis", totalPages] as const;
+        }
+
+        if (currentPage >= totalPages - 2) {
+            return [1, "ellipsis", totalPages - 3, totalPages - 2, totalPages - 1, totalPages] as const;
+        }
+
+        return [1, "ellipsis-left", currentPage - 1, currentPage, currentPage + 1, "ellipsis-right", totalPages] as const;
+    }, [currentPage, totalPages]);
 
     // ================= STATS =================
         const stats = {
@@ -503,7 +547,7 @@ export default function UsersPage() {
                                                 </Button>
                                             </TableHead>
                                             <TableHead className="font-semibold text-foreground py-4">
-                                                ID Guru
+                                                No. Staff
                                             </TableHead>
                                             <TableHead className="font-semibold text-foreground py-4">
                                                 Email
@@ -568,7 +612,7 @@ export default function UsersPage() {
                                                 </TableCell>
                                             </TableRow>
                                         ) : (
-                                           filteredUsers.map((user, index) => {
+                                           paginatedUsers.map((user, index) => {
   return (
     <TableRow
       key={user.id}
@@ -580,7 +624,7 @@ export default function UsersPage() {
         onClick={() => handleEditUser(user)}
       >
         <div className="font-medium text-muted-foreground hover:text-primary transition-colors">
-          {index + 1}
+          {(currentPage - 1) * PAGE_SIZE + index + 1}
         </div>
       </TableCell>
 
@@ -612,7 +656,7 @@ export default function UsersPage() {
         </div>
       </TableCell>
 
-      {/* ID Guru */}
+      {/* No. Staff */}
       <TableCell className="py-4">
         <div className="font-mono bg-muted/30 px-3 py-1.5 rounded-md text-foreground border border-border">
           {user.identifier}
@@ -671,42 +715,115 @@ export default function UsersPage() {
                                 </Table>
                             </div>
                         </div>
+
                     </CardContent>
 
                     {/* FOOTER */}
                     <div className="border-t border-border bg-muted/20 px-6 py-4">
-                        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 text-sm">
-                            <div className="flex items-center gap-2 text-muted-foreground">
-                                <div className="flex items-center gap-1">
-                                    <span className="font-semibold text-foreground">{filteredUsers.length}</span>
-                                    <span>daripada</span>
-                                    <span className="font-semibold text-foreground">{users.length}</span>
-                                    <span>guru dipaparkan</span>
-                                </div>
-                                {filterRole !== "all" && (
-                                    <Badge variant="secondary" className="ml-2">
-                                        {filterRole === "subject teacher" ? "Guru Subjek" : 
-                                         filterRole === "teacher" ? "Guru Kelas" : 
-                                         filterRole === "admin" ? "Admin" : filterRole}
-                                    </Badge>
-                                )}
-                            </div>
-                            <div className="flex items-center gap-4">
+                        <div className="flex flex-col gap-4 text-sm">
+                            <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
                                 <div className="flex items-center gap-2 text-muted-foreground">
-                                    <Clock className="w-4 h-4" />
-                                    <span>Kemas kini: <LastUpdatedTime /></span>
+                                    <div className="flex items-center gap-1">
+                                        <span className="font-semibold text-foreground">{filteredUsers.length}</span>
+                                        <span>daripada</span>
+                                        <span className="font-semibold text-foreground">{users.length}</span>
+                                        <span>guru dipaparkan</span>
+                                    </div>
+                                    {filterRole !== "all" && (
+                                        <Badge variant="secondary" className="ml-2">
+                                            {filterRole === "subject teacher" ? "Guru Subjek" : 
+                                             filterRole === "teacher" ? "Guru Kelas" : 
+                                             filterRole === "admin" ? "Admin" : filterRole}
+                                        </Badge>
+                                    )}
                                 </div>
-                                <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={fetchUsers}
-                                    disabled={loading}
-                                    className="h-8"
-                                >
-                                    {loading && <Loader2 className="w-3 h-3 mr-2 animate-spin" />}
-                                    Refresh Data
-                                </Button>
+                                <div className="flex items-center gap-4">
+                                    <div className="flex items-center gap-2 text-muted-foreground">
+                                        <Clock className="w-4 h-4" />
+                                        <span>Kemas kini: <LastUpdatedTime /></span>
+                                    </div>
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={fetchUsers}
+                                        disabled={loading}
+                                        className="h-8"
+                                    >
+                                        {loading && <Loader2 className="w-3 h-3 mr-2 animate-spin" />}
+                                        Refresh Data
+                                    </Button>
+                                </div>
                             </div>
+
+                            {!loading && totalPages > 1 && (
+                                <div className="flex flex-col gap-3 border-t border-border/60 pt-4">
+                                    <div className="text-sm text-muted-foreground">
+                                        Showing {(currentPage - 1) * PAGE_SIZE + 1}
+                                        {" - "}
+                                        {Math.min(currentPage * PAGE_SIZE, filteredUsers.length)} of {filteredUsers.length} teachers
+                                    </div>
+                                    <Pagination>
+                                        <PaginationContent>
+                                            <PaginationItem>
+                                                <PaginationPrevious
+                                                    href="#"
+                                                    onClick={(e) => {
+                                                        e.preventDefault();
+                                                        setCurrentPage((page) => Math.max(1, page - 1));
+                                                    }}
+                                                    className={
+                                                        currentPage === 1
+                                                            ? "pointer-events-none opacity-50"
+                                                            : undefined
+                                                    }
+                                                />
+                                            </PaginationItem>
+
+                                            {paginationItems.map((item, index) => {
+                                                if (typeof item !== "number") {
+                                                    return (
+                                                        <PaginationItem key={`${item}-${index}`}>
+                                                            <PaginationEllipsis />
+                                                        </PaginationItem>
+                                                    );
+                                                }
+
+                                                return (
+                                                    <PaginationItem key={item}>
+                                                        <PaginationLink
+                                                            href="#"
+                                                            isActive={currentPage === item}
+                                                            onClick={(e) => {
+                                                                e.preventDefault();
+                                                                setCurrentPage(item);
+                                                            }}
+                                                        >
+                                                            {item}
+                                                        </PaginationLink>
+                                                    </PaginationItem>
+                                                );
+                                            })}
+
+                                            <PaginationItem>
+                                                <PaginationNext
+                                                    href="#"
+                                                    onClick={(e) => {
+                                                        e.preventDefault();
+                                                        setCurrentPage((page) =>
+                                                            Math.min(totalPages, page + 1)
+                                                        );
+                                                    }}
+                                                    className={
+                                                        currentPage === totalPages
+                                                            ? "pointer-events-none opacity-50"
+                                                            : undefined
+                                                    }
+                                                />
+                                            </PaginationItem>
+                                        </PaginationContent>
+                                    </Pagination>
+                                </div>
+                            )}
                         </div>
                     </div>
                 </Card>

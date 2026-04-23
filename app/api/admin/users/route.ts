@@ -13,7 +13,7 @@ export async function GET(req: Request) {
         if (role === "admin") {
             const { data, error } = await supabase
                 .from("stg_admins")
-                .select("admin_id");
+                .select("admin_id, fullname");
 
             if (error || !data) {
                 console.error("ADMIN FETCH ERROR:", error);
@@ -23,7 +23,7 @@ export async function GET(req: Request) {
             return NextResponse.json(
                 data.map((a: any) => ({
                     id: a.admin_id,
-                    name: "Admin",
+                    name: a.fullname ?? "Admin",
                     identifier: a.admin_id,
                     role: "admin",
                 }))
@@ -52,29 +52,14 @@ export async function GET(req: Request) {
                     id: s.student_id,
                     name: s.fullname,
                     identifier: s.ic_number,
-                    status: "active",
+                    status: s.status ?? "active",
                     class_id: s.class_id,
                     className: s.stg_classes?.class_name ?? null,
                 }))
             );
         }
 
-<<<<<<< HEAD
-    // ================= TEACHER (ALL or FILTER BY ROLE NAME) =================
-    // ✅ allow:
-    // role=teacher -> all teachers
-    // role=subject coordinator -> only coordinator teachers
-    // role=principal / class teacher / subject teacher -> filtered
-    if (role === "teacher" || role === "principal" || role === "class teacher" || role === "subject teacher" || role === "subject coordinator") {
-      const { data, error } = await supabase
-        .from("stg_teachers")
-        .select(` teacher_id,
-=======
         // ================= TEACHER (ALL or FILTER BY ROLE NAME) =================
-        // ✅ allow:
-        // role=teacher -> all teachers
-        // role=subject coordinator -> only coordinator teachers
-        // role=principal / class teacher / subject teacher -> filtered
         if (
             role === "teacher" ||
             role === "principal" ||
@@ -85,7 +70,7 @@ export async function GET(req: Request) {
             const { data, error } = await supabase.from("stg_teachers").select(
                 `
           teacher_id,
->>>>>>> a3c1c78bc98c6976f363b0faa9dc0a93b21746ff
+          username,
           fullname,
           email,
           stg_teacher_roles (
@@ -101,20 +86,17 @@ export async function GET(req: Request) {
                 return NextResponse.json([], { status: 200 });
             }
 
-            // ✅ format response (same as your existing)
             let teachers = data.map((t: any) => ({
                 id: t.teacher_id,
                 name: t.fullname,
-                identifier: t.teacher_id,
+                identifier: t.username ?? t.teacher_id,
                 email: t.email,
                 roles: (t.stg_teacher_roles || []).map(
                     (tr: any) => tr?.stg_roles?.role_name
                 ),
             }));
 
-            // ✅ if role=teacher -> return all teachers (no filter)
             if (role !== "teacher") {
-                // ✅ filter teacher by exact role name
                 teachers = teachers.filter((t: any) => t.roles.includes(role));
             }
 

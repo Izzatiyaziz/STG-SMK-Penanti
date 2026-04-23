@@ -1,41 +1,26 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState } from "react";
+import { toast } from "sonner";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
-<<<<<<< HEAD
-  Pencil,
-  Trash2,
-  BookOpen,
-  Plus,
-  Search,
-  RefreshCw,
-  Loader2,
-  Shield,
-  Clock,
-  Filter,
-  SortAsc,
-  SortDesc,
-  Eye,
-  UserCheck,
-  UserCircle,
-=======
-    Pencil,
-    Trash2,
-    BookOpen,
-    Plus,
-    Search,
-    RefreshCw,
-    Loader2,
-    Shield,
-    Clock,
-    Filter,
-    SortAsc,
-    SortDesc,
-    Eye,
-    UserCheck,
->>>>>>> a3c1c78bc98c6976f363b0faa9dc0a93b21746ff
-} from "lucide-react";
-
+    Dialog,
+    DialogContent,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+    DialogTrigger,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select";
 import {
     Table,
     TableBody,
@@ -44,1221 +29,373 @@ import {
     TableHeader,
     TableRow,
 } from "@/components/ui/table";
+import { Plus, Trash2, Pencil, UserPlus } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-
-import {
-<<<<<<< HEAD
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-  DialogClose
-=======
-    Dialog,
-    DialogContent,
-    DialogDescription,
-    DialogFooter,
-    DialogHeader,
-    DialogTitle,
-    DialogTrigger,
->>>>>>> a3c1c78bc98c6976f363b0faa9dc0a93b21746ff
-} from "@/components/ui/dialog";
-
-import { Label } from "@/components/ui/label";
-import { toast } from "sonner";
-import { SubjectItem } from "@/app/types";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-
-import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from "@/components/ui/select";
-
-/* ✅ Client-side only time component */
-const LastUpdatedTime = () => {
-    const [time, setTime] = useState<string>("");
-
-<<<<<<< HEAD
-  useEffect(() => {
-    const update = () => setTime(new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }));
-    update();
-    const interval = setInterval(update, 60000);
-    return () => clearInterval(interval);
-  }, []);
-
-  return <span className="font-medium text-primary">{time || "Loading..."}</span>;
+type SubjectRow = {
+    id: string;
+    name: string;
+    coordinator: { id: string; name: string } | null;
 };
 
-type CoordinatorTeacher = {
-  id: string;
-  name: string;
-  email?: string | null;
-  roles?: string[];
-=======
-    useEffect(() => {
-        setTime(
-            new Date().toLocaleTimeString([], {
-                hour: "2-digit",
-                minute: "2-digit",
-            })
-        );
-        const interval = setInterval(() => {
-            setTime(
-                new Date().toLocaleTimeString([], {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                })
-            );
-        }, 60000);
-        return () => clearInterval(interval);
-    }, []);
-
-    return (
-        <span className="font-medium text-primary">{time || "Loading..."}</span>
-    );
+type TeacherRow = {
+    id: string;
+    name: string;
+    identifier?: string;
 };
 
-type CoordinatorTeacher = {
-    id: string; // ✅ from API
-    name: string; // ✅ from API
-    email?: string | null;
-    roles?: string[];
->>>>>>> a3c1c78bc98c6976f363b0faa9dc0a93b21746ff
-};
-
-type SubjectWithCoordinator = SubjectItem & { coordinatorName?: string };
-
-export default function SubjectsPage() {
-<<<<<<< HEAD
-  const [subjects, setSubjects] = useState<SubjectWithCoordinator[]>([]);
-  const [loading, setLoading] = useState(false);
-=======
-    const [subjects, setSubjects] = useState<SubjectItem[]>([]);
+export default function AdminSubjectsPage() {
+    const [rows, setRows] = useState<SubjectRow[]>([]);
     const [loading, setLoading] = useState(false);
->>>>>>> a3c1c78bc98c6976f363b0faa9dc0a93b21746ff
 
-    const [editing, setEditing] = useState<SubjectItem | null>(null);
-    const [deleting, setDeleting] = useState<SubjectItem | null>(null);
+    const [editing, setEditing] = useState<SubjectRow | null>(null);
+    const [editName, setEditName] = useState("");
 
-<<<<<<< HEAD
-  const [detailsSubject, setDetailsSubject] = useState<SubjectItem | null>(null);
-  const [coordinatorTeachers, setCoordinatorTeachers] = useState<CoordinatorTeacher[]>([]);
-  const [loadingTeachers, setLoadingTeachers] = useState(false);
-  const [selectedCoordinatorId, setSelectedCoordinatorId] = useState<string>("");
-=======
-    // ✅ Subject Details Modal
-    const [detailsSubject, setDetailsSubject] = useState<SubjectItem | null>(
-        null
-    );
+    const [teachers, setTeachers] = useState<TeacherRow[]>([]);
+    const [assigning, setAssigning] = useState<SubjectRow | null>(null);
+    const [selectedTeacherId, setSelectedTeacherId] = useState<string>("");
 
-    // ✅ Coordinator list
-    const [coordinatorTeachers, setCoordinatorTeachers] = useState<
-        CoordinatorTeacher[]
-    >([]);
-    const [loadingTeachers, setLoadingTeachers] = useState(false);
-
-    // ✅ Selected coordinator teacher_id
-    const [selectedCoordinatorId, setSelectedCoordinatorId] =
-        useState<string>("");
->>>>>>> a3c1c78bc98c6976f363b0faa9dc0a93b21746ff
-
-    const [searchQuery, setSearchQuery] = useState("");
-    const [sortBy, setSortBy] = useState<"name" | "studentCount">("name");
-    const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
-
-<<<<<<< HEAD
-  // ================= FETCH DATA (GABUNGAN 3 SUMBER) =================
-  const fetchSubjects = useCallback(async () => {
-    setLoading(true);
-    try {
-      // 1. Ambil data subjek (stg_subjects)
-      const res = await fetch("/api/admin/subjects");
-      const dataSubjects: SubjectItem[] = await res.json();
-
-      // 2. Ambil data pemetaan (stg_subject_cordinator)
-      const mappingRes = await fetch("/api/admin/subject-coordinator");
-      const mappings = await mappingRes.json();
-
-      // 3. Ambil data guru (users role subject coordinator)
-      const teacherRes = await fetch("/api/admin/users?role=subject coordinator");
-      const allCoordinators: CoordinatorTeacher[] = await teacherRes.json();
-
-      // 4. Proses pemetaan untuk mendapatkan nama guru
-      const processedData = dataSubjects.map((sub: any) => {
-        // Cari rekod pemetaan bagi subjek ini
-        const mapping = mappings.find((m: any) => m.subject_id === sub.id);
-        
-        // Cari nama guru berdasarkan teacher_id dalam pemetaan tersebut
-        const teacherObj = allCoordinators.find((t) => t.id === mapping?.teacher_id);
-
-        return {
-          ...sub,
-          coordinatorName: teacherObj ? teacherObj.name : "Belum Dilantik",
-        };
-      });
-
-      setSubjects(processedData);
-    } catch (error) {
-      console.error("FETCH ERROR:", error);
-      toast.error("Gagal memuatkan senarai subjek");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchSubjects();
-  }, [fetchSubjects]);
-
-  // ================= FILTER AND SORT =================
-  const filteredSubjects = subjects
-    .filter((subject) =>
-      subject.name.toLowerCase().includes(searchQuery.toLowerCase())
-    )
-    .sort((a, b) => {
-      const valA = sortBy === "name" ? a.name.toLowerCase() : (a as any).studentCount || 0;
-      const valB = sortBy === "name" ? b.name.toLowerCase() : (b as any).studentCount || 0;
-      return sortOrder === "asc" ? (valA > valB ? 1 : -1) : (valA < valB ? 1 : -1);
-    });
-
-  // ================= ACTIONS =================
-  async function handleAddSubject(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    setLoading(true);
-    const formData = new FormData(e.currentTarget);
-    try {
-      const res = await fetch("/api/admin/subjects", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ subject_name: formData.get("subject_name") }),
-      });
-      if (res.ok) {
-        toast.success("Subjek berjaya ditambah ✅");
-        fetchSubjects();
-        (document.getElementById("close-add-dialog") as any)?.click();
-      }
-    } catch { toast.error("Ralat sistem"); } finally { setLoading(false); }
-  }
-
-  async function handleEditSubject(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    if (!editing) return;
-    setLoading(true);
-    const formData = new FormData(e.currentTarget);
-    try {
-      const res = await fetch("/api/admin/subjects", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ subject_id: editing.id, subject_name: formData.get("subject_name") }),
-      });
-      if (res.ok) {
-        toast.success("Subjek dikemaskini ✅");
-        setEditing(null);
-        fetchSubjects();
-      }
-    } catch { toast.error("Gagal"); } finally { setLoading(false); }
-  }
-
-  async function handleDeleteSubject() {
-    if (!deleting) return;
-    setLoading(true);
-    try {
-      const res = await fetch(`/api/admin/subjects?id=${deleting.id}`, { method: "DELETE" });
-      if (res.ok) {
-        toast.success("Subjek dipadam 🗑️");
-        setDeleting(null);
-        fetchSubjects();
-      }
-    } catch { toast.error("Gagal"); } finally { setLoading(false); }
-  }
-
-  async function fetchCoordinatorTeachers() {
-    setLoadingTeachers(true);
-    try {
-      const res = await fetch("/api/admin/users?role=subject coordinator");
-      const data = await res.json();
-      if (res.ok) setCoordinatorTeachers(data);
-    } catch { toast.error("Gagal memuatkan guru"); } finally { setLoadingTeachers(false); }
-  }
-
-  function openDetails(subject: SubjectItem) {
-    setDetailsSubject(subject);
-    setSelectedCoordinatorId("");
-    fetchCoordinatorTeachers();
-  }
-
-  async function handleAppointCoordinator() {
-    if (!detailsSubject || !selectedCoordinatorId) return;
-    setLoading(true);
-    try {
-      const res = await fetch("/api/admin/subject-coordinator", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ subject_id: detailsSubject.id, teacher_id: selectedCoordinatorId }),
-      });
-      if (res.ok) {
-        toast.success("Penyelaras berjaya dilantik ✅");
-        setDetailsSubject(null);
-        fetchSubjects();
-      }
-    } catch { toast.error("Ralat sistem"); } finally { setLoading(false); }
-  }
-
-  return (
-    <div className="min-h-screen bg-background p-4 md:p-6">
-      <div className="max-w-7xl mx-auto space-y-8">
-        
-        {/* HEADER */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
-          <div className="space-y-3">
-            <div className="flex items-center gap-4">
-              <div className="p-3 rounded-2xl bg-gradient-to-br from-primary/10 to-primary/5 border border-primary/20 shadow-sm">
-                <BookOpen className="w-7 h-7 text-primary" />
-              </div>
-              <div>
-                <h1 className="text-xl font-bold text-foreground">Pengurusan Subjek</h1>
-                <p className="text-muted-foreground font-medium mt-1">Urus dan pantau semua subjek dalam sistem</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-3 text-sm text-muted-foreground">
-              <div className="flex items-center gap-1"><Shield className="w-3.5 h-3.5" /><span>Data Terurus</span></div>
-              <div className="w-1 h-1 rounded-full bg-muted" />
-              <div className="flex items-center gap-1"><Clock className="w-3.5 h-3.5" /><span>Kemas kini: <LastUpdatedTime /></span></div>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <Button variant="outline" onClick={fetchSubjects} disabled={loading} className="border-border hover:bg-accent shadow-xs">
-              {loading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-2" />}
-              Refresh
-            </Button>
-            <Dialog>
-              <DialogTrigger asChild>
-                <Button className="bg-primary hover:bg-primary/90 text-primary-foreground shadow-sm"><Plus className="w-4 h-4 mr-2" />Tambah Subjek</Button>
-              </DialogTrigger>
-              <DialogContent className="rounded-lg border-border">
-                <DialogHeader>
-                  <DialogTitle className="text-lg font-semibold">Tambah Subjek Baharu</DialogTitle>
-                  <DialogDescription className="text-muted-foreground">Masukkan nama subjek untuk sistem.</DialogDescription>
-                </DialogHeader>
-                <form onSubmit={handleAddSubject} className="space-y-4 pt-4">
-                  <div className="space-y-2">
-                    <Label className="font-medium">Nama Subjek</Label>
-                    <Input name="subject_name" placeholder="Contoh: Matematik" className="border-border focus:border-primary" required />
-                  </div>
-                  <DialogFooter className="pt-4">
-                    <DialogClose asChild><Button id="close-add-dialog" type="button" variant="outline">Batal</Button></DialogClose>
-                    <Button type="submit" disabled={loading}>Simpan</Button>
-                  </DialogFooter>
-                </form>
-              </DialogContent>
-            </Dialog>
-          </div>
-        </div>
-
-        {/* MAIN TABLE CARD */}
-        <Card className="border-border bg-card shadow-md rounded-xl overflow-hidden">
-          <CardHeader className="border-b border-border bg-gradient-to-r from-card to-card/80 px-6 py-5">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-              <div>
-                <CardTitle className="text-xl font-bold text-foreground flex items-center gap-2">
-                  <Filter className="w-5 h-5 text-primary" /> Senarai Subjek
-                </CardTitle>
-                <p className="text-sm text-muted-foreground mt-1">Urus semua subjek yang berdaftar</p>
-              </div>
-              <Badge variant="outline" className="border-primary/30 bg-primary/5 text-primary font-medium">{filteredSubjects.length} rekod ditemui</Badge>
-            </div>
-          </CardHeader>
-
-          <CardContent className="p-6">
-            <div className="mb-6 relative">
-              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input placeholder="Cari nama subjek..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-10 h-11 rounded-lg border-border bg-background focus:border-primary focus:ring-primary/20" />
-            </div>
-
-            <div className="rounded-lg border border-border overflow-hidden">
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader className="bg-muted/30">
-                    <TableRow className="hover:bg-transparent border-b border-border">
-                      <TableHead className="font-semibold text-foreground py-4 w-16 text-center">#</TableHead>
-                      <TableHead>
-                        <Button variant="ghost" size="sm" onClick={() => { setSortBy("name"); setSortOrder(sortOrder === "asc" ? "desc" : "asc"); }} className="p-0 h-auto font-semibold hover:bg-transparent">
-                          Nama Subjek
-                          {sortBy === "name" && (sortOrder === "asc" ? <SortAsc className="w-3.5 h-3.5 ml-1 text-primary" /> : <SortDesc className="w-3.5 h-3.5 ml-1 text-primary" />)}
-                        </Button>
-                      </TableHead>
-                      <TableHead className="font-semibold text-foreground py-4">Guru Penyelaras Subjek</TableHead>
-                      <TableHead className="font-semibold text-foreground py-4 text-right">Tindakan</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {loading ? (
-                      <TableRow><TableCell colSpan={4} className="py-16 text-center"><Loader2 className="w-8 h-8 animate-spin text-primary inline" /></TableCell></TableRow>
-                    ) : filteredSubjects.length === 0 ? (
-                      <TableRow><TableCell colSpan={4} className="py-16 text-center text-muted-foreground">Tiada subjek dijumpai</TableCell></TableRow>
-                    ) : (
-                      filteredSubjects.map((subject, index) => (
-                        <TableRow key={subject.id} className="hover:bg-muted/50 transition-colors border-b border-border/50 last:border-0">
-                          <TableCell className="text-center text-muted-foreground">{index + 1}</TableCell>
-                          <TableCell className="font-bold text-foreground">{subject.name}</TableCell>
-                          <TableCell>
-                            <div className="flex items-center gap-2">
-                              <UserCircle className={`w-4 h-4 ${subject.coordinatorName === "Belum Dilantik" ? "text-muted-foreground" : "text-orange-500"}`} />
-                              <span className={`text-sm font-medium ${subject.coordinatorName === "Belum Dilantik" ? "text-muted-foreground italic" : "text-foreground"}`}>
-                                {subject.coordinatorName}
-                              </span>
-                            </div>
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <div className="flex justify-end gap-2">
-                                <Button size="sm" variant="outline" onClick={() => openDetails(subject)} className="h-8 w-8 p-0 border-border hover:bg-accent hover:text-primary" title="Lantik Penyelaras">
-                                  <Eye className="h-3.5 w-3.5" />
-                                </Button>
-                                <Button size="sm" variant="outline" onClick={() => setEditing(subject)} className="h-8 w-8 p-0 border-border hover:bg-accent hover:text-primary">
-                                  <Pencil className="h-3.5 w-3.5" />
-                                </Button>
-                                <Button size="sm" variant="destructive" onClick={() => setDeleting(subject)} className="h-8 w-8 p-0">
-                                  <Trash2 className="h-3.5 w-3.5" />
-                                </Button>
-=======
-    const [stats, setStats] = useState({
-        totalSubjects: 0,
-        activeSubjects: 0,
-        averageClasses: 0,
-        completionRate: 85,
-    });
-
-    // ================= FETCH SUBJECTS =================
     async function fetchSubjects() {
         setLoading(true);
         try {
             const res = await fetch("/api/admin/subjects");
             const data = await res.json();
-
-            console.group("📦 FETCH SUBJECTS RESPONSE");
-            console.log("Raw API data:", data);
-            data.forEach((s: any, i: number) => {
-                console.log(`Subject[${i}]`, {
-                    id: s.id,
-                    name: s.name,
-                    coordinator: s.coordinator,
-                });
-            });
-            console.groupEnd();
-
-            setSubjects(data);
-        } catch (err) {
-            console.error("❌ FETCH SUBJECTS ERROR:", err);
-            toast.error("Gagal memuatkan senarai subjek");
+            setRows(data ?? []);
+        } catch {
+            setRows([]);
         } finally {
             setLoading(false);
+        }
+    }
+
+    async function fetchTeachers() {
+        try {
+            const res = await fetch("/api/admin/users?role=teacher");
+            const data = await res.json();
+            setTeachers(Array.isArray(data) ? data : []);
+        } catch {
+            setTeachers([]);
         }
     }
 
     useEffect(() => {
         fetchSubjects();
+        fetchTeachers();
     }, []);
 
-    // ================= FILTER AND SORT =================
-    const filteredSubjects = subjects
-        .filter((subject) =>
-            subject.name.toLowerCase().includes(searchQuery.toLowerCase())
-        )
-        .sort((a, b) => {
-            let compareA: any, compareB: any;
-
-            if (sortBy === "name") {
-                compareA = a.name.toLowerCase();
-                compareB = b.name.toLowerCase();
-            } else {
-                compareA = (a as any).studentCount || 0;
-                compareB = (b as any).studentCount || 0;
-            }
-
-            if (sortOrder === "asc") return compareA > compareB ? 1 : -1;
-            return compareA < compareB ? 1 : -1;
-        });
-
-    // ================= TOGGLE SORT =================
-    const toggleSort = (field: "name" | "studentCount") => {
-        if (sortBy === field) {
-            setSortOrder(sortOrder === "asc" ? "desc" : "asc");
-        } else {
-            setSortBy(field);
-            setSortOrder("asc");
-        }
-    };
-
-    // ================= ADD SUBJECT =================
-    async function handleAddSubject(e: React.FormEvent<HTMLFormElement>) {
+    async function handleAdd(e: React.FormEvent<HTMLFormElement>) {
         e.preventDefault();
-        setLoading(true);
+        const fd = new FormData(e.currentTarget);
+        const subject_name = String(fd.get("subject_name") ?? "").trim();
+        if (!subject_name) return;
 
-        const formData = new FormData(e.currentTarget);
-        const subjectName = formData.get("subject_name") as string;
-
+        const toastId = toast.loading("Menambah subjek...");
         try {
             const res = await fetch("/api/admin/subjects", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ subject_name: subjectName }),
+                body: JSON.stringify({ subject_name }),
             });
-
-            const data = await res.json();
-
+            const json = await res.json();
             if (!res.ok) {
-                toast.error(data.message || "Gagal menambah subjek");
-                setLoading(false);
+                toast.error(json?.message ?? "Gagal", { id: toastId });
                 return;
             }
-
-            toast.success("Subjek berjaya ditambah", {
-                description: `Subjek "${subjectName}" telah ditambah ke dalam sistem`,
-            });
-
+            toast.success("Subjek berjaya ditambah", { id: toastId });
             fetchSubjects();
-            (
-                document.getElementById("close-add-dialog") as HTMLButtonElement
-            )?.click();
+            (e.currentTarget as HTMLFormElement).reset();
         } catch {
-            toast.error("Ralat sistem. Sila cuba lagi.");
-        } finally {
-            setLoading(false);
+            toast.error("Ralat sistem", { id: toastId });
         }
     }
 
-    // ================= EDIT SUBJECT =================
-    async function handleEditSubject(e: React.FormEvent<HTMLFormElement>) {
-        e.preventDefault();
+    async function handleSaveEdit() {
         if (!editing) return;
-
-        setLoading(true);
-        const formData = new FormData(e.currentTarget);
-        const subjectName = formData.get("subject_name") as string;
-
+        const toastId = toast.loading("Menyimpan...");
         try {
             const res = await fetch("/api/admin/subjects", {
                 method: "PUT",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     subject_id: editing.id,
-                    subject_name: subjectName,
+                    subject_name: editName,
                 }),
             });
-
-            const data = await res.json();
-
+            const json = await res.json();
             if (!res.ok) {
-                toast.error(data.message || "Gagal mengemas kini subjek");
-                setLoading(false);
+                toast.error(json?.message ?? "Gagal", { id: toastId });
                 return;
             }
-
-            toast.success("Subjek berjaya dikemas kini", {
-                description: `Subjek telah dikemas kini kepada "${subjectName}"`,
-            });
-
+            toast.success("Subjek dikemaskini", { id: toastId });
             setEditing(null);
             fetchSubjects();
         } catch {
-            toast.error("Ralat sistem. Sila cuba lagi.");
-        } finally {
-            setLoading(false);
+            toast.error("Ralat sistem", { id: toastId });
         }
     }
 
-    // ================= DELETE SUBJECT =================
-    async function handleDeleteSubject() {
-        if (!deleting) return;
-        setLoading(true);
-
+    async function handleDelete(id: string) {
+        const toastId = toast.loading("Memadam...");
         try {
-            const res = await fetch(`/api/admin/subjects?id=${deleting.id}`, {
+            const res = await fetch(`/api/admin/subjects?id=${id}`, {
                 method: "DELETE",
             });
-
-            const data = await res.json();
-
+            const json = await res.json();
             if (!res.ok) {
-                toast.error(data.message || "Gagal memadam subjek");
-                setLoading(false);
+                toast.error(json?.message ?? "Gagal", { id: toastId });
                 return;
             }
-
-            toast.success("Subjek berjaya dipadam", {
-                description: `Subjek "${deleting.name}" telah dipadam dari sistem`,
-            });
-
-            setDeleting(null);
+            toast.success("Dipadam", { id: toastId });
             fetchSubjects();
         } catch {
-            toast.error("Ralat sistem. Sila cuba lagi.");
-        } finally {
-            setLoading(false);
+            toast.error("Ralat sistem", { id: toastId });
         }
     }
 
-    // ================= FETCH COORDINATOR TEACHERS =================
-    async function fetchCoordinatorTeachers() {
-        setLoadingTeachers(true);
-        try {
-            const res = await fetch(
-                "/api/admin/users?role=subject coordinator"
-            );
-            const data = await res.json();
+    async function handleAssignCoordinator() {
+        if (!assigning || !selectedTeacherId) return;
 
-            console.group("👨‍🏫 FETCH COORDINATOR TEACHERS");
-            console.log("Raw teachers:", data);
-
-            const formattedTeachers = data.map((t: any) => ({
-                id: t.teacher_id || t.id,
-                name: t.fullname || t.name,
-            }));
-
-            console.log("Formatted teachers:", formattedTeachers);
-            console.groupEnd();
-
-            setCoordinatorTeachers(formattedTeachers);
-        } catch (error) {
-            console.error("❌ Error fetching teachers:", error);
-            toast.error("Gagal memuatkan guru penyelaras");
-        } finally {
-            setLoadingTeachers(false);
-        }
-    }
-
-    // ================= OPEN DETAILS MODAL =================
-    function openDetails(subject: SubjectItem) {
-        console.group("👁️ OPEN DETAILS");
-        console.log("Subject clicked:", subject);
-        console.log("Coordinator from subject:", subject.coordinator);
-
-        const currentCoordinatorId = subject.coordinator?.id ?? "";
-        console.log("Resolved coordinator ID:", currentCoordinatorId);
-
-        setDetailsSubject(subject);
-        setSelectedCoordinatorId(currentCoordinatorId);
-
-        if (subject.coordinator) {
-            setCoordinatorTeachers([
-                {
-                    id: subject.coordinator.id,
-                    name: subject.coordinator.name,
-                },
-            ]);
-        } else {
-            setCoordinatorTeachers([]);
-        }
-
-        console.log("Prefilled coordinatorTeachers:", subject.coordinator);
-        console.groupEnd();
-
-        fetchCoordinatorTeachers();
-    }
-
-    // ================= APPOINT COORDINATOR =================
-    async function handleAppointCoordinator() {
-        if (!detailsSubject) return;
-
-        if (!selectedCoordinatorId) {
-            toast.error("Sila pilih guru penyelaras subjek");
-            return;
-        }
-
+        const toastId = toast.loading("Menyimpan penyelaras...");
         try {
             const res = await fetch("/api/admin/subject-coordinator", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                    subject_id: detailsSubject.id,
-                    teacher_id: selectedCoordinatorId,
+                    subject_id: assigning.id,
+                    teacher_id: selectedTeacherId,
                 }),
             });
-
-            const data = await res.json();
-
+            const json = await res.json();
             if (!res.ok) {
-                toast.error(data?.error || "Gagal lantik penyelaras");
+                toast.error(json?.error ?? "Gagal", { id: toastId });
                 return;
             }
-
-            toast.success("Penyelaras berjaya dilantik ✅");
-            setDetailsSubject(null);
+            toast.success(json?.message ?? "Berjaya", { id: toastId });
+            setAssigning(null);
+            setSelectedTeacherId("");
             fetchSubjects();
         } catch {
-            toast.error("Ralat sistem. Sila cuba lagi");
+            toast.error("Ralat sistem", { id: toastId });
         }
     }
 
     return (
-        <div className="min-h-screen bg-background p-4 md:p-6">
-            <div className="max-w-7xl mx-auto space-y-8">
-                {/* HEADER */}
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
-                    <div className="space-y-3">
-                        <div className="flex items-center gap-4">
-                            <div className="p-3 rounded-2xl bg-gradient-to-br from-primary/10 to-primary/5 border border-primary/20 shadow-sm">
-                                <BookOpen className="w-7 h-7 text-primary" />
->>>>>>> a3c1c78bc98c6976f363b0faa9dc0a93b21746ff
-                            </div>
-                            <div>
-                                <h1 className="text-xl font-bold text-foreground">
-                                    Pengurusan Subjek
-                                </h1>
-                                <p className="text-muted-foreground font-medium mt-1">
-                                    Urus dan pantau semua subjek dalam sistem
-                                    pengurusan sekolah
-                                </p>
-                            </div>
-                        </div>
-
-<<<<<<< HEAD
-        {/* DIALOG LANTIK PENYELARAS */}
-        <Dialog open={!!detailsSubject} onOpenChange={() => setDetailsSubject(null)}>
-          <DialogContent className="rounded-xl max-w-lg border-border">
-            <DialogHeader>
-              <DialogTitle className="text-lg font-bold flex items-center gap-2">
-                <UserCheck className="w-5 h-5 text-primary" /> Maklumat Subjek
-              </DialogTitle>
-              <DialogDescription className="text-muted-foreground">Lantik guru penyelaras untuk subjek ini.</DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4 py-4">
-              <div className="rounded-lg border border-border p-4 bg-muted/20">
-                <p className="text-xs text-muted-foreground">Nama Subjek</p>
-                <p className="font-bold text-foreground">{detailsSubject?.name}</p>
-              </div>
-              <div className="space-y-2">
-                <Label className="text-sm font-medium">Guru Penyelaras</Label>
-                <Select value={selectedCoordinatorId} onValueChange={setSelectedCoordinatorId}>
-                  <SelectTrigger className="border-border">
-                    <SelectValue placeholder={loadingTeachers ? "Memuatkan..." : "Pilih penyelaras..."} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {coordinatorTeachers.length === 0 ? (
-                      <SelectItem value="none" disabled>Tiada guru penyelaras dijumpai</SelectItem>
-                    ) : (
-                      coordinatorTeachers.map((t) => (<SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>))
-                    )}
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground">Hanya guru dengan peranan <b>penyelaras subjek</b> dipaparkan.</p>
-              </div>
-            </div>
-            <DialogFooter className="gap-2">
-              <Button variant="outline" onClick={() => setDetailsSubject(null)} className="border-border">Tutup</Button>
-              <Button onClick={handleAppointCoordinator} disabled={loading || !selectedCoordinatorId} className="gap-2 bg-primary">
-                <UserCheck className="w-4 h-4" /> Lantik Penyelaras
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-
-        {/* DIALOG EDIT */}
-        <Dialog open={!!editing} onOpenChange={() => setEditing(null)}>
-          <DialogContent className="rounded-lg border-border">
-            <DialogHeader>
-              <DialogTitle className="text-lg font-semibold">Kemas Kini Subjek</DialogTitle>
-              <DialogDescription>Ubah nama subjek yang dipilih.</DialogDescription>
-            </DialogHeader>
-            <form onSubmit={handleEditSubject} className="space-y-4 pt-4">
-              <div className="space-y-2">
-                <Label className="font-medium">Nama Subjek</Label>
-                <Input name="subject_name" defaultValue={editing?.name} className="border-border focus:border-primary" required />
-              </div>
-              <DialogFooter className="pt-4">
-                <Button variant="outline" type="button" onClick={() => setEditing(null)}>Batal</Button>
-                <Button type="submit" disabled={loading}>{loading ? "Menyimpan..." : "Simpan Perubahan"}</Button>
-              </DialogFooter>
-            </form>
-          </DialogContent>
-        </Dialog>
-
-        {/* DIALOG DELETE */}
-        <Dialog open={!!deleting} onOpenChange={() => setDeleting(null)}>
-          <DialogContent className="rounded-lg border-border">
-            <DialogHeader>
-              <DialogTitle className="text-lg font-semibold text-destructive flex items-center gap-2">
-                <Trash2 className="w-5 h-5" /> Padam Subjek
-              </DialogTitle>
-              <DialogDescription className="text-muted-foreground">
-                Anda pasti ingin memadam subjek <b className="text-foreground">{deleting?.name}</b>? Tindakan ini tidak boleh diundur.
-              </DialogDescription>
-            </DialogHeader>
-            <DialogFooter className="pt-4">
-              <Button variant="outline" onClick={() => setDeleting(null)}>Batal</Button>
-              <Button variant="destructive" onClick={handleDeleteSubject} disabled={loading}>
-                {loading ? "Memadam..." : "Ya, Padam Subjek"}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-
-      </div>
-    </div>
-  );
-}
-=======
-                        <div className="flex items-center gap-3 text-sm text-muted-foreground">
-                            <div className="flex items-center gap-1">
-                                <Shield className="w-3.5 h-3.5" />
-                                <span>Data Terurus</span>
-                            </div>
-                            <div className="w-1 h-1 rounded-full bg-muted" />
-                            <div className="flex items-center gap-1">
-                                <Clock className="w-3.5 h-3.5" />
-                                <span>
-                                    Kemas kini: <LastUpdatedTime />
-                                </span>
-                            </div>
-                        </div>
+        <div className="min-h-screen bg-gradient-to-b from-background to-muted/20 p-4 md:p-6">
+            <div className="max-w-6xl mx-auto space-y-6">
+                <div className="flex items-center justify-between gap-3">
+                    <div>
+                        <h1 className="text-3xl font-bold tracking-tight">
+                            Subjek
+                        </h1>
+                        <p className="text-muted-foreground mt-1">
+                            Urus senarai subjek dan penyelaras.
+                        </p>
                     </div>
 
-                    <div className="flex items-center gap-3">
-                        <Button
-                            variant="outline"
-                            onClick={fetchSubjects}
-                            disabled={loading}
-                            className="border-border hover:bg-accent hover:text-accent-foreground shadow-xs"
-                        >
-                            {loading ? (
-                                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                            ) : (
-                                <RefreshCw className="w-4 h-4 mr-2" />
-                            )}
-                            Refresh
-                        </Button>
-
-                        {/* ADD SUBJECT */}
-                        <Dialog>
-                            <DialogTrigger asChild>
-                                <Button className="bg-primary hover:bg-primary/90 text-primary-foreground shadow-sm">
-                                    <Plus className="w-4 h-4 mr-2" />
-                                    Tambah Subjek
-                                </Button>
-                            </DialogTrigger>
-
-                            <DialogContent className="rounded-lg border-border">
-                                <DialogHeader>
-                                    <DialogTitle className="text-lg font-semibold">
-                                        Tambah Subjek Baharu
-                                    </DialogTitle>
-                                    <DialogDescription className="text-muted-foreground">
-                                        Masukkan nama subjek untuk menambah
-                                        subjek baharu dalam sistem.
-                                    </DialogDescription>
-                                </DialogHeader>
-
-                                <form
-                                    onSubmit={handleAddSubject}
-                                    className="space-y-4 pt-4"
-                                >
-                                    <div className="space-y-2">
-                                        <Label
-                                            htmlFor="subject_name"
-                                            className="font-medium"
-                                        >
-                                            Nama Subjek
-                                        </Label>
-                                        <Input
-                                            id="subject_name"
-                                            name="subject_name"
-                                            placeholder="Contoh: Matematik"
-                                            className="border-border focus:border-primary"
-                                            required
-                                        />
-                                    </div>
-
-                                    <DialogFooter className="pt-4">
-                                        <Button
-                                            id="close-add-dialog"
-                                            type="button"
-                                            variant="outline"
-                                            className="border-border hover:bg-accent"
-                                        >
-                                            Batal
-                                        </Button>
-                                        <Button
-                                            type="submit"
-                                            disabled={loading}
-                                            className="bg-primary hover:bg-primary/90"
-                                        >
-                                            {loading ? (
-                                                <>
-                                                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                                                    Menyimpan...
-                                                </>
-                                            ) : (
-                                                "Simpan"
-                                            )}
-                                        </Button>
-                                    </DialogFooter>
-                                </form>
-                            </DialogContent>
-                        </Dialog>
-                    </div>
+                    <Dialog>
+                        <DialogTrigger asChild>
+                            <Button>
+                                <Plus className="w-4 h-4 mr-2" />
+                                Tambah Subjek
+                            </Button>
+                        </DialogTrigger>
+                        <DialogContent>
+                            <DialogHeader>
+                                <DialogTitle>Tambah Subjek</DialogTitle>
+                            </DialogHeader>
+                            <form onSubmit={handleAdd} className="space-y-4">
+                                <div className="space-y-2">
+                                    <Label>Nama Subjek</Label>
+                                    <Input name="subject_name" required />
+                                </div>
+                                <DialogFooter>
+                                    <Button type="submit">Simpan</Button>
+                                </DialogFooter>
+                            </form>
+                        </DialogContent>
+                    </Dialog>
                 </div>
 
-                {/* CARD */}
-                <Card className="border-border bg-card shadow-md rounded-xl overflow-hidden">
-                    <CardHeader className="border-b border-border bg-gradient-to-r from-card to-card/80 px-6 py-5">
-                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                            <div>
-                                <CardTitle className="text-xl font-bold text-foreground flex items-center gap-2">
-                                    <Filter className="w-5 h-5 text-primary" />
-                                    Senarai Subjek
-                                </CardTitle>
-                                <p className="text-sm text-muted-foreground mt-1">
-                                    Urus dan pantau semua subjek dalam sistem
-                                </p>
-                            </div>
-
-                            <Badge
-                                variant="outline"
-                                className="border-primary/30 bg-primary/5 text-primary font-medium"
-                            >
-                                {filteredSubjects.length} subjek ditemui
-                            </Badge>
-                        </div>
+                <Card className="shadow-lg border border-border/50">
+                    <CardHeader>
+                        <CardTitle>Senarai Subjek</CardTitle>
                     </CardHeader>
-
-                    <CardContent className="p-6">
-                        {/* SEARCH */}
-                        <div className="mb-6">
-                            <div className="relative">
-                                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                                <Input
-                                    placeholder="Cari subjek..."
-                                    value={searchQuery}
-                                    onChange={(e) =>
-                                        setSearchQuery(e.target.value)
-                                    }
-                                    className="pl-10 h-11 rounded-lg border-border bg-background focus:border-primary focus:ring-primary/20"
-                                />
-                            </div>
-                        </div>
-
-                        {/* TABLE */}
-                        <div className="rounded-lg border border-border overflow-hidden">
-                            <div className="overflow-x-auto">
-                                <Table>
-                                    <TableHeader className="bg-muted/30">
-                                        <TableRow className="hover:bg-transparent border-b border-border">
-                                            <TableHead className="w-16 text-center">
-                                                #
-                                            </TableHead>
-                                            <TableHead>
+                    <CardContent className="p-0">
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead>Nama</TableHead>
+                                    <TableHead>Penyelaras</TableHead>
+                                    <TableHead className="text-right">
+                                        Tindakan
+                                    </TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {rows.map((r) => (
+                                    <TableRow key={r.id}>
+                                        <TableCell>{r.name}</TableCell>
+                                        <TableCell>
+                                            {r.coordinator?.name ?? "—"}
+                                        </TableCell>
+                                        <TableCell className="text-right">
+                                            <div className="flex justify-end gap-2">
                                                 <Button
-                                                    variant="ghost"
                                                     size="sm"
-                                                    onClick={() =>
-                                                        toggleSort("name")
+                                                    variant="outline"
+                                                    onClick={() => {
+                                                        setAssigning(r);
+                                                        setSelectedTeacherId(
+                                                            r.coordinator?.id ?? ""
+                                                        );
+                                                    }}
+                                                    title={
+                                                        r.coordinator
+                                                            ? "Tukar penyelaras"
+                                                            : "Lantik penyelaras"
                                                     }
-                                                    className="p-0 h-auto font-semibold hover:bg-transparent"
                                                 >
-                                                    Nama Subjek
-                                                    {sortBy === "name" &&
-                                                        (sortOrder === "asc" ? (
-                                                            <SortAsc className="w-3.5 h-3.5 ml-1" />
-                                                        ) : (
-                                                            <SortDesc className="w-3.5 h-3.5 ml-1" />
-                                                        ))}
+                                                    <UserPlus className="w-4 h-4" />
                                                 </Button>
-                                            </TableHead>
-                                            <TableHead className="text-right">
-                                                Tindakan
-                                            </TableHead>
-                                        </TableRow>
-                                    </TableHeader>
-
-                                    <TableBody>
-                                        {loading ? (
-                                            <TableRow>
-                                                <TableCell
-                                                    colSpan={3}
-                                                    className="py-16 text-center"
+                                                <Button
+                                                    size="sm"
+                                                    variant="outline"
+                                                    onClick={() => {
+                                                        setEditing(r);
+                                                        setEditName(r.name);
+                                                    }}
                                                 >
-                                                    <Loader2 className="w-8 h-8 animate-spin text-primary inline" />
-                                                </TableCell>
-                                            </TableRow>
-                                        ) : filteredSubjects.length === 0 ? (
-                                            <TableRow>
-                                                <TableCell
-                                                    colSpan={3}
-                                                    className="py-16 text-center"
+                                                    <Pencil className="w-4 h-4" />
+                                                </Button>
+                                                <Button
+                                                    size="sm"
+                                                    variant="destructive"
+                                                    onClick={() => handleDelete(r.id)}
                                                 >
-                                                    Tiada subjek dijumpai
-                                                </TableCell>
-                                            </TableRow>
-                                        ) : (
-                                            filteredSubjects.map(
-                                                (subject, index) => (
-                                                    <TableRow
-                                                        key={subject.id}
-                                                        className="hover:bg-muted/50"
-                                                    >
-                                                        <TableCell className="text-center">
-                                                            {index + 1}
-                                                        </TableCell>
+                                                    <Trash2 className="w-4 h-4" />
+                                                </Button>
+                                            </div>
+                                        </TableCell>
+                                    </TableRow>
+                                ))}
 
-                                                        <TableCell className="font-semibold">
-                                                            {subject.name}
-                                                        </TableCell>
-
-                                                        <TableCell className="text-right">
-                                                            <div className="flex justify-end gap-2">
-                                                                <Button
-                                                                    size="sm"
-                                                                    variant="outline"
-                                                                    onClick={() =>
-                                                                        openDetails(
-                                                                            subject
-                                                                        )
-                                                                    }
-                                                                    className="h-8 w-8 p-0"
-                                                                    title="Details"
-                                                                >
-                                                                    <Eye className="h-3.5 w-3.5" />
-                                                                </Button>
-
-                                                                <Button
-                                                                    size="sm"
-                                                                    variant="outline"
-                                                                    onClick={() =>
-                                                                        setEditing(
-                                                                            subject
-                                                                        )
-                                                                    }
-                                                                    className="h-8 w-8 p-0"
-                                                                >
-                                                                    <Pencil className="h-3.5 w-3.5" />
-                                                                </Button>
-
-                                                                <Button
-                                                                    size="sm"
-                                                                    variant="destructive"
-                                                                    onClick={() =>
-                                                                        setDeleting(
-                                                                            subject
-                                                                        )
-                                                                    }
-                                                                    className="h-8 w-8 p-0"
-                                                                >
-                                                                    <Trash2 className="h-3.5 w-3.5" />
-                                                                </Button>
-                                                            </div>
-                                                        </TableCell>
-                                                    </TableRow>
-                                                )
-                                            )
-                                        )}
-                                    </TableBody>
-                                </Table>
-                            </div>
-                        </div>
+                                {!loading && rows.length === 0 && (
+                                    <TableRow>
+                                        <TableCell
+                                            colSpan={3}
+                                            className="text-center text-muted-foreground py-10"
+                                        >
+                                            Tiada subjek.
+                                        </TableCell>
+                                    </TableRow>
+                                )}
+                                {loading && (
+                                    <TableRow>
+                                        <TableCell
+                                            colSpan={3}
+                                            className="text-center text-muted-foreground py-10"
+                                        >
+                                            Loading...
+                                        </TableCell>
+                                    </TableRow>
+                                )}
+                            </TableBody>
+                        </Table>
                     </CardContent>
                 </Card>
+            </div>
 
-                {/* DETAILS MODAL */}
-                <Dialog
-                    open={!!detailsSubject}
-                    onOpenChange={() => setDetailsSubject(null)}
-                >
-                    <DialogContent className="rounded-xl max-w-lg">
-                        <DialogHeader>
-                            <DialogTitle className="text-lg font-bold flex items-center gap-2">
-                                <BookOpen className="w-5 h-5 text-primary" />
-                                Maklumat Subjek
-                            </DialogTitle>
-                            <DialogDescription>
-                                Lantik guru penyelaras untuk subjek ini.
-                            </DialogDescription>
-                        </DialogHeader>
-
-                        <div className="space-y-4">
-                            <div className="rounded-lg border border-border p-4">
-                                <p className="text-xs text-muted-foreground">
-                                    Nama Subjek
-                                </p>
-                                <p className="font-semibold text-foreground">
-                                    {detailsSubject?.name}
-                                </p>
-                            </div>
-
-                            {/* COORDINATOR SELECT */}
-                            <div className="space-y-2">
-                                <Label className="text-sm font-medium">
-                                    Guru Penyelaras Subjek
-                                </Label>
-
-                                <Select
-                                    value={selectedCoordinatorId}
-                                    onValueChange={setSelectedCoordinatorId}
-                                >
-                                    <SelectTrigger>
-                                        <SelectValue
-                                            placeholder={
-                                                loadingTeachers
-                                                    ? "Memuatkan guru..."
-                                                    : "Pilih guru penyelaras..."
-                                            }
-                                        />
-                                    </SelectTrigger>
-
-                                    <SelectContent>
-                                        {loadingTeachers ? (
-                                            <SelectItem
-                                                key="loading-item"
-                                                value="__loading__"
-                                                disabled
-                                            >
-                                                Memuatkan...
-                                            </SelectItem>
-                                        ) : coordinatorTeachers.length === 0 ? (
-                                            <SelectItem
-                                                key="empty-item"
-                                                value="__empty__"
-                                                disabled
-                                            >
-                                                Tiada guru penyelaras dijumpai
-                                            </SelectItem>
-                                        ) : (
-                                            coordinatorTeachers.map((t) => (
-                                                <SelectItem
-                                                    key={t.id}
-                                                    value={t.id}
-                                                >
-                                                    {t.name}
-                                                </SelectItem>
-                                            ))
-                                        )}
-                                    </SelectContent>
-                                </Select>
-
-                                <p className="text-xs text-muted-foreground">
-                                    Hanya guru dengan role{" "}
-                                    <b>subject coordinator</b> dipaparkan.
-                                </p>
-                            </div>
+            <Dialog open={Boolean(editing)} onOpenChange={() => setEditing(null)}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Edit Subjek</DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-4">
+                        <div className="space-y-2">
+                            <Label>Nama Subjek</Label>
+                            <Input
+                                value={editName}
+                                onChange={(e) => setEditName(e.target.value)}
+                            />
                         </div>
-
-                        <DialogFooter className="mt-6 flex gap-2">
-                            <Button
-                                variant="outline"
-                                onClick={() => setDetailsSubject(null)}
-                            >
-                                Tutup
+                        <DialogFooter>
+                            <Button variant="outline" onClick={() => setEditing(null)}>
+                                Batal
                             </Button>
-
-                            <Button
-                                onClick={handleAppointCoordinator}
-                                className="gap-2"
-                            >
-                                <UserCheck className="w-4 h-4" />
-                                Lantik Penyelaras
+                            <Button onClick={handleSaveEdit} disabled={!editName}>
+                                Simpan
                             </Button>
                         </DialogFooter>
-                    </DialogContent>
-                </Dialog>
+                    </div>
+                </DialogContent>
+            </Dialog>
 
-                {/* EDIT DIALOG */}
-                <Dialog open={!!editing} onOpenChange={() => setEditing(null)}>
-                    <DialogContent className="rounded-lg border-border">
-                        <DialogHeader>
-                            <DialogTitle className="text-lg font-semibold">
-                                Kemas Kini Subjek
-                            </DialogTitle>
-                            <DialogDescription className="text-muted-foreground">
-                                Kemas kini maklumat subjek yang dipilih.
-                            </DialogDescription>
-                        </DialogHeader>
+            <Dialog
+                open={Boolean(assigning)}
+                onOpenChange={(open) => {
+                    if (!open) {
+                        setAssigning(null);
+                        setSelectedTeacherId("");
+                    }
+                }}
+            >
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>
+                            {assigning?.coordinator
+                                ? "Tukar Penyelaras Subjek"
+                                : "Lantik Penyelaras Subjek"}
+                        </DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-4">
+                        <div className="space-y-1">
+                            <p className="text-sm text-muted-foreground">
+                                Subjek:{" "}
+                                <span className="font-medium text-foreground">
+                                    {assigning?.name ?? "-"}
+                                </span>
+                            </p>
+                        </div>
 
-                        <form
-                            onSubmit={handleEditSubject}
-                            className="space-y-4 pt-4"
-                        >
-                            <div className="space-y-2">
-                                <Label
-                                    htmlFor="edit_subject_name"
-                                    className="font-medium"
-                                >
-                                    Nama Subjek
-                                </Label>
-                                <Input
-                                    id="edit_subject_name"
-                                    name="subject_name"
-                                    defaultValue={editing?.name}
-                                    placeholder="Masukkan nama subjek"
-                                    className="border-border focus:border-primary"
-                                    required
-                                />
-                            </div>
+                        <div className="space-y-2">
+                            <Label>Guru</Label>
+                            <Select
+                                value={selectedTeacherId}
+                                onValueChange={setSelectedTeacherId}
+                            >
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Pilih guru" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {teachers.map((t) => (
+                                        <SelectItem key={t.id} value={t.id}>
+                                            {t.name}
+                                            {t.identifier ? ` (${t.identifier})` : ""}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
 
-                            <DialogFooter className="pt-4">
-                                <Button
-                                    variant="outline"
-                                    onClick={() => setEditing(null)}
-                                >
-                                    Batal
-                                </Button>
-                                <Button type="submit" disabled={loading}>
-                                    {loading
-                                        ? "Menyimpan..."
-                                        : "Simpan Perubahan"}
-                                </Button>
-                            </DialogFooter>
-                        </form>
-                    </DialogContent>
-                </Dialog>
-
-                {/* DELETE DIALOG */}
-                <Dialog
-                    open={!!deleting}
-                    onOpenChange={() => setDeleting(null)}
-                >
-                    <DialogContent className="rounded-lg border-border">
-                        <DialogHeader>
-                            <DialogTitle className="text-lg font-semibold text-destructive flex items-center gap-2">
-                                <Trash2 className="w-5 h-5" />
-                                Padam Subjek
-                            </DialogTitle>
-                            <DialogDescription className="text-muted-foreground">
-                                Anda pasti ingin memadam subjek{" "}
-                                <b className="text-foreground">
-                                    {deleting?.name}
-                                </b>
-                                ?
-                            </DialogDescription>
-                        </DialogHeader>
-
-                        <DialogFooter className="pt-4">
+                        <DialogFooter>
                             <Button
                                 variant="outline"
-                                onClick={() => setDeleting(null)}
+                                onClick={() => {
+                                    setAssigning(null);
+                                    setSelectedTeacherId("");
+                                }}
                             >
                                 Batal
                             </Button>
                             <Button
-                                variant="destructive"
-                                onClick={handleDeleteSubject}
-                                disabled={loading}
+                                onClick={handleAssignCoordinator}
+                                disabled={!selectedTeacherId}
                             >
-                                {loading ? "Memadam..." : "Ya, Padam Subjek"}
+                                Simpan
                             </Button>
                         </DialogFooter>
-                    </DialogContent>
-                </Dialog>
-            </div>
+                    </div>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }
->>>>>>> a3c1c78bc98c6976f363b0faa9dc0a93b21746ff

@@ -183,7 +183,7 @@ export function AddTeacherDialog({ onSuccess, children }: AddTeacherDialogProps)
 
         <form onSubmit={handleSubmit} className="space-y-5">
             {/* ✅ NEW: STAFF ID DISPLAY */}
-<div className="grid grid-cols-2 gap-4 p-4 bg-muted rounded-xl">
+<div className="grid grid-cols-1 gap-4 rounded-xl bg-muted p-4 sm:grid-cols-2">
             <div>
               <Label className="text-xs">Staff ID</Label>
               <div className="font-mono font-bold text-primary">
@@ -241,7 +241,7 @@ export function AddTeacherDialog({ onSuccess, children }: AddTeacherDialogProps)
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
                   <Label htmlFor="email" className="text-sm font-medium">
                     <Mail className="w-3 h-3 inline mr-1" />
@@ -297,7 +297,7 @@ export function AddTeacherDialog({ onSuccess, children }: AddTeacherDialogProps)
           </div>
 
           {/* ACTION BUTTONS */}
-          <div className="flex gap-3 pt-2">
+          <div className="flex flex-col gap-3 pt-2 sm:flex-row">
             <Button
               type="button"
               variant="outline"

@@ -42,6 +42,13 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 /* ================= TYPES ================= */
 interface Student {
@@ -69,18 +76,24 @@ const LastUpdatedTime = () => {
 };
 
 export default function MyClassPage() {
+  const [teacherId, setTeacherId] = useState<string>("");
   const [classInfo, setClassInfo] = useState<ClassInfo | null>(null);
   const [myStudents, setMyStudents] = useState<Student[]>([]);
   const [availableStudents, setAvailableStudents] = useState<Student[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [exams, setExams] = useState<Array<{ id: string; name: string; academic_year: string }>>([]);
+  const [selectedExamId, setSelectedExamId] = useState<string>("");
+  const [commentStudent, setCommentStudent] = useState<Student | null>(null);
+  const [commentMode, setCommentMode] = useState<"manual" | "ai">("manual");
+  const [commentText, setCommentText] = useState<string>("");
 
   // 1. Fetch data kelas guru dan pelajar sedia ada
   async function fetchData() {
     setLoading(true);
     try {
-      const res = await fetch("/api/teacher/class-teacher"); // Gunakan endpoint yang anda buat
+      const res = await fetch(`/api/teacher/class-teacher?teacher_id=${teacherId}`);
       const data = await res.json();
       if (res.ok) {
         setClassInfo(data.class);
@@ -108,8 +121,74 @@ export default function MyClassPage() {
   }
 
   useEffect(() => {
-    fetchData();
+    try {
+      const raw = localStorage.getItem("stg_session");
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      if (parsed?.userType === "teacher" && parsed?.user_id) {
+        setTeacherId(parsed.user_id);
+      }
+    } catch {
+      // ignore
+    }
   }, []);
+
+  useEffect(() => {
+    async function loadExams() {
+      try {
+        const res = await fetch("/api/admin/exams", { cache: "no-store" });
+        const data = await res.json();
+        const list = (data ?? []).map((e: any) => ({
+          id: e.id,
+          name: e.name,
+          academic_year: e.academic_year,
+        }));
+        setExams(list);
+        if (list.length > 0) setSelectedExamId(list[0].id);
+      } catch {
+        setExams([]);
+      }
+    }
+
+    loadExams();
+  }, []);
+
+  useEffect(() => {
+    if (teacherId) fetchData();
+  }, [teacherId]);
+
+  async function handleSaveComment() {
+    if (!commentStudent || !classInfo || !selectedExamId || !teacherId) return;
+
+    const toastId = toast.loading("Menyimpan comment...");
+    try {
+      const res = await fetch("/api/teacher/report-cards/comment", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          student_id: commentStudent.id,
+          class_id: classInfo.id,
+          teacher_id: teacherId,
+          exam_id: selectedExamId,
+          mode: commentMode,
+          comment: commentText,
+        }),
+      });
+
+      const json = await res.json();
+      if (!res.ok) {
+        toast.error(json?.message || "Gagal", { id: toastId });
+        return;
+      }
+
+      toast.success("Comment disimpan (Report Card)", { id: toastId });
+      setCommentStudent(null);
+      setCommentText("");
+      setCommentMode("manual");
+    } catch {
+      toast.error("Ralat sistem", { id: toastId });
+    }
+  }
 
   // 3. Tambah pelajar ke kelas
   async function handleAddStudent(studentId: string) {
@@ -319,6 +398,36 @@ export default function MyClassPage() {
           </Card>
         </div>
 
+        <Card className="border-border bg-card shadow-lg rounded-xl overflow-hidden">
+          <CardHeader className="border-b border-border bg-gradient-to-r from-card to-card/80 px-6 py-5">
+            <div className="flex justify-between items-center gap-3">
+              <div>
+                <CardTitle className="text-xl font-bold flex items-center gap-2">
+                  <Activity className="w-5 h-5 text-primary" />
+                  Report Card Comment
+                </CardTitle>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Pilih peperiksaan untuk simpan komen manual / AI.
+                </p>
+              </div>
+              <div className="w-72">
+                <Select value={selectedExamId} onValueChange={setSelectedExamId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Pilih peperiksaan" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {exams.map((e) => (
+                      <SelectItem key={e.id} value={e.id}>
+                        {e.name} ({e.academic_year})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </CardHeader>
+        </Card>
+
         {/* ================= STUDENT TABLE (GAYA KOTAK INPUT) ================= */}
         <Card className="border-border bg-card shadow-lg rounded-xl overflow-hidden">
           <CardHeader className="border-b border-border bg-gradient-to-r from-card to-card/80 px-6 py-5">
@@ -388,17 +497,32 @@ export default function MyClassPage() {
                           </Badge>
                         </TableCell>
 
-                        {/* TINDAKAN BUANG */}
+                        {/* TINDAKAN */}
                         <TableCell className="text-right pr-6">
-                          <Button 
-                            variant="ghost" 
-                            size="sm" 
-                            className="text-destructive hover:bg-destructive/10 h-9 w-9 p-0 rounded-lg"
-                            onClick={() => handleRemoveStudent(student.id)}
-                            title="Keluarkan dari kelas"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
+                          <div className="flex justify-end gap-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                setCommentStudent(student);
+                                setCommentMode("manual");
+                                setCommentText("");
+                              }}
+                              disabled={!selectedExamId}
+                            >
+                              Comment
+                            </Button>
+
+                            <Button 
+                              variant="ghost" 
+                              size="sm" 
+                              className="text-destructive hover:bg-destructive/10 h-9 w-9 p-0 rounded-lg"
+                              onClick={() => handleRemoveStudent(student.id)}
+                              title="Keluarkan dari kelas"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))
@@ -410,6 +534,60 @@ export default function MyClassPage() {
         </Card>
 
       </div>
+
+    <Dialog open={Boolean(commentStudent)} onOpenChange={() => setCommentStudent(null)}>
+      <DialogContent className="sm:max-w-[520px] rounded-xl">
+        <DialogHeader>
+          <DialogTitle className="text-xl font-bold">Comment Report Card</DialogTitle>
+          <DialogDescription>
+            Comment akan disimpan ke `stg_report_cards.ai_comment` untuk peperiksaan yang dipilih.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Mod</label>
+            <Select value={commentMode} onValueChange={(v) => setCommentMode(v as any)}>
+              <SelectTrigger>
+                <SelectValue placeholder="Pilih mod" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="manual">Manual</SelectItem>
+                <SelectItem value="ai">AI Suggestion</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {commentMode === "manual" ? (
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Comment</label>
+              <Input
+                value={commentText}
+                onChange={(e) => setCommentText(e.target.value)}
+                placeholder="Tulis komen ringkas..."
+              />
+            </div>
+          ) : (
+            <div className="text-sm text-muted-foreground">
+              Sistem akan jana komen berdasarkan keputusan <b>approved</b> untuk peperiksaan ini.
+            </div>
+          )}
+        </div>
+
+        <div className="flex justify-end gap-2 pt-2">
+          <Button variant="outline" onClick={() => setCommentStudent(null)}>
+            Batal
+          </Button>
+          <Button
+            onClick={handleSaveComment}
+            disabled={!selectedExamId || (commentMode === "manual" && !commentText)}
+          >
+            Simpan
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+
     </div>
   );
 }
