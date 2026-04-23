@@ -108,10 +108,10 @@ export default function StudentDashboardPage() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
 
           <Card className="shadow-lg border border-border/50">
-            <CardContent className="p-6 flex items-center justify-between">
-              <div>
+            <CardContent className="flex items-center justify-between gap-4 p-6">
+              <div className="min-w-0">
                 <p className="text-sm text-muted-foreground">Kelas</p>
-                <h2 className="text-2xl font-bold mt-2">
+                <h2 className="mt-2 truncate text-2xl font-bold">
                   {data.className}
                 </h2>
               </div>
@@ -120,10 +120,10 @@ export default function StudentDashboardPage() {
           </Card>
 
           <Card className="shadow-lg border border-border/50">
-            <CardContent className="p-6 flex items-center justify-between">
-              <div>
+            <CardContent className="flex items-center justify-between gap-4 p-6">
+              <div className="min-w-0">
                 <p className="text-sm text-muted-foreground">Guru Kelas</p>
-                <h2 className="text-lg font-semibold mt-2">
+                <h2 className="mt-2 truncate text-lg font-semibold">
                   {data.classTeacher}
                 </h2>
               </div>
@@ -132,8 +132,8 @@ export default function StudentDashboardPage() {
           </Card>
 
           <Card className="shadow-lg border border-border/50">
-            <CardContent className="p-6 flex items-center justify-between">
-              <div>
+            <CardContent className="flex items-center justify-between gap-4 p-6">
+              <div className="min-w-0">
                 <p className="text-sm text-muted-foreground">Purata</p>
                 <h2 className="text-3xl font-bold mt-2 text-accent">
                   {data.average}%
@@ -220,7 +220,7 @@ export default function StudentDashboardPage() {
                 {/* ================= ACTION ================= */}
                 <div className="flex justify-end">
                     <Link href="/student/report-card">
-                        <Button>
+                        <Button className="w-full sm:w-auto">
                             <FileText className="w-4 h-4 mr-2" />
                             Lihat Slip Keputusan
                         </Button>

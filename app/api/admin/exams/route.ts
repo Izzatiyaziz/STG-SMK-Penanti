@@ -8,17 +8,18 @@ export async function GET() {
   try {
     const { data, error } = await supabase
       .from("stg_exams")
-      .select("exam_id, exam_name, academic_year");
+      .select("*");
 
     if (error) {
       console.error("EXAM FETCH ERROR:", error);
       return NextResponse.json([], { status: 200 });
     }
 
-    const exams = (data ?? []).map((e) => ({
+    const exams = (data ?? []).map((e: any) => ({
       id: e.exam_id,
       name: e.exam_name,
       academic_year: e.academic_year,
+      subject_settings: e.subject_settings ?? {},
     }));
 
     return NextResponse.json(exams);
@@ -77,11 +78,40 @@ export async function POST(req: Request) {
 export async function PUT(req: Request) {
   try {
     const body = await req.json();
-    const { exam_id, exam_name, academic_year } = body;
+    const { exam_id, exam_name, academic_year, subject_settings } = body;
 
-    if (!exam_id || !exam_name || !academic_year) {
+    if (!exam_id) {
       return NextResponse.json(
-        { message: "Exam ID, name and academic year are required" },
+        { message: "Exam ID diperlukan" },
+        { status: 400 }
+      );
+    }
+
+    // Update settings only
+    if (subject_settings !== undefined) {
+      const { error } = await supabase
+        .from("stg_exams")
+        .update({ subject_settings })
+        .eq("exam_id", exam_id);
+
+      if (error) {
+        console.error("UPDATE EXAM SETTINGS ERROR:", error);
+        return NextResponse.json(
+          {
+            message:
+              error.message ||
+              "Gagal mengemas kini settings peperiksaan. Pastikan kolum `subject_settings` wujud di `stg_exams`.",
+          },
+          { status: 500 }
+        );
+      }
+
+      return NextResponse.json({ message: "Settings peperiksaan berjaya dikemas kini" });
+    }
+
+    if (!exam_name || !academic_year) {
+      return NextResponse.json(
+        { message: "Exam name and academic year are required" },
         { status: 400 }
       );
     }

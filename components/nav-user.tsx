@@ -36,7 +36,25 @@ export function NavUser({
     const { isMobile } = useSidebar();
     const router = useRouter();
 
-    const handleLogout = () => {
+    const handleLogout = async () => {
+        try {
+            const raw = localStorage.getItem("stg_session");
+            if (raw) {
+                const parsed = JSON.parse(raw);
+                const session_id = parsed?.session_id;
+
+                if (session_id) {
+                    await fetch("/api/auth/logout", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ session_id }),
+                    });
+                }
+            }
+        } catch {
+            // ignore logging failures
+        }
+
         sessionStorage.clear();
         localStorage.clear();
         router.replace("/login");

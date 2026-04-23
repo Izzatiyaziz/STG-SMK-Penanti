@@ -303,11 +303,11 @@ export default function ClassDetailPage() {
                     </h1>
                 </div>
 
-                <div className="flex gap-2">
+                <div className="flex w-full gap-2 sm:w-auto">
                     <Button
                         variant="outline"
                         onClick={() => setIsEditing(!isEditing)}
-                        className="rounded-lg gap-2"
+                        className="w-full rounded-lg gap-2 sm:w-auto"
                     >
                         <Edit className="w-4 h-4" />
                         {isEditing ? "Batal Edit" : "Edit Kelas"}
@@ -320,22 +320,22 @@ export default function ClassDetailPage() {
                 <CardHeader>
                     <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                         <div className="flex-1">
-                            <div className="flex items-center gap-3 mb-2">
+                            <div className="mb-2 flex flex-wrap items-center gap-3">
                                 <div className="p-2 bg-primary/10 rounded-lg">
                                     <GraduationCap className="w-5 h-5 text-primary" />
                                 </div>
                                 {isEditing ? (
-                                    <div className="flex items-center gap-2 flex-1">
+                                    <div className="flex flex-1 flex-col gap-2 sm:flex-row sm:items-center">
                                         <Input
                                             value={editedName}
                                             onChange={(e) =>
                                                 setEditedName(e.target.value)
                                             }
-                                            className="text-xl md:text-2xl font-bold h-12"
+                                            className="h-12 text-xl font-bold md:text-2xl"
                                         />
                                         <Button
                                             onClick={handleSaveName}
-                                            className="gap-2"
+                                            className="w-full gap-2 sm:w-auto"
                                         >
                                             <Save className="w-4 h-4" />
                                             Simpan
@@ -357,7 +357,7 @@ export default function ClassDetailPage() {
                                 Maklumat lengkap dan senarai pelajar kelas ini
                             </CardDescription>
                         </div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex flex-wrap items-center gap-2">
                             <Users className="w-5 h-5 text-muted-foreground" />
                             <span className="text-lg font-semibold text-foreground">
                                 {students.length} Pelajar
@@ -481,7 +481,7 @@ export default function ClassDetailPage() {
             {/* Student List Card */}
             <Card className="border-border/40 bg-gradient-to-br from-card to-muted/10 rounded-xl shadow-sm">
                 <CardHeader>
-                    <div className="flex items-center justify-between">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                         <div className="flex items-center gap-3">
                             <div className="p-2 bg-primary/10 rounded-lg">
                                 <Users className="w-5 h-5 text-primary" />
@@ -595,8 +595,8 @@ export default function ClassDetailPage() {
                     Kembali ke Senarai
                 </Button>
 
-                <div className="flex gap-3 w-full sm:w-auto">
-                    <Button className="rounded-lg gap-2 w-full sm:w-auto">
+                <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row">
+                    <Button className="w-full rounded-lg gap-2 sm:w-auto">
                         <Users className="w-4 h-4" />
                         Eksport Senarai
                     </Button>

@@ -25,12 +25,27 @@ import { PiCalendarPlusLight } from "react-icons/pi";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { ExamItem } from "@/app/types";
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select";
+import { Button as UIButton } from "@/components/ui/button";
 
 export default function ExamsPage() {
     const [exams, setExams] = useState<ExamItem[]>([]);
     const [loading, setLoading] = useState(false);
     const [editing, setEditing] = useState<ExamItem | null>(null);
     const [deleting, setDeleting] = useState<ExamItem | null>(null);
+    const [settingExam, setSettingExam] = useState<any | null>(null);
+    const [subjects, setSubjects] = useState<Array<{ id: string; name: string }>>([]);
+    const [selectedSubjectId, setSelectedSubjectId] = useState<string>("");
+    const [deadline, setDeadline] = useState<string>("");
+    const [objectiveQuestions, setObjectiveQuestions] = useState<number>(40);
+    const [objectiveMax, setObjectiveMax] = useState<number>(40);
+    const [subjectiveMax, setSubjectiveMax] = useState<number>(60);
 
     // ================= FETCH EXAMS =================
     async function fetchExams() {
@@ -43,8 +58,19 @@ export default function ExamsPage() {
         }
     }
 
+    async function fetchSubjects() {
+        try {
+            const res = await fetch("/api/admin/subjects", { cache: "no-store" });
+            const data = await res.json();
+            setSubjects((data ?? []).map((s: any) => ({ id: s.id, name: s.name })));
+        } catch {
+            setSubjects([]);
+        }
+    }
+
     useEffect(() => {
         fetchExams();
+        fetchSubjects();
     }, []);
 
     // ================= ADD EXAM =================
@@ -137,12 +163,69 @@ export default function ExamsPage() {
         fetchExams();
     }
 
+    function openSettings(exam: any) {
+        setSettingExam(exam);
+        setSelectedSubjectId("");
+        setDeadline("");
+        setObjectiveQuestions(40);
+        setObjectiveMax(40);
+        setSubjectiveMax(60);
+    }
+
+    function loadSubjectSettings(exam: any, subjectId: string) {
+        const settings = (exam?.subject_settings ?? {}) as Record<string, any>;
+        const s = settings?.[subjectId] ?? null;
+        setDeadline(String(s?.deadline ?? ""));
+        setObjectiveQuestions(Number(s?.objective_questions ?? 40));
+        setObjectiveMax(Number(s?.objective_max ?? Number(s?.objective_questions ?? 40)));
+        setSubjectiveMax(Number(s?.subjective_max ?? 60));
+    }
+
+    async function handleSaveSettings() {
+        if (!settingExam || !selectedSubjectId) {
+            toast.error("Sila pilih subjek");
+            return;
+        }
+
+        const subject_settings = {
+            ...(settingExam.subject_settings ?? {}),
+            [selectedSubjectId]: {
+                deadline: deadline || null,
+                objective_questions: Number(objectiveQuestions) || 0,
+                objective_max: Number(objectiveMax) || 0,
+                subjective_max: Number(subjectiveMax) || 0,
+            },
+        };
+
+        setLoading(true);
+        const res = await fetch("/api/admin/exams", {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                exam_id: settingExam.id,
+                subject_settings,
+            }),
+        });
+
+        const data = await res.json();
+        setLoading(false);
+
+        if (!res.ok) {
+            toast.error(data.message || "Gagal menyimpan settings. Pastikan kolum `subject_settings` wujud dalam DB.");
+            return;
+        }
+
+        toast.success("Settings berjaya disimpan");
+        setSettingExam(null);
+        fetchExams();
+    }
+
     return (
         <div className="min-h-screen bg-gradient-to-b from-background to-muted/20 p-4 md:p-6">
             <div className="max-w-7xl mx-auto space-y-6">
 
                 {/* ================= HEADER + ADD BUTTON ================= */}
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                     <div className="space-y-1">
                         <div className="flex items-center gap-3">
                             <div className="p-2 rounded-xl bg-primary/10">
@@ -161,7 +244,7 @@ export default function ExamsPage() {
                     {/* ADD EXAM BUTTON */}
                     <Dialog>
                         <DialogTrigger asChild>
-                            <Button className="bg-gradient-to-r from-primary to-primary/90 hover:from-primary/95 hover:to-primary/80 shadow-lg">
+                            <Button className="w-full bg-gradient-to-r from-primary to-primary/90 shadow-lg hover:from-primary/95 hover:to-primary/80 sm:w-auto">
                                 <PiCalendarPlusLight className="w-4 h-4 mr-2" />
                                 Tambah Peperiksaan
                             </Button>
@@ -238,7 +321,14 @@ export default function ExamsPage() {
                                         <TableCell>{index + 1}</TableCell>
                                         <TableCell>{exam.name}</TableCell>
                                         <TableCell>{exam.academic_year}</TableCell>
-                                        <TableCell className="flex gap-2">
+                                        <TableCell className="flex flex-wrap gap-2">
+                                            <Button
+                                                size="sm"
+                                                variant="secondary"
+                                                onClick={() => openSettings(exam)}
+                                            >
+                                                Settings
+                                            </Button>
                                             <Button
                                                 size="icon"
                                                 variant="outline"
@@ -333,6 +423,100 @@ export default function ExamsPage() {
                                 Padam
                             </Button>
                         </DialogFooter>
+                    </DialogContent>
+                </Dialog>
+
+                {/* ================= SETTINGS DIALOG ================= */}
+                <Dialog open={!!settingExam} onOpenChange={() => setSettingExam(null)}>
+                    <DialogContent>
+                        <DialogHeader>
+                            <DialogTitle>Settings Peperiksaan (ikut subjek)</DialogTitle>
+                            <DialogDescription>
+                                Tetapkan deadline hantar markah + limit objektif/subjektif untuk setiap subjek bagi peperiksaan ini.
+                            </DialogDescription>
+                        </DialogHeader>
+
+                        <div className="space-y-4">
+                            <div className="space-y-2">
+                                <Label>Subjek</Label>
+                                <Select
+                                    value={selectedSubjectId}
+                                    onValueChange={(v) => {
+                                        setSelectedSubjectId(v);
+                                        loadSubjectSettings(settingExam, v);
+                                    }}
+                                >
+                                    <SelectTrigger>
+                                        <SelectValue placeholder="Pilih subjek" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {subjects.map((s) => (
+                                            <SelectItem key={s.id} value={s.id}>
+                                                {s.name}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+
+                            <div className="space-y-2">
+                                <Label>Tarikh Deadline</Label>
+                                <Input
+                                    type="date"
+                                    value={deadline}
+                                    onChange={(e) => setDeadline(e.target.value)}
+                                />
+                            </div>
+
+                            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                                <div className="space-y-2">
+                                    <Label>Bil. Soalan Objektif</Label>
+                                    <Input
+                                        type="number"
+                                        min={0}
+                                        value={objectiveQuestions}
+                                        onChange={(e) =>
+                                            setObjectiveQuestions(Number(e.target.value))
+                                        }
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label>Max Objektif</Label>
+                                    <Input
+                                        type="number"
+                                        min={0}
+                                        value={objectiveMax}
+                                        onChange={(e) => setObjectiveMax(Number(e.target.value))}
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label>Max Subjektif</Label>
+                                    <Input
+                                        type="number"
+                                        min={0}
+                                        value={subjectiveMax}
+                                        onChange={(e) =>
+                                            setSubjectiveMax(Number(e.target.value))
+                                        }
+                                    />
+                                </div>
+                            </div>
+
+                            <DialogFooter>
+                                <UIButton
+                                    variant="outline"
+                                    onClick={() => setSettingExam(null)}
+                                >
+                                    Batal
+                                </UIButton>
+                                <UIButton
+                                    onClick={handleSaveSettings}
+                                    disabled={loading || !selectedSubjectId}
+                                >
+                                    Simpan
+                                </UIButton>
+                            </DialogFooter>
+                        </div>
                     </DialogContent>
                 </Dialog>
             </div>

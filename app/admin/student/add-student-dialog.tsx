@@ -1,6 +1,6 @@
 "use client";
 
-import { ReactNode, useState } from "react";
+import { ReactNode, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -52,33 +52,30 @@ export function AddStudentDialog({
         enrollment_date: today,
     });
 
-    // Fungsi Logik Auto-Detect Tingkatan
-    const autoDetectLevel = (ic: string) => {
-        if (ic.length < 2) return;
+    // Auto-detect Tingkatan ikut tarikh daftar sekolah (bukan IC)
+    const autoDetectLevelFromEnrollment = (enrollmentDate: string) => {
+        const d = new Date(enrollmentDate);
+        if (Number.isNaN(d.getTime())) return;
 
-        const yearPart = ic.substring(0, 2);
-        const birthYear = parseInt(yearPart) > 30 ? 1900 + parseInt(yearPart) : 2000 + parseInt(yearPart);
-        const currentYear = new Date().getFullYear();
-        const age = currentYear - birthYear;
-
-        let detected = "";
-        if (age === 13) detected = "1";
-        else if (age === 14) detected = "2";
-        else if (age === 15) detected = "3";
-        else if (age === 16) detected = "4";
-        else if (age === 17) detected = "5";
-
-        if (detected) {
-            setSelectedLevel(detected);
-        }
+        const now = new Date();
+        const years = now.getFullYear() - d.getFullYear() + 1;
+        const clamped = Math.max(1, Math.min(5, years));
+        setSelectedLevel(String(clamped));
     };
+
+    useEffect(() => {
+        if (open && formData.enrollment_date && !selectedLevel) {
+            autoDetectLevelFromEnrollment(formData.enrollment_date);
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [open]);
 
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const { name, value } = e.target;
         setFormData((prev) => ({ ...prev, [name]: value }));
 
-        if (name === "ic_number") {
-            autoDetectLevel(value);
+        if (name === "enrollment_date") {
+            autoDetectLevelFromEnrollment(value);
         }
     };
 
@@ -188,7 +185,7 @@ export function AddStudentDialog({
                                 />
                             </div>
 
-                            <div className="grid grid-cols-2 gap-4">
+                            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                                 <div className="space-y-2">
                                     <Label htmlFor="ic_number" className="text-sm font-medium flex items-center gap-1">
                                         <IdCard className="w-3 h-3" />
@@ -254,7 +251,7 @@ export function AddStudentDialog({
                     </div>
 
                     {/* ACTION BUTTONS */}
-                    <div className="flex gap-3 pt-2">
+                    <div className="flex flex-col gap-3 pt-2 sm:flex-row">
                         <Button
                             type="button"
                             variant="outline"

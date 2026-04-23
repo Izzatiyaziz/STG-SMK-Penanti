@@ -188,17 +188,17 @@ async function handleSave() {
                 />
               </div>
 
-              {/* ID Guru (UI only) */}
+              {/* No. Staff (UI only) */}
               <div className="space-y-2">
-                <label className="text-sm font-medium">ID Guru (Paparan)</label>
+                <label className="text-sm font-medium">No. Staff (Paparan)</label>
                 <Input
                   value={identifier}
                   onChange={(e) => setIdentifier(e.target.value)}
-                  placeholder="Contoh: TCH001"
+                  placeholder="Contoh: STAF001"
                   disabled
                 />
                 <p className="text-xs text-muted-foreground">
-                  ID Guru ini hanya paparan (tidak dikemaskini ke DB).
+                  No. Staff ini untuk paparan (login guna No. Staff).
                 </p>
               </div>
 

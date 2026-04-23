@@ -66,7 +66,7 @@ export async function POST(req: Request) {
         if (role === "teacher") {
             const { data: teacher, error } = await supabase
                 .from("stg_teachers")
-                .select("teacher_id, fullname, email")
+                .select("teacher_id, fullname, email, is_first_login")
                 .eq("teacher_id", user_id)
                 .single();
 
@@ -103,6 +103,7 @@ export async function POST(req: Request) {
                 email: teacher.email,
                 roles: roleNames,
                 avatar: "/img/teacher-avatar.png",
+                must_change_password: Boolean(teacher.is_first_login),
             });
         }
 

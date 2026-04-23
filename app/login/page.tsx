@@ -10,7 +10,7 @@ export default function LoginPage() {
     return (
         <div className="grid min-h-svh lg:grid-cols-2">
             {/* ================= LEFT PANEL ================= */}
-            <div className="relative hidden lg:flex flex-col justify-between bg-[#1f3a6f] p-10 text-white">
+            <div className="relative hidden overflow-hidden lg:flex flex-col justify-between bg-[#1f3a6f] p-10 text-white">
                 {/* Overlay image */}
                 <Image
                     src="https://images4.alphacoders.com/134/thumb-1920-1348334.jpg" 
@@ -21,7 +21,7 @@ export default function LoginPage() {
                 />
 
                 {/* Content */}
-                <div className="relative z-10 w-full top-50">
+                <div className="relative z-10 flex w-full flex-1 flex-col justify-center">
                     <div className="flex items-center gap-3 mb-10">
                         <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-white/10">
                             <Image
@@ -86,9 +86,9 @@ export default function LoginPage() {
             </div>
 
             {/* ================= RIGHT PANEL ================= */}
-            <div className="flex flex-col gap-4 p-6 md:p-10">
+            <div className="flex min-w-0 flex-col gap-4 p-4 sm:p-6 md:p-10">
                 {/* Top bar */}
-                <div className="flex justify-between items-center">
+                <div className="flex items-center justify-between gap-3">
                     <Link
                         href="/"
                         className="flex items-center gap-2 font-medium"
@@ -108,7 +108,7 @@ export default function LoginPage() {
 
                 {/* Login card */}
                 <div className="flex flex-1 items-center justify-center">
-                    <div className="w-full max-w-sm rounded-xl border bg-card p-6 shadow-sm">
+                    <div className="w-full max-w-sm rounded-xl border bg-card p-5 shadow-sm sm:p-6">
                         <div className="mb-6 text-center">
                             <h1 className="text-2xl font-bold">Log Masuk</h1>
                             <p className="text-sm text-muted-foreground">

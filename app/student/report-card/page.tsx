@@ -150,7 +150,7 @@ export default function ReportCardPage() {
 
                 {/* ================= ACTION ================= */}
                 <div className="flex justify-end">
-                    <Button>
+                    <Button className="w-full sm:w-auto">
                         Muat Turun PDF Slip Keputusan
                     </Button>
                 </div>

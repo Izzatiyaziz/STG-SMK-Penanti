@@ -1,0 +1,186 @@
+import { NextResponse } from "next/server";
+import supabase from "@/lib/supabase";
+
+export const runtime = "nodejs";
+
+function gradeFromTotal(total: number) {
+    if (total >= 80) return "A";
+    if (total >= 65) return "B";
+    if (total >= 50) return "C";
+    if (total >= 40) return "D";
+    return "E";
+}
+
+export async function POST(req: Request) {
+    try {
+        const body = await req.json();
+        const teacher_id = String(body?.teacher_id ?? "").trim();
+        const class_id = String(body?.class_id ?? "").trim();
+        const subject_id = String(body?.subject_id ?? "").trim();
+        const exam_id = String(body?.exam_id ?? "").trim();
+        const marks = Array.isArray(body?.marks) ? body.marks : [];
+
+        if (!teacher_id || !class_id || !subject_id || !exam_id) {
+            return NextResponse.json(
+                { message: "teacher_id, class_id, subject_id, exam_id diperlukan" },
+                { status: 400 }
+            );
+        }
+
+        // Enforce deadline (per exam + subject settings)
+        const { data: exam, error: examErr } = await supabase
+            .from("stg_exams")
+            .select("subject_settings")
+            .eq("exam_id", exam_id)
+            .single();
+
+        if (examErr) {
+            return NextResponse.json({ message: examErr.message }, { status: 500 });
+        }
+
+        const settingsAll =
+            exam?.subject_settings && typeof exam.subject_settings === "object"
+                ? (exam.subject_settings as Record<string, unknown>)
+                : {};
+        const subjectSettingsRaw = settingsAll[subject_id];
+        const subjectSettings =
+            subjectSettingsRaw && typeof subjectSettingsRaw === "object"
+                ? (subjectSettingsRaw as Record<string, unknown>)
+                : {};
+
+        const deadlineRaw = subjectSettings.deadline;
+        const deadline =
+            typeof deadlineRaw === "string" ? deadlineRaw.trim() : "";
+
+        if (deadline && /^\d{4}-\d{2}-\d{2}$/.test(deadline)) {
+            const today = new Date().toISOString().slice(0, 10);
+            if (today > deadline) {
+                return NextResponse.json(
+                    {
+                        message: `Tarikh akhir penghantaran telah tamat (${deadline}). Sila hubungi Penyelaras Subjek.`,
+                    },
+                    { status: 403 }
+                );
+            }
+        }
+
+        const { data: students, error: sErr } = await supabase
+            .from("stg_students")
+            .select("student_id")
+            .eq("class_id", class_id);
+
+        if (sErr) {
+            return NextResponse.json({ message: sErr.message }, { status: 500 });
+        }
+
+        const studentIds = (students ?? [])
+            .map((s: any) => s.student_id as string)
+            .filter(Boolean);
+
+        const markByStudent = new Map<string, number>();
+        for (const m of marks) {
+            const sid = String(m?.student_id ?? "").trim();
+            const val = Number(m?.subjective_mark ?? 0);
+            if (sid) markByStudent.set(sid, val);
+        }
+
+        // Save subjective marks + create/update results
+        for (const studentId of studentIds) {
+            const subjective_mark = markByStudent.get(studentId) ?? 0;
+
+            // upsert subjective mark (manual)
+            const { data: existing } = await supabase
+                .from("stg_subjective_marks")
+                .select("subjective_id")
+                .eq("teacher_id", teacher_id)
+                .eq("student_id", studentId)
+                .eq("subject_id", subject_id)
+                .eq("exam_id", exam_id)
+                .maybeSingle();
+
+            let subjective_id: string | null = null;
+            if (existing?.subjective_id) {
+                const { error: uErr } = await supabase
+                    .from("stg_subjective_marks")
+                    .update({
+                        subjective_mark,
+                        input_date: new Date().toISOString(),
+                    })
+                    .eq("subjective_id", existing.subjective_id);
+                if (uErr) throw uErr;
+                subjective_id = existing.subjective_id;
+            } else {
+                const { data: created, error: cErr } = await supabase
+                    .from("stg_subjective_marks")
+                    .insert({
+                        teacher_id,
+                        student_id: studentId,
+                        subject_id,
+                        exam_id,
+                        subjective_mark,
+                    })
+                    .select("subjective_id")
+                    .single();
+                if (cErr) throw cErr;
+                subjective_id = created?.subjective_id ?? null;
+            }
+
+            // objective from OMR scans if exists
+            const { data: omr } = await supabase
+                .from("stg_omr_scans")
+                .select("omr_scan_id, objective_total_mark")
+                .eq("student_id", studentId)
+                .eq("subject_id", subject_id)
+                .eq("exam_id", exam_id)
+                .order("scan_date", { ascending: false })
+                .limit(1)
+                .maybeSingle();
+
+            const objective_total = Number(omr?.objective_total_mark ?? 0);
+            const total = objective_total + subjective_mark;
+            const grade = gradeFromTotal(total);
+
+            const { data: existingResult } = await supabase
+                .from("stg_results")
+                .select("result_id")
+                .eq("student_id", studentId)
+                .eq("subject_id", subject_id)
+                .eq("exam_id", exam_id)
+                .maybeSingle();
+
+            if (existingResult?.result_id) {
+                const { error: rErr } = await supabase
+                    .from("stg_results")
+                    .update({
+                        omr_scan_id: omr?.omr_scan_id ?? null,
+                        subjective_id,
+                        total,
+                        grade,
+                        status: "pending",
+                    })
+                    .eq("result_id", existingResult.result_id);
+                if (rErr) throw rErr;
+            } else {
+                const { error: iErr } = await supabase.from("stg_results").insert({
+                    student_id: studentId,
+                    subject_id,
+                    exam_id,
+                    omr_scan_id: omr?.omr_scan_id ?? null,
+                    subjective_id,
+                    total,
+                    grade,
+                    status: "pending",
+                });
+                if (iErr) throw iErr;
+            }
+        }
+
+        return NextResponse.json({ success: true });
+    } catch (err: any) {
+        console.error("POST teacher marks FAILED:", err);
+        return NextResponse.json(
+            { message: err.message || "Server error" },
+            { status: 500 }
+        );
+    }
+}

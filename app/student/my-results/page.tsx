@@ -59,7 +59,7 @@ export default function MyResultsPage() {
                             <BarChart3 className="w-6 h-6 text-primary" />
                         </div>
                         <h1 className="text-3xl font-bold tracking-tight">
-                            Dashboard Pelajar
+                            Keputusan Saya
                         </h1>
                     </div>
                     <p className="text-muted-foreground">
@@ -72,8 +72,8 @@ export default function MyResultsPage() {
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     {/* Peperiksaan */}
                     <Card className="shadow-lg border border-border/50">
-                        <CardContent className="p-6 flex items-center justify-between">
-                            <div>
+                        <CardContent className="flex items-center justify-between gap-4 p-6">
+                            <div className="min-w-0">
                                 <p className="text-sm text-muted-foreground">
                                     Peperiksaan
                                 </p>
@@ -89,8 +89,8 @@ export default function MyResultsPage() {
 
                     {/* Purata Markah */}
                     <Card className="shadow-lg border border-border/50">
-                        <CardContent className="p-6 flex items-center justify-between">
-                            <div>
+                        <CardContent className="flex items-center justify-between gap-4 p-6">
+                            <div className="min-w-0">
                                 <p className="text-sm text-muted-foreground">
                                     Purata Markah
                                 </p>
@@ -106,8 +106,8 @@ export default function MyResultsPage() {
 
                     {/* Kedudukan Kelas */}
                     <Card className="shadow-lg border border-border/50">
-                        <CardContent className="p-6 flex items-center justify-between">
-                            <div>
+                        <CardContent className="flex items-center justify-between gap-4 p-6">
+                            <div className="min-w-0">
                                 <p className="text-sm text-muted-foreground">
                                     Kedudukan Kelas
                                 </p>
@@ -192,7 +192,7 @@ export default function MyResultsPage() {
                 {/* ================= ACTION ================= */}
                 <div className="flex justify-end">
                     <Link href="/student/report-card">
-                        <Button>
+                        <Button className="w-full sm:w-auto">
                             <FileText className="w-4 h-4 mr-2" />
                             Lihat Slip Keputusan
                         </Button>

@@ -96,21 +96,36 @@ export function LoginForm({
 
                 const finalRole = selectedTeacherRole || roles[0] || "subject teacher";
 
-                if (data.is_first_login) {
+                if (data.must_change_password) {
                     setTempData({
                         user_id: data.user_id,
                         role: finalRole,
+                        roles,
+                        session_id: data.session_id ?? null,
                     });
                     setShowPasswordDialog(true);
                     toast.dismiss(toastId);
                     return;
                 }
 
-                proceedToDashboard(data.user_id, "teacher", finalRole, toastId);
+                proceedToDashboard(
+                    data.user_id,
+                    "teacher",
+                    finalRole,
+                    data.session_id ?? null,
+                    toastId,
+                    roles
+                );
                 return;
             }
 
-            proceedToDashboard(data.user_id, submitRole, submitRole, toastId);
+            proceedToDashboard(
+                data.user_id,
+                submitRole,
+                submitRole,
+                data.session_id ?? null,
+                toastId
+            );
 
         } catch (err) {
             console.error("LOGIN ERROR:", err);
@@ -120,19 +135,34 @@ export function LoginForm({
         }
     }
 
-    function proceedToDashboard(userId: string, userType: string, specificRole: string, toastId?: string | number) {
+    function proceedToDashboard(
+        userId: string,
+        userType: string,
+        specificRole: string,
+        sessionId?: string | null,
+        toastId?: string | number,
+        roles?: string[]
+    ) {
         localStorage.setItem(
             "stg_session",
             JSON.stringify({
                 userType: userType,
-                role: specificRole,
+                role: String(specificRole).toLowerCase().trim(),
+                roles: Array.isArray(roles)
+                    ? roles.map((r) => String(r).toLowerCase().trim())
+                    : undefined,
                 user_id: userId,
+                session_id: sessionId ?? null,
             })
         );
         if (toastId) toast.success("Log masuk berjaya 🎉", { id: toastId });
         
         if (userType === "admin") router.push("/admin/dashboard");
-        else if (userType === "teacher") router.push("/teacher/dashboard");
+        else if (userType === "teacher") {
+            const r = String(specificRole).toLowerCase().trim();
+            if (r === "subject coordinator") router.push("/coordinator/dashboard");
+            else router.push("/teacher/dashboard");
+        }
         else router.push("/student/dashboard");
     }
 
@@ -157,15 +187,25 @@ export function LoginForm({
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ 
-                    user_id: tempData.user_id, 
-                    new_password: newPassword 
+                    userType: "teacher",
+                    user_id: tempData.user_id,
+                    current_password: "",
+                    new_password: newPassword,
+                    first_login: true,
                 }),
             });
 
             if (!res.ok) throw new Error("Gagal mengemas kini kata laluan");
 
             setShowPasswordDialog(false);
-            proceedToDashboard(tempData.user_id, "teacher", tempData.role, toastId);
+            proceedToDashboard(
+                tempData.user_id,
+                "teacher",
+                tempData.role,
+                tempData.session_id ?? null,
+                toastId,
+                Array.isArray(tempData.roles) ? tempData.roles : undefined
+            );
 
         } catch (error) {
             toast.error("Gagal menukar kata laluan. Sila cuba lagi.", { id: toastId });
@@ -243,7 +283,7 @@ export function LoginForm({
                     <form onSubmit={(e) => handleSubmit(e, "teacher")} {...props}>
                         <FieldGroup>
                             <Field>
-                                <FieldLabel>ID Guru</FieldLabel>
+                                <FieldLabel>No. Staff</FieldLabel>
                                 <Input name="username" required />
                             </Field>
                             <Field>

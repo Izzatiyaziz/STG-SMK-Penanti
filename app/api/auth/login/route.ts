@@ -13,6 +13,30 @@ export async function POST(req: Request) {
             return NextResponse.json({ message: "Jawatan diperlukan" }, { status: 400 });
         }
 
+        async function createSessionLog(params: {
+            user_id: string;
+            user_name?: string | null;
+            role: "admin" | "teacher" | "student";
+        }) {
+            try {
+                const { data, error } = await supabase
+                    .from("stg_sessions")
+                    .insert({
+                        user_id: params.user_id,
+                        user_name: params.user_name ?? null,
+                        role: params.role,
+                        action: "Log Masuk",
+                    })
+                    .select("session_id")
+                    .single();
+
+                if (error) return null;
+                return data?.session_id ?? null;
+            } catch {
+                return null;
+            }
+        }
+
         // ================= STUDENT =================
         if (role === "student") {
             const { ic_number } = body;
@@ -20,22 +44,20 @@ export async function POST(req: Request) {
 
             const { data: student, error } = await supabase
                 .from("stg_students")
-                .select("student_id, name, status") // Pastikan ada lajur nama jika nak simpan
+                .select("student_id, fullname, status")
                 .eq("ic_number", ic_number)
                 .single();
 
             if (error || !student) return NextResponse.json({ message: "Pelajar tidak dijumpai" }, { status: 401 });
             if (student.status !== "active") return NextResponse.json({ message: "Akaun pelajar tidak aktif" }, { status: 403 });
 
-            // REKOD SESI
-            await supabase.from("stg_sessions").insert({
-                user_id: student.student_id,
-                user_name: student.name || student.student_id,
-                role: "Pelajar",
-                action: "Log Masuk"
+            const session_id = await createSessionLog({
+                user_id: String(student.student_id),
+                user_name: student.fullname ?? null,
+                role: "student",
             });
 
-            return NextResponse.json({ role: "student", user_id: student.student_id });
+            return NextResponse.json({ role: "student", user_id: student.student_id, session_id });
         }
 
         // ================= ADMIN =================
@@ -54,15 +76,13 @@ export async function POST(req: Request) {
             const valid = await bcrypt.compare(password, admin.password);
             if (!valid) return NextResponse.json({ message: "Kelayakan tidak sah" }, { status: 401 });
 
-            // REKOD SESI
-            await supabase.from("stg_sessions").insert({
-                user_id: admin.admin_id,
-                user_name: admin.fullname || admin.admin_id,
-                role: "Pentadbir",
-                action: "Log Masuk"
+            const session_id = await createSessionLog({
+                user_id: String(admin.admin_id),
+                user_name: admin.fullname ?? null,
+                role: "admin",
             });
 
-            return NextResponse.json({ role: "admin", user_id: admin.admin_id });
+            return NextResponse.json({ role: "admin", user_id: admin.admin_id, session_id });
         }
 
         // ================= TEACHER =================
@@ -98,12 +118,10 @@ export async function POST(req: Request) {
                 roleNames = roles?.map((r) => r.role_name) ?? [];
             }
 
-            // REKOD SESI
-            await supabase.from("stg_sessions").insert({
-                user_id: teacher.teacher_id,
-                user_name: teacher.fullname || username,
-                role: "Guru",
-                action: "Log Masuk"
+            const session_id = await createSessionLog({
+                user_id: String(teacher.teacher_id),
+                user_name: teacher.fullname ?? null,
+                role: "teacher",
             });
 
             return NextResponse.json({
@@ -111,7 +129,8 @@ export async function POST(req: Request) {
                 user_id: teacher.teacher_id,
                 fullname: teacher.fullname,
                 roles: roleNames,
-                is_first_login: teacher.is_first_login, 
+                session_id,
+                must_change_password: Boolean(teacher.is_first_login),
             });
         }
 

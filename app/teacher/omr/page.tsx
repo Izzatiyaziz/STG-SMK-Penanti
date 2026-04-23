@@ -23,6 +23,11 @@ export default function OMRScanPage() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [isCameraActive, setIsCameraActive] = useState(true);
 
+  function isProbablyMobileUA() {
+    if (typeof navigator === "undefined") return false;
+    return /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+  }
+
   /* ================= ROLE GUARD ================= */
   useEffect(() => {
     const session = localStorage.getItem("stg_session");
@@ -32,9 +37,21 @@ export default function OMRScanPage() {
     }
 
     const parsed = JSON.parse(session);
-    if (parsed.userType !== "teacher" || parsed.role !== "subject teacher") {
+    const role = String(parsed.role ?? "").toLowerCase().trim();
+    const allowedRoles = new Set(["subject teacher", "subject coordinator"]);
+    if (parsed.userType !== "teacher" || !allowedRoles.has(role)) {
       toast.error("Anda tidak dibenarkan akses OMR");
-      router.replace("/teacher/dashboard");
+      router.replace(
+        role === "subject coordinator"
+          ? "/coordinator/dashboard"
+          : "/teacher/dashboard"
+      );
+      return;
+    }
+
+    if (!isProbablyMobileUA()) {
+      toast.info("Imbasan OMR perlu guna telefon (mobile) sahaja.");
+      router.replace("/teacher/my-subject");
     }
   }, [router]);
 
@@ -128,12 +145,12 @@ export default function OMRScanPage() {
                     ref={videoRef}
                     autoPlay
                     playsInline
-                    className="w-full h-[420px] object-cover"
+                    className="h-[300px] w-full object-cover sm:h-[420px]"
                   />
                 ) : (
                   <img
                     src={capturedImage}
-                    className="w-full h-[420px] object-contain"
+                    className="h-[300px] w-full object-contain sm:h-[420px]"
                   />
                 )}
 
@@ -234,7 +251,7 @@ export default function OMRScanPage() {
                   • Hasil dipaparkan dalam 2–3 saat
                 </p>
                 <p className="text-muted-foreground">
-                  Akses khas untuk Guru Subjek sahaja.
+                  Akses khas untuk Guru Subjek dan Penyelaras Subjek.
                 </p>
               </CardContent>
             </Card>
@@ -244,7 +261,7 @@ export default function OMRScanPage() {
               <CardHeader>
                 <CardTitle>Statistik</CardTitle>
               </CardHeader>
-              <CardContent className="grid grid-cols-2 gap-4 text-center">
+              <CardContent className="grid grid-cols-1 gap-4 text-center sm:grid-cols-2">
                 <div className="p-3 bg-muted/30 rounded-lg">
                   <div className="text-2xl font-bold text-primary">0</div>
                   <div className="text-xs text-muted-foreground">

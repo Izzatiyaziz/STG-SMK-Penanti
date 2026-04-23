@@ -70,6 +70,28 @@ export async function POST(req: Request) {
       );
     }
 
+    // ✅ Enforce: one teacher can only be class teacher for ONE class
+    const { data: teacherConflicts, error: conflictErr } = await supabase
+      .from("stg_class_teachers")
+      .select("class_id, teacher_id")
+      .eq("teacher_id", teacher_id)
+      .neq("class_id", class_id)
+      .limit(1);
+
+    if (conflictErr) {
+      return NextResponse.json({ error: conflictErr.message }, { status: 500 });
+    }
+
+    if (Array.isArray(teacherConflicts) && teacherConflicts.length > 0) {
+      return NextResponse.json(
+        {
+          error: "Guru ini sudah dilantik sebagai guru kelas untuk kelas lain.",
+          conflict: teacherConflicts[0],
+        },
+        { status: 409 }
+      );
+    }
+
     // ✅ Check existing row for class
     const { data: existingRow, error: existingErr } = await supabase
       .from("stg_class_teachers")
@@ -123,7 +145,7 @@ export async function POST(req: Request) {
       },
       { status: 201 }
     );
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("POST class-teacher FAILED:", err);
     return NextResponse.json({ error: "Server error" }, { status: 500 });
   }

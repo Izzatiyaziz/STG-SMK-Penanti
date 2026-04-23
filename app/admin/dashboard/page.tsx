@@ -1,40 +1,24 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { 
   Users, 
   GraduationCap, 
   UserCheck, 
-  ClipboardList, 
   Activity,
   ShieldCheck,
-  Clock,
-  Loader2,
-  Building2,
-  BarChart3
+  Clock
 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { toast } from "sonner";
 import { User } from "@/app/types";
-import { Badge } from "@/components/ui/badge";
+import AdminSystemUsageTable, {
+  type SystemUsageLogRow,
+} from "@/components/admin/system-usage-table";
+import SystemUsageChart from "../reports/system-usage-chart";
 
-interface SessionLog {
-  session_id: string;
-  user_id: string;
-  user_name: string;
-  role: string;
-  action: string;
-  login_time: string;
-  logout_time: string | null;
-}
+type SessionLog = SystemUsageLogRow;
 
 const LastUpdatedTime = () => {
   const [time, setTime] = useState<string>("");
@@ -59,14 +43,20 @@ export default function AdminDashboardPage() {
       const [studentRes, teacherRes, sessionRes] = await Promise.all([
         fetch("/api/admin/users?role=student"),
         fetch("/api/admin/users?role=teacher"),
-        fetch("/api/admin/sessions"),
+        fetch("/api/admin/sessions?limit=10"),
       ]);
 
       if (studentRes.ok) setStudents(await studentRes.json());
       if (teacherRes.ok) setTeachers(await teacherRes.json());
-      if (sessionRes.ok) setSessions(await sessionRes.json());
+      if (sessionRes.ok) {
+        const sessionJson = await sessionRes.json();
+        const list = Array.isArray(sessionJson)
+          ? sessionJson
+          : (sessionJson?.data ?? []);
+        setSessions(Array.isArray(list) ? list : []);
+      }
       
-    } catch (error) {
+    } catch {
       toast.error("Gagal memuatkan data dashboard");
     } finally {
       setLoading(false);
@@ -126,91 +116,39 @@ export default function AdminDashboardPage() {
           />
         </div>
 
-        {/* ================= TABLE LOG SISTEM ================= */}
-        <Card className="border-border bg-card shadow-md rounded-xl overflow-hidden">
-          <CardHeader className="border-b border-border bg-gradient-to-r from-card to-card/80 px-6 py-5">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-              <div>
-                <CardTitle className="text-xl font-bold text-foreground flex items-center gap-2">
-                  <ClipboardList className="w-5 h-5 text-primary" />
-                  Log Penggunaan Sistem
-                </CardTitle>
-                <p className="text-sm text-muted-foreground mt-1">Memantau aktiviti log masuk dan log keluar pengguna</p>
-              </div>
-              <Badge variant="outline" className="border-primary/30 bg-primary/5 text-primary font-medium">
-                {sessions.length} Sesi Terkumpul
-              </Badge>
-            </div>
-          </CardHeader>
+        <SystemUsageChart />
 
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader className="bg-muted/30">
-                <TableRow className="hover:bg-transparent border-b border-border">
-                  <TableHead className="font-semibold text-foreground py-4 w-16 text-center">#</TableHead>
-                  <TableHead className="font-semibold text-foreground">ID Pengguna</TableHead>
-                  <TableHead className="font-semibold text-foreground">Peranan</TableHead>
-                  <TableHead className="font-semibold text-foreground">Aktiviti</TableHead>
-                  <TableHead className="font-semibold text-foreground">Waktu Log Masuk</TableHead>
-                  <TableHead className="font-semibold text-foreground text-right pr-6">Status / Log Keluar</TableHead>
-                </TableRow>
-              </TableHeader>
+        <div className="space-y-2">
+          <h2 className="text-lg font-semibold text-foreground">
+            Log Penggunaan Sistem (Terkini)
+          </h2>
+          <p className="text-sm text-muted-foreground">
+            Paparan ringkas aktiviti pengguna untuk pemantauan pantas.
+          </p>
+        </div>
 
-              <TableBody>
-                {loading ? (
-                  <TableRow>
-                    <TableCell colSpan={6} className="py-16 text-center">
-                      <Loader2 className="w-8 h-8 animate-spin text-primary inline" />
-                    </TableCell>
-                  </TableRow>
-                ) : sessions.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={6} className="py-16 text-center text-muted-foreground">
-                      Tiada rekod log ditemui.
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  sessions.map((log, index) => {
-                    const loginDate = new Date(log.login_time);
-                    const formattedLogin = `${loginDate.toLocaleDateString("ms-MY")} ${loginDate.toLocaleTimeString("ms-MY", { hour: '2-digit', minute: '2-digit' })}`;
-                    
-                    return (
-                      <TableRow key={log.session_id} className="hover:bg-muted/50 transition-colors border-b border-border/50 last:border-0">
-                        <TableCell className="text-center font-medium text-muted-foreground">{index + 1}</TableCell>
-                        <TableCell className="font-bold text-foreground uppercase">{log.user_id}</TableCell>
-                        <TableCell>
-                          <Badge variant="secondary" className="bg-blue-50 text-blue-700 border-blue-100 font-medium capitalize">
-                            {log.role}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-slate-600 font-medium">{log.action}</TableCell>
-                        <TableCell className="text-muted-foreground tabular-nums text-sm">{formattedLogin}</TableCell>
-                        <TableCell className="text-right pr-6 tabular-nums text-sm">
-                          {log.logout_time ? (
-                            <span className="text-muted-foreground">
-                              {new Date(log.logout_time).toLocaleDateString("ms-MY")} {new Date(log.logout_time).toLocaleTimeString("ms-MY", { hour: '2-digit', minute: '2-digit' })}
-                            </span>
-                          ) : (
-                            <Badge className="bg-emerald-500/10 text-emerald-600 border-emerald-200 animate-pulse">
-                              Sedang Aktif
-                            </Badge>
-                          )}
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })
-                )}
-              </TableBody>
-            </Table>
-          </div>
-        </Card>
+        <AdminSystemUsageTable
+          logs={sessions}
+          loading={loading}
+          emptyText="Tiada rekod log ditemui."
+        />
       </div>
     </div>
   );
 }
 
 // ✅ StatCard yang diubah suai mengikut gaya Student Page
-function StatCard({ title, value, icon: Icon, variant }: { title: string, value: number, icon: any, variant: 'primary' | 'chart2' | 'chart3' }) {
+function StatCard({
+  title,
+  value,
+  icon: Icon,
+  variant,
+}: {
+  title: string;
+  value: number;
+  icon: LucideIcon;
+  variant: "primary" | "chart2" | "chart3";
+}) {
   const styles = {
     primary: {
       border: "hover:border-primary/30",

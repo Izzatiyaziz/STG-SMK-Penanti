@@ -18,19 +18,6 @@ export interface TeacherItem {
     roles: string[];
 }
 
-type Student = {
-  id: string;
-  name: string;
-  identifier: string; // <-- IC number awak
-  email?: string;
-  className?: string;
-  status: string;
-  lastActive?: string;
-  createdAt?: string;
-  level?: string; 
-  enrollment_date?: string;
-};
-
 export type StudentPage = {
   id: string;
   name: string;

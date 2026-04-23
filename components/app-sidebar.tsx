@@ -1,7 +1,6 @@
 "use client";
 
 import * as React from "react";
-import Link from "next/link";
 import Image from "next/image";
 import { Settings, HelpCircle, type LucideIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -33,12 +32,34 @@ type Session = {
     user_id: string;
     userType: UserType | TeacherUserType;
     role: string;
+    roles?: string[];
+    session_id?: string | null;
 };
 
 type UserProfile = {
     name: string;
     email: string;
     avatar: string;
+    roles?: string[];
+};
+
+type IconLike = React.ComponentType<{ className?: string }>;
+
+type SidebarNavItem = {
+    title: string;
+    url: string;
+    icon: IconLike;
+};
+
+type SidebarDocItem = {
+    name: string;
+    url: string;
+    icon: IconLike;
+};
+
+type SidebarResolvedConfig = {
+    navMain: SidebarNavItem[];
+    documents: SidebarDocItem[];
 };
 
 /* ============== HELPERS ============== */
@@ -48,6 +69,56 @@ const normalize = (value: string) => value.toLowerCase().trim();
 
 function isTeacherRole(role: string): role is TeacherRole {
     return normalize(role) in teacherRoleConfig;
+}
+
+function uniqueByUrl(items: SidebarNavItem[]) {
+    const seen = new Set<string>();
+    const out: SidebarNavItem[] = [];
+    for (const item of items) {
+        if (seen.has(item.url)) continue;
+        seen.add(item.url);
+        out.push(item);
+    }
+    return out;
+}
+
+function uniqueDocsByUrl(items: SidebarDocItem[]) {
+    const seen = new Set<string>();
+    const out: SidebarDocItem[] = [];
+    for (const item of items) {
+        if (seen.has(item.url)) continue;
+        seen.add(item.url);
+        out.push(item);
+    }
+    return out;
+}
+
+function mergeTeacherConfigs(roles: TeacherRole[]): SidebarResolvedConfig {
+    const labelByRole: Record<TeacherRole, string> = {
+        "class teacher": "Kelas",
+        "subject teacher": "Subjek",
+        "subject coordinator": "Penyelaras",
+    };
+
+    const titleSeen = new Map<string, number>();
+    const nav: SidebarNavItem[] = [];
+    const docs: SidebarDocItem[] = [];
+
+    for (const role of roles) {
+        const cfg = teacherRoleConfig[role];
+        for (const item of cfg.navMain ?? []) {
+            const seenCount = titleSeen.get(item.title) ?? 0;
+            const title = seenCount === 0 ? item.title : `${item.title} (${labelByRole[role]})`;
+            nav.push({ ...item, title });
+            titleSeen.set(item.title, seenCount + 1);
+        }
+
+        for (const d of cfg.documents ?? []) {
+            docs.push(d);
+        }
+    }
+
+    return { navMain: uniqueByUrl(nav), documents: uniqueDocsByUrl(docs) };
 }
 
 /* ============== COMPONENT ============== */
@@ -84,8 +155,11 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
 
         // 🔥 NORMALIZE ROLE (FIX MENU NOT APPEARING)
         parsed.role = normalize(parsed.role);
-
-        setSession(parsed);
+        parsed.roles = Array.isArray((parsed as { roles?: unknown }).roles)
+            ? ((parsed as { roles?: unknown }).roles as unknown[]).map((r) =>
+                  normalize(String(r))
+              )
+            : undefined;
 
         fetch("/api/auth/me", {
             method: "POST",
@@ -99,7 +173,21 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
                 if (!res.ok) throw new Error("Unauthorized");
                 return res.json();
             })
-            .then((data: UserProfile) => setUser(data))
+            .then((data: UserProfile) => {
+                // If teacher roles changed in DB, auto-pick the first role.
+                if (parsed.userType === "teacher") {
+                    const roles = (data.roles ?? []).map(normalize);
+                    parsed.roles = roles;
+                    if (roles.length > 0 && !roles.includes(parsed.role)) {
+                        parsed.role = roles[0];
+                    }
+
+                    localStorage.setItem("stg_session", JSON.stringify(parsed));
+                }
+
+                setSession(parsed);
+                setUser(data);
+            })
             .catch(() => {
                 router.replace("/login");
             });
@@ -107,17 +195,33 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
 
     if (!user || !session) return null;
 
+    if (session.userType === "principal") return null;
+
     /* ========== RESOLVE SIDEBAR CONFIG ========== */
 
-    let config:
-        | {
-              navMain: any[];
-              documents: any[];
-          }
-        | undefined;
+    let config: SidebarResolvedConfig | undefined;
 
     if (session.userType === "teacher") {
-        if (isTeacherRole(session.role)) {
+        const rawRoles = Array.isArray(session.roles) && session.roles.length > 0
+            ? session.roles
+            : [session.role];
+
+        const roles = Array.from(new Set(rawRoles.map(normalize))).filter(
+            isTeacherRole
+        );
+
+        const order: TeacherRole[] = [
+            "subject teacher",
+            "class teacher",
+            "subject coordinator",
+        ];
+        roles.sort((a, b) => order.indexOf(a) - order.indexOf(b));
+
+        if (roles.length === 1) {
+            config = teacherRoleConfig[roles[0]];
+        } else if (roles.length > 1) {
+            config = mergeTeacherConfigs(roles);
+        } else if (isTeacherRole(session.role)) {
             config = teacherRoleConfig[session.role];
         }
     } else {
@@ -127,6 +231,7 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
     if (!config) return null;
 
     const { navMain = [], documents = [] } = config;
+    const profilePath = `/${session.userType}/profile`;
 
     /* ================= RENDER ================= */
 
@@ -165,8 +270,8 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
                 <NavSecondary
                     items={[
                         {
-                            title: "Settings",
-                            url: "/settings",
+                            title: "Account",
+                            url: profilePath,
                             icon: Settings as LucideIcon,
                         },
                         {

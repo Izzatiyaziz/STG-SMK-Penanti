@@ -8,38 +8,39 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 
-/**
- * ===============================
- * DUMMY DATA
- * ===============================
- */
-const data3Months = [
-  { date: "Apr 6", value: 120 },
-  { date: "Apr 13", value: 180 },
-  { date: "Apr 21", value: 150 },
-  { date: "Apr 29", value: 210 },
-  { date: "May 6", value: 260 },
-  { date: "May 13", value: 230 },
-  { date: "May 21", value: 170 },
-  { date: "May 29", value: 240 },
-  { date: "Jun 5", value: 260 },
-  { date: "Jun 12", value: 280 },
-  { date: "Jun 20", value: 300 },
-  { date: "Jun 30", value: 270 },
-];
-
-const data30Days = data3Months.slice(-6);
-const data7Days = data3Months.slice(-3);
+type Range = "3m" | "30d" | "7d";
+type Point = { date: string; value: number };
 
 export default function SystemUsageChart() {
-  const [range, setRange] = useState<"3m" | "30d" | "7d">("3m");
+  const [range, setRange] = useState<Range>("30d");
+  const [chartData, setChartData] = useState<Point[]>([]);
+  const [loading, setLoading] = useState(false);
 
-  const chartData =
-    range === "7d" ? data7Days : range === "30d" ? data30Days : data3Months;
+  useEffect(() => {
+    let cancelled = false;
+
+    async function load() {
+      setLoading(true);
+      try {
+        const res = await fetch(`/api/admin/system-usage?range=${range}`);
+        const json = await res.json();
+        if (!cancelled) setChartData(json?.data ?? []);
+      } catch {
+        if (!cancelled) setChartData([]);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [range]);
 
   return (
     <Card className="border border-border/50 shadow-lg">
@@ -50,7 +51,7 @@ export default function SystemUsageChart() {
           <div>
             <h2 className="text-lg font-semibold">Penggunaan Sistem</h2>
             <p className="text-sm text-muted-foreground">
-              Jumlah akses pengguna berdasarkan tempoh masa
+              Jumlah log masuk pengguna berdasarkan tempoh masa
             </p>
           </div>
 
@@ -104,6 +105,10 @@ export default function SystemUsageChart() {
             </AreaChart>
           </ResponsiveContainer>
         </div>
+
+        {loading && (
+          <div className="text-sm text-muted-foreground">Loading...</div>
+        )}
 
       </CardContent>
     </Card>
