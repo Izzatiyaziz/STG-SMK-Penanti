@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { ProfileShell } from "@/components/profile/profile-shell";
 
 type Session = {
     user_id: string;
@@ -51,26 +51,14 @@ export default function StudentProfilePage() {
     }, [router, session, sessionChecked]);
 
     return (
-        <div className="min-h-screen bg-gradient-to-b from-background to-muted/20 p-4 md:p-6">
-            <div className="max-w-xl mx-auto space-y-6">
-                <Card className="shadow-lg border border-border/50">
-                    <CardHeader>
-                        <CardTitle>Akaun Pelajar</CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-1 text-sm text-muted-foreground">
-                        <div>
-                            <span className="font-medium text-foreground">
-                                {me?.name ?? "Student"}
-                            </span>
-                        </div>
-                        {me?.email && <div>{me.email}</div>}
-                        <div className="pt-2">
-                            Halaman ini fokus kepada maklumat akaun. Penukaran kata
-                            laluan pelajar boleh ditambah jika diperlukan.
-                        </div>
-                    </CardContent>
-                </Card>
-            </div>
-        </div>
+        <ProfileShell
+            accountLabel="Akaun Pelajar"
+            name={me?.name ?? "Student"}
+            email={me?.email}
+            roleLabel="Pelajar"
+            accentLabel="Paparan"
+            accentValue="Maklumat Akaun"
+            note="Halaman ini memfokuskan maklumat akaun pelajar. Jika perlu, tetapan tambahan seperti penukaran kata laluan atau kemas kini profil boleh ditambah kemudian."
+        />
     );
 }

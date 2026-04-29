@@ -1,9 +1,13 @@
 import { NextResponse } from "next/server";
 import supabase from "@/lib/supabase";
+import { requireApiRole } from "@/lib/auth";
 
 export const runtime = "nodejs";
 export async function GET() {
 	try {
+		const guard = await requireApiRole("admin");
+		if ("response" in guard) return guard.response;
+
 		// 1️⃣ Fetch subjects
 		const { data: subjects, error: subjectError } = await supabase
 			.from("stg_subjects")
@@ -73,6 +77,9 @@ export async function GET() {
 
 export async function POST(req: Request) {
 	try {
+		const guard = await requireApiRole("admin");
+		if ("response" in guard) return guard.response;
+
 		const body = await req.json();
 		const { subject_name } = body;
 
@@ -108,6 +115,9 @@ export async function POST(req: Request) {
 
 export async function PUT(req: Request) {
 	try {
+		const guard = await requireApiRole("admin");
+		if ("response" in guard) return guard.response;
+
 		const body = await req.json();
 		const { subject_id, subject_name } = body;
 
@@ -136,6 +146,9 @@ export async function PUT(req: Request) {
 
 export async function DELETE(req: Request) {
 	try {
+		const guard = await requireApiRole("admin");
+		if ("response" in guard) return guard.response;
+
 		const { searchParams } = new URL(req.url);
 		const subject_id = searchParams.get("id");
 

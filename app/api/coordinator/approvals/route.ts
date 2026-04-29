@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import supabase from "@/lib/supabase";
+import { requireApiRole } from "@/lib/auth";
 
 export const runtime = "nodejs";
 
@@ -49,6 +50,9 @@ function normalizeStatus(raw: string | null): ApprovalStatus | "all" {
 
 export async function GET(req: Request) {
     try {
+        const guard = await requireApiRole("subject coordinator");
+        if ("response" in guard) return guard.response;
+
         const { searchParams } = new URL(req.url);
         const teacher_id = String(searchParams.get("teacher_id") ?? "").trim();
         const status = normalizeStatus(searchParams.get("status"));
@@ -58,6 +62,10 @@ export async function GET(req: Request) {
                 { message: "teacher_id diperlukan", data: [] },
                 { status: 400 }
             );
+        }
+
+        if (teacher_id !== guard.session.user_id) {
+            return NextResponse.json({ message: "Forbidden", data: [] }, { status: 403 });
         }
 
         const { data: coordRows, error: coordErr } = await supabase
@@ -321,6 +329,9 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
     try {
+        const guard = await requireApiRole("subject coordinator");
+        if ("response" in guard) return guard.response;
+
         const body = await req.json();
         const action = String(body?.action ?? "").trim();
         const subject_id = String(body?.subject_id ?? "").trim();
@@ -346,6 +357,24 @@ export async function POST(req: Request) {
                 { message: "Invalid action" },
                 { status: 400 }
             );
+        }
+
+        const { data: coordinatorRows, error: coordinatorErr } = await supabase
+            .from("stg_subject_coordinators")
+            .select("subject_coordinator_id")
+            .eq("teacher_id", guard.session.user_id)
+            .eq("subject_id", subject_id)
+            .limit(1);
+
+        if (coordinatorErr) {
+            return NextResponse.json(
+                { message: coordinatorErr.message },
+                { status: 500 }
+            );
+        }
+
+        if (!Array.isArray(coordinatorRows) || coordinatorRows.length === 0) {
+            return NextResponse.json({ message: "Forbidden" }, { status: 403 });
         }
 
         const { data: students, error: studentErr } = await supabase

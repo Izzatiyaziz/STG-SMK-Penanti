@@ -68,11 +68,6 @@ type ClassSummary = {
     grades: Array<{ grade: string; value: number }>;
 };
 
-function isProbablyMobileUA() {
-    if (typeof navigator === "undefined") return false;
-    return /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-}
-
 function toIsoDateString(d: Date) {
     return d.toISOString().slice(0, 10);
 }
@@ -90,6 +85,14 @@ function readNumber(
 function readString(obj: Record<string, unknown>, key: string, fallback = "") {
     const raw = obj[key];
     return typeof raw === "string" ? raw : raw == null ? fallback : String(raw);
+}
+
+function getObjectiveMark(
+    objectiveMarksByStudentId: Record<string, number>,
+    studentId: string
+) {
+    const value = objectiveMarksByStudentId[studentId];
+    return Number.isFinite(value) ? value : null;
 }
 
 export default function SubjectTeacherPage() {
@@ -130,6 +133,25 @@ export default function SubjectTeacherPage() {
         isComplete: false,
         approval: { total: 0, pending: 0, approved: 0, rejected: 0, status: "none" },
     });
+
+    function readMarksContext() {
+        try {
+            const raw = localStorage.getItem("stg_marks_context");
+            if (!raw) return null;
+            const parsed = JSON.parse(raw) as {
+                class_id?: string;
+                subject_id?: string;
+                exam_id?: string;
+            };
+            return {
+                class_id: String(parsed.class_id ?? "").trim(),
+                subject_id: String(parsed.subject_id ?? "").trim(),
+                exam_id: String(parsed.exam_id ?? "").trim(),
+            };
+        } catch {
+            return null;
+        }
+    }
 
     useEffect(() => {
         try {
@@ -199,10 +221,37 @@ export default function SubjectTeacherPage() {
             const eJson = await eRes.json();
 
             setAssignments(aJson?.data ?? []);
-            setExams(eJson ?? []);
+            // /api/admin/exams can return either an array or a wrapper like { data: [...] }.
+            const examsList: Exam[] = Array.isArray(eJson)
+                ? eJson
+                : Array.isArray((eJson as { data?: unknown })?.data)
+                  ? ((eJson as { data: Exam[] }).data ?? [])
+                  : [];
+            setExams(examsList);
 
-            if ((eJson ?? []).length > 0) {
-                setSelectedExamId((eJson ?? [])[0].id);
+            const marksContext = readMarksContext();
+
+            if (marksContext?.exam_id) {
+                const matchedExam = examsList.find((e) => e.id === marksContext.exam_id);
+                if (matchedExam) {
+                    setSelectedExamId(matchedExam.id);
+                } else if (!selectedExamId && examsList.length > 0) {
+                    setSelectedExamId(examsList[0].id);
+                }
+            } else if (!selectedExamId && examsList.length > 0) {
+                setSelectedExamId(examsList[0].id);
+            }
+
+            if (marksContext?.class_id && marksContext?.subject_id) {
+                const matchedAssignment = (aJson?.data ?? []).find(
+                    (a: Assignment) =>
+                        a.class_id === marksContext.class_id &&
+                        a.subject_id === marksContext.subject_id
+                );
+
+                if (matchedAssignment) {
+                    setSelectedAssignmentId(matchedAssignment.id);
+                }
             }
         } catch {
             toast.error("Gagal memuatkan data");
@@ -215,7 +264,7 @@ export default function SubjectTeacherPage() {
         if (!session) return;
         loadAssignmentsAndExams();
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [session?.user_id]);
+    }, [session?.user_id, selectedExamId]);
 
     async function loadStudents() {
         if (!selectedAssignment) return;
@@ -383,11 +432,11 @@ export default function SubjectTeacherPage() {
         <div className="min-h-screen bg-gradient-to-b from-background to-muted/20 p-4 md:p-6">
             <div className="max-w-7xl mx-auto space-y-6">
                 <div className="space-y-1">
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-start gap-3">
                         <div className="p-2 rounded-xl bg-primary/10">
                             <ClipboardList className="w-6 h-6 text-primary" />
                         </div>
-                        <h1 className="text-3xl font-bold tracking-tight">
+                        <h1 className="text-2xl font-bold tracking-tight md:text-3xl">
                             Pemarkahan Subjek
                         </h1>
                     </div>
@@ -418,17 +467,9 @@ export default function SubjectTeacherPage() {
                             <div className="flex flex-wrap gap-2 pt-2">
                                 <Button
                                     variant="outline"
-                                    onClick={() => {
-                                        if (!isProbablyMobileUA()) {
-                                            toast.info(
-                                                "Scan OMR perlu guna telefon (mobile) sahaja."
-                                            );
-                                            return;
-                                        }
-                                        router.push("/teacher/omr");
-                                    }}
+                                    onClick={() => router.push("/teacher/omr")}
                                 >
-                                    Scan OMR (Mobile)
+                                    Buka OMR
                                 </Button>
                             </div>
                         </CardContent>
@@ -436,7 +477,7 @@ export default function SubjectTeacherPage() {
                 )}
 
                 {classSummary && (
-                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 lg:gap-6">
                         <Card className="shadow-lg border border-border/50">
                             <CardContent className="p-6">
                                 <div className="text-sm text-muted-foreground">
@@ -538,7 +579,7 @@ export default function SubjectTeacherPage() {
 
                         <div className="space-y-2">
                             <div className="text-sm text-muted-foreground">Status Hantaran</div>
-                            <div className="flex items-center gap-2">
+                            <div className="flex flex-wrap items-center gap-2">
                                 <Badge variant="outline">
                                     {submission.submittedCount}/{submission.totalStudents} marked
                                 </Badge>
@@ -548,7 +589,7 @@ export default function SubjectTeacherPage() {
                                     <Badge className="bg-yellow-100 text-yellow-700">Belum lengkap</Badge>
                                 )}
                             </div>
-                            <div className="flex items-center gap-2 pt-1">
+                            <div className="flex flex-wrap items-center gap-2 pt-1">
                                 <span className="text-xs text-muted-foreground">
                                     Kelulusan:
                                 </span>
@@ -590,58 +631,114 @@ export default function SubjectTeacherPage() {
                         </CardTitle>
                     </CardHeader>
                     <CardContent className="p-0">
-                        <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead>Nama Pelajar</TableHead>
-                                    <TableHead className="text-center">Objektif</TableHead>
-                                    <TableHead className="text-center">Subjektif</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {students.map((s) => (
-                                    <TableRow key={s.id}>
-                                        <TableCell className="font-medium">
-                                            {s.name}
-                                        </TableCell>
-                                        <TableCell className="text-center text-muted-foreground">
-                                            —
-                                        </TableCell>
-                                        <TableCell className="text-center">
-                                            <Input
-                                                type="number"
-                                                min={0}
-                                                max={limits.subjectiveMax}
-                                                className="w-28 mx-auto text-center"
-                                                value={subjectiveMarks[s.id] ?? ""}
-                                                onChange={(e) =>
-                                                    setSubjectiveMarks((prev) => ({
-                                                        ...prev,
-                                                        [s.id]: e.target.value,
-                                                    }))
-                                                }
-                                                placeholder={`0–${limits.subjectiveMax}`}
-                                            />
-                                        </TableCell>
-                                    </TableRow>
-                                ))}
+                        <div className="divide-y md:hidden">
+                            {students.map((s) => {
+                                const objectiveMark = getObjectiveMark(
+                                    objectiveMarksByStudentId,
+                                    s.id
+                                );
+                                return (
+                                    <div key={s.id} className="space-y-4 p-4">
+                                        <div className="space-y-1">
+                                            <div className="font-medium text-foreground">{s.name}</div>
+                                            <div className="text-xs text-muted-foreground">
+                                                {s.identifier}
+                                            </div>
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <div className="rounded-lg border border-border/60 bg-background/70 p-3">
+                                                <div className="text-xs text-muted-foreground">
+                                                    Objektif
+                                                </div>
+                                                <div className="mt-1 text-lg font-semibold">
+                                                    {objectiveMark ?? "-"}
+                                                </div>
+                                            </div>
+                                            <div className="rounded-lg border border-border/60 bg-background/70 p-3">
+                                                <div className="text-xs text-muted-foreground">
+                                                    Subjektif
+                                                </div>
+                                                <Input
+                                                    type="number"
+                                                    min={0}
+                                                    max={limits.subjectiveMax}
+                                                    className="mt-2 text-center"
+                                                    value={subjectiveMarks[s.id] ?? ""}
+                                                    onChange={(e) =>
+                                                        setSubjectiveMarks((prev) => ({
+                                                            ...prev,
+                                                            [s.id]: e.target.value,
+                                                        }))
+                                                    }
+                                                    placeholder={`0-${limits.subjectiveMax}`}
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
+                                );
+                            })}
 
-                                {!loading && students.length === 0 && (
+                            {!loading && students.length === 0 && (
+                                <div className="py-10 text-center text-muted-foreground">
+                                    Tiada pelajar.
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="hidden overflow-x-auto md:block">
+                            <Table>
+                                <TableHeader>
                                     <TableRow>
-                                        <TableCell
-                                            colSpan={3}
-                                            className="text-center text-muted-foreground py-10"
-                                        >
-                                            Tiada pelajar.
-                                        </TableCell>
+                                        <TableHead>Nama Pelajar</TableHead>
+                                        <TableHead className="text-center">Objektif</TableHead>
+                                        <TableHead className="text-center">Subjektif</TableHead>
                                     </TableRow>
-                                )}
-                            </TableBody>
-                        </Table>
+                                </TableHeader>
+                                <TableBody>
+                                    {students.map((s) => (
+                                        <TableRow key={s.id}>
+                                            <TableCell className="font-medium">
+                                                {s.name}
+                                            </TableCell>
+                                            <TableCell className="text-center text-muted-foreground">
+                                                {getObjectiveMark(objectiveMarksByStudentId, s.id) ?? "-"}
+                                            </TableCell>
+                                            <TableCell className="text-center">
+                                                <Input
+                                                    type="number"
+                                                    min={0}
+                                                    max={limits.subjectiveMax}
+                                                    className="w-28 mx-auto text-center"
+                                                    value={subjectiveMarks[s.id] ?? ""}
+                                                    onChange={(e) =>
+                                                        setSubjectiveMarks((prev) => ({
+                                                            ...prev,
+                                                            [s.id]: e.target.value,
+                                                        }))
+                                                    }
+                                                    placeholder={`0-${limits.subjectiveMax}`}
+                                                />
+                                            </TableCell>
+                                        </TableRow>
+                                    ))}
+
+                                    {!loading && students.length === 0 && (
+                                        <TableRow>
+                                            <TableCell
+                                                colSpan={3}
+                                                className="text-center text-muted-foreground py-10"
+                                            >
+                                                Tiada pelajar.
+                                            </TableCell>
+                                        </TableRow>
+                                    )}
+                                </TableBody>
+                            </Table>
+                        </div>
                     </CardContent>
                 </Card>
 
-                <div className="flex justify-end gap-3">
+                <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
                     <Button variant="outline" disabled>
                         <Save className="w-4 h-4 mr-2" />
                         Simpan Draf

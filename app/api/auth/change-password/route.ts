@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import supabase from "@/lib/supabase";
+import { requireApiSession } from "@/lib/auth";
 
 export const runtime = "nodejs";
 
@@ -8,6 +9,9 @@ type UserType = "admin" | "teacher" | "student";
 
 export async function POST(req: Request) {
     try {
+        const guard = await requireApiSession();
+        if ("response" in guard) return guard.response;
+
         const body = await req.json();
         const userType = String(body?.userType ?? "").trim() as UserType;
         const user_id = String(body?.user_id ?? "").trim();
@@ -20,6 +24,13 @@ export async function POST(req: Request) {
                 { message: "userType dan user_id diperlukan" },
                 { status: 400 }
             );
+        }
+
+        if (
+            guard.session.userType !== userType ||
+            String(guard.session.user_id) !== user_id
+        ) {
+            return NextResponse.json({ message: "Forbidden" }, { status: 403 });
         }
 
         if (!new_password) {

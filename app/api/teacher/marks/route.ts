@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import supabase from "@/lib/supabase";
+import { requireApiRole } from "@/lib/auth";
 
 export const runtime = "nodejs";
 
@@ -13,6 +14,9 @@ function gradeFromTotal(total: number) {
 
 export async function POST(req: Request) {
     try {
+        const guard = await requireApiRole("teacher");
+        if ("response" in guard) return guard.response;
+
         const body = await req.json();
         const teacher_id = String(body?.teacher_id ?? "").trim();
         const class_id = String(body?.class_id ?? "").trim();
@@ -25,6 +29,25 @@ export async function POST(req: Request) {
                 { message: "teacher_id, class_id, subject_id, exam_id diperlukan" },
                 { status: 400 }
             );
+        }
+
+        if (teacher_id !== guard.session.user_id) {
+            return NextResponse.json({ message: "Forbidden" }, { status: 403 });
+        }
+
+        const { data: assignment, error: assignErr } = await supabase
+            .from("stg_teacher_subject")
+            .select("teacher_subject_id")
+            .eq("teacher_id", teacher_id)
+            .eq("subject_id", subject_id)
+            .eq("class_id", class_id)
+            .limit(1);
+
+        if (assignErr) {
+            return NextResponse.json({ message: assignErr.message }, { status: 500 });
+        }
+        if (!Array.isArray(assignment) || assignment.length === 0) {
+            return NextResponse.json({ message: "Forbidden" }, { status: 403 });
         }
 
         // Enforce deadline (per exam + subject settings)

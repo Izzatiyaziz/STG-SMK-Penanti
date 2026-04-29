@@ -23,13 +23,17 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
+  ChartContainer,
+  ChartTooltip,
+  ChartTooltipContent,
+  type ChartConfig,
+} from "@/components/ui/chart";
+import {
   BarChart,
   Bar,
   XAxis,
   YAxis,
   CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
 } from "recharts";
 import {
   BarChart3,
@@ -64,6 +68,13 @@ const reportData: Record<SubjectKey, ReportRow[]> = {
     { class: "2 Ibnu Khaldun", average: 85, grade: "A" },
   ],
 };
+
+const chartConfig = {
+  average: {
+    label: "Purata Markah",
+    color: "var(--chart-1)",
+  },
+} satisfies ChartConfig;
 
 export default function SubjectTeacherReportPage() {
   const [selectedSubject, setSelectedSubject] =
@@ -189,15 +200,28 @@ export default function SubjectTeacherReportPage() {
               Graf ini menunjukkan perbandingan prestasi antara kelas.
             </p>
 
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={data}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="class" />
-                <YAxis domain={[0, 100]} />
-                <Tooltip />
-                <Bar dataKey="average" />
+            <ChartContainer
+              config={chartConfig}
+              className="aspect-auto h-[300px] w-full"
+            >
+              <BarChart accessibilityLayer data={data}>
+                <CartesianGrid vertical={false} />
+                <XAxis
+                  dataKey="class"
+                  tickLine={false}
+                  axisLine={false}
+                  tickMargin={10}
+                />
+                <YAxis
+                  domain={[0, 100]}
+                  tickLine={false}
+                  axisLine={false}
+                  tickMargin={10}
+                />
+                <ChartTooltip content={<ChartTooltipContent />} />
+                <Bar dataKey="average" fill="var(--color-average)" radius={6} />
               </BarChart>
-            </ResponsiveContainer>
+            </ChartContainer>
           </CardContent>
         </Card>
 

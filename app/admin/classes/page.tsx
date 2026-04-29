@@ -292,7 +292,7 @@ export default function AdminClassesPage() {
 
     return (
         <div className="min-h-screen bg-gradient-to-b from-background to-muted/20 p-4 md:p-6">
-            <div className="max-w-6xl mx-auto space-y-6">
+            <div className="max-w-7xl mx-auto space-y-6">
                 <div className="flex items-center justify-between gap-3">
                     <div>
                         <h1 className="text-3xl font-bold tracking-tight">

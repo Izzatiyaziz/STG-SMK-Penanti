@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import supabase from "@/lib/supabase";
+import { requireApiRole } from "@/lib/auth";
 
 export const runtime = "nodejs";
 
@@ -15,6 +16,9 @@ function deriveLevel(enrollmentDate: string | null | undefined) {
 
 export async function POST() {
     try {
+        const guard = await requireApiRole("admin");
+        if ("response" in guard) return guard.response;
+
         const { data: students, error } = await supabase
             .from("stg_students")
             .select("student_id, enrollment_date");
@@ -42,4 +46,3 @@ export async function POST() {
         return NextResponse.json({ message: "Server error" }, { status: 500 });
     }
 }
-

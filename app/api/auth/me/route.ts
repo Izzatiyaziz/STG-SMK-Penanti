@@ -1,9 +1,12 @@
 import { NextResponse } from "next/server";
 import supabase from "@/lib/supabase";
+import { getServerSession } from "@/lib/auth";
 
-export async function POST(req: Request) {
+export async function POST() {
     try {
-        const { role, user_id } = await req.json();
+        const session = await getServerSession();
+        const role = session?.userType;
+        const user_id = session?.user_id;
 
         if (!role || !user_id) {
             return NextResponse.json(
@@ -16,7 +19,7 @@ export async function POST(req: Request) {
         if (role === "student") {
             const { data, error } = await supabase
                 .from("stg_students")
-                .select("*")
+                .select("student_id, ic_number, fullname, status, class_id, created_at, level")
                 .eq("student_id", user_id)
                 .single();
 
@@ -27,14 +30,23 @@ export async function POST(req: Request) {
                 );
             }
 
+            let class_name = "";
+            if (data.class_id) {
+                const { data: cls } = await supabase
+                    .from("stg_classes")
+                    .select("class_name")
+                    .eq("class_id", data.class_id)
+                    .maybeSingle();
+                class_name = String(cls?.class_name ?? "").trim();
+            }
+
             return NextResponse.json({
                 role: "student",
                 ic_number: data.ic_number,
                 name: data.fullname,
-                email: data.email,
-                phone_number: data.phone_number,
                 status: data.status ?? "active",
-                class_name: data.class_id,
+                class_name,
+                level: data.level ?? null,
                 created_at: data.created_at,
             });
         }

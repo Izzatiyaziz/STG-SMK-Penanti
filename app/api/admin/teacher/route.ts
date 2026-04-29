@@ -2,9 +2,13 @@ import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import nodemailer from "nodemailer";
 import supabase from "@/lib/supabase";
+import { requireApiRole } from "@/lib/auth";
 
 export async function POST(req: Request) {
   try {
+    const guard = await requireApiRole("admin");
+    if ("response" in guard) return guard.response;
+
     const {
       username,
       fullname,

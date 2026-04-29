@@ -65,6 +65,7 @@ export function LoginForm({
             if (submitRole === "teacher") {
                 payload.username = String(formData.get("username") ?? "");
                 payload.password = String(formData.get("password") ?? "");
+                payload.selected_teacher_role = selectedTeacherRole || null;
             }
 
             if (submitRole === "admin") {
@@ -108,7 +109,7 @@ export function LoginForm({
                     return;
                 }
 
-                proceedToDashboard(
+                await proceedToDashboard(
                     data.user_id,
                     "teacher",
                     finalRole,
@@ -119,7 +120,7 @@ export function LoginForm({
                 return;
             }
 
-            proceedToDashboard(
+            await proceedToDashboard(
                 data.user_id,
                 submitRole,
                 submitRole,
@@ -135,7 +136,7 @@ export function LoginForm({
         }
     }
 
-    function proceedToDashboard(
+    async function proceedToDashboard(
         userId: string,
         userType: string,
         specificRole: string,
@@ -198,7 +199,7 @@ export function LoginForm({
             if (!res.ok) throw new Error("Gagal mengemas kini kata laluan");
 
             setShowPasswordDialog(false);
-            proceedToDashboard(
+            await proceedToDashboard(
                 tempData.user_id,
                 "teacher",
                 tempData.role,

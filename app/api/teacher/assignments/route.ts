@@ -1,15 +1,22 @@
 import { NextResponse } from "next/server";
 import supabase from "@/lib/supabase";
+import { requireApiRole } from "@/lib/auth";
 
 export const runtime = "nodejs";
 
 export async function GET(req: Request) {
     try {
+        const guard = await requireApiRole("teacher");
+        if ("response" in guard) return guard.response;
+
         const { searchParams } = new URL(req.url);
         const teacher_id = String(searchParams.get("teacher_id") ?? "").trim();
 
         if (!teacher_id) {
             return NextResponse.json({ data: [] }, { status: 200 });
+        }
+        if (teacher_id !== guard.session.user_id) {
+            return NextResponse.json({ message: "Forbidden" }, { status: 403 });
         }
 
         const { data: rows, error } = await supabase
@@ -69,4 +76,3 @@ export async function GET(req: Request) {
         return NextResponse.json({ data: [] }, { status: 200 });
     }
 }
-

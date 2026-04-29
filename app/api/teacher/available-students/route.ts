@@ -1,10 +1,14 @@
 import { NextResponse } from "next/server";
 import supabase from "@/lib/supabase";
+import { requireApiRole } from "@/lib/auth";
 
 export const runtime = "nodejs";
 
 export async function GET(req: Request) {
     try {
+        const guard = await requireApiRole("class teacher");
+        if ("response" in guard) return guard.response;
+
         const { searchParams } = new URL(req.url);
         const gradeRaw = searchParams.get("grade");
         const grade = gradeRaw ? String(gradeRaw).trim() : "";
@@ -37,4 +41,3 @@ export async function GET(req: Request) {
         return NextResponse.json([], { status: 200 });
     }
 }
-

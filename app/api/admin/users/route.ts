@@ -1,10 +1,14 @@
 import { NextResponse } from "next/server";
 import supabase from "@/lib/supabase";
+import { requireApiRole } from "@/lib/auth";
 
 export const runtime = "nodejs";
 
 export async function GET(req: Request) {
     try {
+        const guard = await requireApiRole("admin");
+        if ("response" in guard) return guard.response;
+
         const { searchParams } = new URL(req.url);
         const role = searchParams.get("role");
         // role can be: admin, student, teacher OR any role_name (principal, subject coordinator...)

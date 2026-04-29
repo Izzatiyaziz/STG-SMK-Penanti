@@ -1,11 +1,15 @@
 import { NextResponse } from "next/server";
 import supabase from "@/lib/supabase";
+import { requireApiRole } from "@/lib/auth";
 
 export async function PUT(
     req: Request,
     context: { params: Promise<{ id: string }> }
 ) {
     try {
+        const guard = await requireApiRole("admin");
+        if ("response" in guard) return guard.response;
+
         const { id: teacherId } = await context.params;
 
         const body = await req.json();
@@ -79,6 +83,9 @@ export async function DELETE(
     context: { params: Promise<{ id: string }> }
 ) {
     try {
+        const guard = await requireApiRole("admin");
+        if ("response" in guard) return guard.response;
+
         const { id: teacherId } = await context.params;
         if (!teacherId) {
             return NextResponse.json(

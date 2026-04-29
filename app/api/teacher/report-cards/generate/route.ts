@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import supabase from "@/lib/supabase";
+import { requireApiRole } from "@/lib/auth";
 
 export const runtime = "nodejs";
 
@@ -21,6 +22,9 @@ function average(arr: number[]) {
 
 export async function POST(req: Request) {
     try {
+        const guard = await requireApiRole("teacher");
+        if ("response" in guard) return guard.response;
+
         const body = await req.json();
         const teacher_id = toId(body?.teacher_id);
         const exam_id = toId(body?.exam_id);
@@ -30,6 +34,10 @@ export async function POST(req: Request) {
                 { message: "teacher_id dan exam_id diperlukan" },
                 { status: 400 }
             );
+        }
+
+        if (teacher_id !== guard.session.user_id) {
+            return NextResponse.json({ message: "Forbidden" }, { status: 403 });
         }
 
         // Verify class teacher and fetch class
@@ -243,4 +251,3 @@ export async function POST(req: Request) {
         );
     }
 }
-

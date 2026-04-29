@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import supabase from "@/lib/supabase";
+import { requireApiRole } from "@/lib/auth";
 
 export const runtime = "nodejs";
 
@@ -25,6 +26,9 @@ async function isCoordinatorForSubject(params: {
 
 export async function GET(req: Request) {
     try {
+        const guard = await requireApiRole("subject coordinator");
+        if ("response" in guard) return guard.response;
+
         const { searchParams } = new URL(req.url);
         const coordinator_teacher_id = String(
             searchParams.get("coordinator_teacher_id") ?? ""
@@ -36,6 +40,10 @@ export async function GET(req: Request) {
                 { message: "coordinator_teacher_id dan subject_id diperlukan" },
                 { status: 400 }
             );
+        }
+
+        if (coordinator_teacher_id !== guard.session.user_id) {
+            return NextResponse.json({ message: "Forbidden" }, { status: 403 });
         }
 
         const ok = await isCoordinatorForSubject({
@@ -114,6 +122,9 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
     try {
+        const guard = await requireApiRole("subject coordinator");
+        if ("response" in guard) return guard.response;
+
         const body = await req.json();
         const coordinator_teacher_id = String(
             body?.coordinator_teacher_id ?? ""
@@ -127,6 +138,10 @@ export async function POST(req: Request) {
                 { message: "coordinator_teacher_id, subject_id, class_id diperlukan" },
                 { status: 400 }
             );
+        }
+
+        if (coordinator_teacher_id !== guard.session.user_id) {
+            return NextResponse.json({ message: "Forbidden" }, { status: 403 });
         }
 
         const ok = await isCoordinatorForSubject({
@@ -242,4 +257,3 @@ export async function POST(req: Request) {
         );
     }
 }
-

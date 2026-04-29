@@ -13,6 +13,18 @@ import {
 } from "lucide-react";
 import { LiaChalkboardTeacherSolid } from "react-icons/lia";
 
+export type SidebarNavChildItem = {
+    title: string;
+    url: string;
+};
+
+export type SidebarNavItem = {
+    title: string;
+    url: string;
+    icon: React.ComponentType<{ className?: string }>;
+    items?: SidebarNavChildItem[];
+};
+
 /* ================= PERANAN GURU ================= */
 
 export const teacherRoleConfig = {
@@ -62,13 +74,7 @@ export const teacherRoleConfig = {
                 icon: FileText,
             },
         ],
-        documents: [
-            {
-                name: "Skema Jawapan",
-                url: "/coordinator/answer-schemes",
-                icon: FileSignature,
-            },
-        ],
+        documents: [],
     },
 
     /* ================= PENYELARAS SUBJEK ================= */
@@ -125,6 +131,20 @@ export const sidebarConfig = {
                 title: "Pengurusan Pengguna",
                 url: "/admin/users",
                 icon: Users,
+                items: [
+                    {
+                        title: "Semua Pengguna",
+                        url: "/admin/users",
+                    },
+                    {
+                        title: "Guru",
+                        url: "/admin/teacher",
+                    },
+                    {
+                        title: "Pelajar",
+                        url: "/admin/student",
+                    },
+                ],
             },
             {
                 title: "Kelas",

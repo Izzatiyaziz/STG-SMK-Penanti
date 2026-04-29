@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import supabase from "@/lib/supabase";
+import { requireApiRole } from "@/lib/auth";
 
 export const runtime = "nodejs";
 
@@ -18,6 +19,9 @@ function buildAiComment(params: {
 
 export async function POST(req: Request) {
     try {
+        const guard = await requireApiRole("teacher");
+        if ("response" in guard) return guard.response;
+
         const body = await req.json();
         const student_id = String(body?.student_id ?? "").trim();
         const class_id = String(body?.class_id ?? "").trim();
@@ -31,6 +35,10 @@ export async function POST(req: Request) {
                 { message: "student_id, class_id, teacher_id, exam_id diperlukan" },
                 { status: 400 }
             );
+        }
+
+        if (teacher_id !== guard.session.user_id) {
+            return NextResponse.json({ message: "Forbidden" }, { status: 403 });
         }
 
         // Use approved results for report card
@@ -155,4 +163,3 @@ export async function POST(req: Request) {
         );
     }
 }
-

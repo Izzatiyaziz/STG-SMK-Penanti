@@ -138,11 +138,11 @@ export default function MyClassPage() {
       try {
         const res = await fetch("/api/admin/exams", { cache: "no-store" });
         const data = await res.json();
-        const list = (data ?? []).map((e: any) => ({
-          id: e.id,
-          name: e.name,
-          academic_year: e.academic_year,
-        }));
+        const list = (Array.isArray(data) ? data : []).map((e: any) => ({
+          id: String(e.id ?? ""),
+          name: String(e.name ?? ""),
+          academic_year: String(e.academic_year ?? ""),
+        })).filter((e) => Boolean(e.id));
         setExams(list);
         if (list.length > 0) setSelectedExamId(list[0].id);
       } catch {
