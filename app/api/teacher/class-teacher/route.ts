@@ -1,11 +1,15 @@
 import { NextResponse } from "next/server";
 import supabase from "@/lib/supabase";
+import { requireApiRole } from "@/lib/auth";
 
 export const runtime = "nodejs";
 
 // GET: fetch class assigned to this class teacher + current students
 export async function GET(req: Request) {
     try {
+        const guard = await requireApiRole("teacher");
+        if ("response" in guard) return guard.response;
+
         const { searchParams } = new URL(req.url);
         const teacher_id = String(searchParams.get("teacher_id") ?? "").trim();
 
@@ -14,6 +18,9 @@ export async function GET(req: Request) {
                 { error: "teacher_id diperlukan" },
                 { status: 400 }
             );
+        }
+        if (teacher_id !== guard.session.user_id) {
+            return NextResponse.json({ message: "Forbidden" }, { status: 403 });
         }
 
         const { data: assignment, error: aErr } = await supabase
@@ -68,6 +75,9 @@ export async function GET(req: Request) {
 // POST: upsert class teacher assignment (same logic as admin)
 export async function POST(req: Request) {
     try {
+        const guard = await requireApiRole("teacher");
+        if ("response" in guard) return guard.response;
+
         const body = await req.json();
         const class_id = String(body?.class_id ?? "").trim();
         const teacher_id = String(body?.teacher_id ?? "").trim();

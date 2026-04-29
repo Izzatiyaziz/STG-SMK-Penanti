@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 export default function HelpPage() {
     return (
         <div className="min-h-screen bg-gradient-to-b from-background to-muted/20 p-4 md:p-6">
-            <div className="max-w-3xl mx-auto">
+            <div className="max-w-7xl mx-auto">
                 <Card className="shadow-lg border border-border/50">
                     <CardHeader>
                         <CardTitle>Help</CardTitle>
@@ -22,4 +22,3 @@ export default function HelpPage() {
         </div>
     );
 }
-

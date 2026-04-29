@@ -1,10 +1,25 @@
 import { NextResponse } from "next/server";
-import supabase from "@/lib/supabase";
+import supabaseAdmin from "@/lib/supabase-admin";
+import { requireApiRole } from "@/lib/auth";
 
 export const runtime = "nodejs";
 
+async function isCoordinatorForSubject(teacherId: string, subjectId: string) {
+    const { data, error } = await supabaseAdmin
+        .from("stg_subject_coordinators")
+        .select("subject_coordinator_id")
+        .eq("teacher_id", teacherId)
+        .eq("subject_id", subjectId)
+        .limit(1);
+
+    return !error && Array.isArray(data) && data.length > 0;
+}
+
 export async function GET(req: Request) {
     try {
+        const guard = await requireApiRole("subject coordinator");
+        if ("response" in guard) return guard.response;
+
         const { searchParams } = new URL(req.url);
         const exam_id = String(searchParams.get("exam_id") ?? "").trim();
         const subject_id = String(searchParams.get("subject_id") ?? "").trim();
@@ -13,7 +28,10 @@ export async function GET(req: Request) {
             return NextResponse.json({ data: [] });
         }
 
-        const { data, error } = await supabase
+        const ok = await isCoordinatorForSubject(guard.session.user_id, subject_id);
+        if (!ok) return NextResponse.json({ message: "Forbidden" }, { status: 403 });
+
+        const { data, error } = await supabaseAdmin
             .from("stg_answer_schema")
             .select("schema_id, question_no, correct_answer")
             .eq("exam_id", exam_id)
@@ -39,6 +57,9 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
     try {
+        const guard = await requireApiRole("subject coordinator");
+        if ("response" in guard) return guard.response;
+
         const body = await req.json();
         const exam_id = String(body?.exam_id ?? "").trim();
         const subject_id = String(body?.subject_id ?? "").trim();
@@ -51,21 +72,21 @@ export async function POST(req: Request) {
             );
         }
 
-        // Replace existing schema for this exam+subject
-        await supabase
-            .from("stg_answer_schema")
-            .delete()
-            .eq("exam_id", exam_id)
-            .eq("subject_id", subject_id);
+        const ok = await isCoordinatorForSubject(guard.session.user_id, subject_id);
+        if (!ok) return NextResponse.json({ message: "Forbidden" }, { status: 403 });
 
         const payload = answers
             .map((a: any) => ({
                 exam_id,
                 subject_id,
                 question_no: Number(a?.question_no ?? 0),
-                correct_answer: String(a?.correct_answer ?? "").trim(),
+                correct_answer: String(a?.correct_answer ?? "").trim().toUpperCase(),
             }))
-            .filter((a: any) => a.question_no > 0 && a.correct_answer);
+            .filter(
+                (a: any) =>
+                    a.question_no > 0 &&
+                    ["A", "B", "C", "D"].includes(String(a.correct_answer))
+            );
 
         if (payload.length === 0) {
             return NextResponse.json(
@@ -74,7 +95,14 @@ export async function POST(req: Request) {
             );
         }
 
-        const { error } = await supabase.from("stg_answer_schema").insert(payload);
+        // Replace existing schema for this exam+subject
+        await supabaseAdmin
+            .from("stg_answer_schema")
+            .delete()
+            .eq("exam_id", exam_id)
+            .eq("subject_id", subject_id);
+
+        const { error } = await supabaseAdmin.from("stg_answer_schema").insert(payload);
 
         if (error) {
             return NextResponse.json({ message: error.message }, { status: 500 });
@@ -83,7 +111,10 @@ export async function POST(req: Request) {
         return NextResponse.json({ success: true });
     } catch (err) {
         console.error("POST answer schemes FAILED:", err);
-        return NextResponse.json({ message: "Server error" }, { status: 500 });
+        const message =
+            err instanceof Error && err.message
+                ? err.message
+                : "Server error";
+        return NextResponse.json({ message }, { status: 500 });
     }
 }
-

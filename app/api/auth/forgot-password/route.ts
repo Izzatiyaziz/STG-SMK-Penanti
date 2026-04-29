@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import supabase from "@/lib/supabase";
 import nodemailer from "nodemailer"; // 🔥 Import Nodemailer
+import { randomBytes } from "crypto";
 
 export const runtime = "nodejs";
 
@@ -18,7 +19,7 @@ export async function POST(req: Request) {
         }
 
         // Jana kata laluan rawak sementara (Cth: temp-A1B2C)
-        const randomString = Math.random().toString(36).substring(2, 7).toUpperCase();
+        const randomString = randomBytes(4).toString("hex").toUpperCase();
         const tempPassword = `temp-${randomString}`;
         
         const salt = await bcrypt.genSalt(10);
@@ -38,7 +39,13 @@ export async function POST(req: Request) {
                 return NextResponse.json({ message: "ID pengguna tidak dijumpai." }, { status: 404 });
             }
 
-            userEmail = teacher.email;
+            userEmail = String(teacher.email ?? "").trim();
+            if (!userEmail) {
+                return NextResponse.json(
+                    { message: "Guru ini tidak mempunyai rekod e-mel yang sah." },
+                    { status: 400 }
+                );
+            }
 
             const { error: updateErr } = await supabase
                 .from("stg_teachers")
@@ -53,24 +60,13 @@ export async function POST(req: Request) {
         
         // ================= ADMIN =================
         else if (role === "admin") {
-            const { data: admin, error: fetchErr } = await supabase
-                .from("stg_admins")
-                .select("admin_id, email") 
-                .eq("admin_id", identifier)
-                .single();
-
-            if (fetchErr || !admin) {
-                return NextResponse.json({ message: "ID pengguna tidak dijumpai." }, { status: 404 });
-            }
-
-            userEmail = admin.email;
-
-            const { error: updateErr } = await supabase
-                .from("stg_admins")
-                .update({ password: hashedPassword })
-                .eq("admin_id", admin.admin_id);
-
-            if (updateErr) throw updateErr;
+            return NextResponse.json(
+                {
+                    message:
+                        "Tetapan semula kata laluan admin melalui e-mel belum disokong kerana jadual stg_admins tidak mempunyai kolum e-mel.",
+                },
+                { status: 400 }
+            );
         }
 
         if (!userEmail) {

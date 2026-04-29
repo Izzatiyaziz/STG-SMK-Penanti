@@ -1,14 +1,20 @@
 import { NextResponse } from "next/server";
 import supabase from "@/lib/supabase";
+import { requireApiRole } from "@/lib/auth";
 
 export const runtime = "nodejs";
 
 // ================= GET EXAMS =================
 export async function GET() {
   try {
+    const guard = await requireApiRole(["admin", "teacher"]);
+    if ("response" in guard) return guard.response;
+
     const { data, error } = await supabase
       .from("stg_exams")
-      .select("*");
+      .select("*")
+      .order("academic_year", { ascending: false })
+      .order("exam_name", { ascending: true });
 
     if (error) {
       console.error("EXAM FETCH ERROR:", error);
@@ -32,6 +38,9 @@ export async function GET() {
 // ================= ADD EXAM =================
 export async function POST(req: Request) {
   try {
+    const guard = await requireApiRole("admin");
+    if ("response" in guard) return guard.response;
+
     const body = await req.json();
     const { exam_name, academic_year } = body;
 
@@ -77,6 +86,9 @@ export async function POST(req: Request) {
 // ================= UPDATE EXAM =================
 export async function PUT(req: Request) {
   try {
+    const guard = await requireApiRole("admin");
+    if ("response" in guard) return guard.response;
+
     const body = await req.json();
     const { exam_id, exam_name, academic_year, subject_settings } = body;
 
@@ -141,6 +153,9 @@ export async function PUT(req: Request) {
 // ================= DELETE EXAM =================
 export async function DELETE(req: Request) {
   try {
+    const guard = await requireApiRole("admin");
+    if ("response" in guard) return guard.response;
+
     const { searchParams } = new URL(req.url);
     const exam_id = searchParams.get("id");
 

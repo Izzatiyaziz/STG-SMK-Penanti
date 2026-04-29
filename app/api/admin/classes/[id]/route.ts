@@ -1,11 +1,15 @@
 import { NextResponse } from "next/server";
 import supabase from "@/lib/supabase";
+import { requireApiRole } from "@/lib/auth";
 
 export async function GET(
     req: Request,
     { params }: { params: Promise<{ id: string }> }
 ) {
     try {
+        const guard = await requireApiRole("admin");
+        if ("response" in guard) return guard.response;
+
         const { id: classId } = await params; // ✅ IMPORTANT
 
         if (!classId) {

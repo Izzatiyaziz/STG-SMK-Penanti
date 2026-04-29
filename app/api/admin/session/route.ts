@@ -1,10 +1,14 @@
 import { NextResponse } from "next/server";
 import supabase from "@/lib/supabase";
+import { requireApiRole } from "@/lib/auth";
 
 export const runtime = "nodejs";
 
 export async function GET() {
     try {
+        const guard = await requireApiRole("admin");
+        if ("response" in guard) return guard.response;
+
         // Ambil 50 log terakhir dan susun dari yang terkini
         const { data, error } = await supabase
             .from("stg_sessions")

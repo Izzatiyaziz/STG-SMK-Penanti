@@ -3,10 +3,10 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { ProfileShell } from "@/components/profile/profile-shell";
 
 type Session = {
     user_id: string;
@@ -108,75 +108,63 @@ export default function AdminProfilePage() {
     }
 
     return (
-        <div className="min-h-screen bg-gradient-to-b from-background to-muted/20 p-4 md:p-6">
-            <div className="max-w-xl mx-auto space-y-6">
-                <Card className="shadow-lg border border-border/50">
-                    <CardHeader>
-                        <CardTitle>Akaun Admin</CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-1 text-sm text-muted-foreground">
-                        <div>
-                            <span className="font-medium text-foreground">
-                                {me?.name ?? "Admin"}
-                            </span>
+        <ProfileShell
+            accountLabel="Akaun Admin"
+            name={me?.name ?? "Admin"}
+            email={me?.email}
+            roleLabel="Pentadbir Sistem"
+            accentLabel="Akses"
+            accentValue="Penuh"
+            note="Akaun ini mengurus data pengguna, peperiksaan, subjek, dan tetapan sistem sekolah. Pastikan kata laluan sentiasa kukuh dan tidak dikongsi."
+            securityTitle="Tukar Kata Laluan"
+            securityDescription="Gunakan kata laluan baharu yang kuat untuk memastikan akaun pentadbir kekal selamat."
+            securityContent={
+                <form onSubmit={handleChangePassword}>
+                    <FieldGroup>
+                        <Field>
+                            <FieldLabel>Kata Laluan Semasa</FieldLabel>
+                            <Input
+                                type="password"
+                                value={currentPassword}
+                                onChange={(e) => setCurrentPassword(e.target.value)}
+                                required
+                            />
+                        </Field>
+                        <Field>
+                            <FieldLabel>Kata Laluan Baharu</FieldLabel>
+                            <Input
+                                type="password"
+                                value={newPassword}
+                                onChange={(e) => setNewPassword(e.target.value)}
+                                required
+                            />
+                        </Field>
+                        <Field>
+                            <FieldLabel>Sahkan Kata Laluan Baharu</FieldLabel>
+                            <Input
+                                type="password"
+                                value={confirmPassword}
+                                onChange={(e) => setConfirmPassword(e.target.value)}
+                                required
+                            />
+                        </Field>
+
+                        <div className="flex flex-col gap-3 pt-2 sm:flex-row sm:justify-end">
+                            <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() => router.back()}
+                                disabled={loading}
+                            >
+                                Batal
+                            </Button>
+                            <Button type="submit" disabled={loading}>
+                                {loading ? "Menyimpan..." : "Simpan"}
+                            </Button>
                         </div>
-                        {me?.email && <div>{me.email}</div>}
-                    </CardContent>
-                </Card>
-
-                <Card className="shadow-lg border border-border/50">
-                    <CardHeader>
-                        <CardTitle>Tukar Kata Laluan</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                        <form onSubmit={handleChangePassword}>
-                            <FieldGroup>
-                                <Field>
-                                    <FieldLabel>Kata Laluan Semasa</FieldLabel>
-                                    <Input
-                                        type="password"
-                                        value={currentPassword}
-                                        onChange={(e) => setCurrentPassword(e.target.value)}
-                                        required
-                                    />
-                                </Field>
-                                <Field>
-                                    <FieldLabel>Kata Laluan Baharu</FieldLabel>
-                                    <Input
-                                        type="password"
-                                        value={newPassword}
-                                        onChange={(e) => setNewPassword(e.target.value)}
-                                        required
-                                    />
-                                </Field>
-                                <Field>
-                                    <FieldLabel>Sahkan Kata Laluan Baharu</FieldLabel>
-                                    <Input
-                                        type="password"
-                                        value={confirmPassword}
-                                        onChange={(e) => setConfirmPassword(e.target.value)}
-                                        required
-                                    />
-                                </Field>
-
-                                <div className="flex justify-end gap-3 pt-2">
-                                    <Button
-                                        type="button"
-                                        variant="outline"
-                                        onClick={() => router.back()}
-                                        disabled={loading}
-                                    >
-                                        Batal
-                                    </Button>
-                                    <Button type="submit" disabled={loading}>
-                                        {loading ? "Menyimpan..." : "Simpan"}
-                                    </Button>
-                                </div>
-                            </FieldGroup>
-                        </form>
-                    </CardContent>
-                </Card>
-            </div>
-        </div>
+                    </FieldGroup>
+                </form>
+            }
+        />
     );
 }

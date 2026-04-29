@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import supabase from "@/lib/supabase";
+import supabaseAdmin from "@/lib/supabase-admin";
+import { requireApiRole } from "@/lib/auth";
 
 export const runtime = "nodejs";
 
@@ -14,6 +15,9 @@ function toNumber(v: unknown) {
 
 export async function GET(req: Request) {
     try {
+        const guard = await requireApiRole("teacher");
+        if ("response" in guard) return guard.response;
+
         const { searchParams } = new URL(req.url);
         const class_id = toId(searchParams.get("class_id"));
         const subject_id = toId(searchParams.get("subject_id"));
@@ -23,7 +27,22 @@ export async function GET(req: Request) {
             return NextResponse.json({ data: {} }, { status: 200 });
         }
 
-        const { data: students } = await supabase
+        const { data: assignment, error: assignmentErr } = await supabaseAdmin
+            .from("stg_teacher_subject")
+            .select("teacher_subject_id")
+            .eq("teacher_id", guard.session.user_id)
+            .eq("class_id", class_id)
+            .eq("subject_id", subject_id)
+            .limit(1);
+
+        if (assignmentErr) {
+            return NextResponse.json({ message: assignmentErr.message }, { status: 500 });
+        }
+        if (!Array.isArray(assignment) || assignment.length === 0) {
+            return NextResponse.json({ message: "Forbidden" }, { status: 403 });
+        }
+
+        const { data: students } = await supabaseAdmin
             .from("stg_students")
             .select("student_id")
             .eq("class_id", class_id);
@@ -36,7 +55,7 @@ export async function GET(req: Request) {
             return NextResponse.json({ data: {} }, { status: 200 });
         }
 
-        const { data: scans, error } = await supabase
+        const { data: scans, error } = await supabaseAdmin
             .from("stg_omr_scans")
             .select("student_id, objective_total_mark, scan_date")
             .eq("subject_id", subject_id)
@@ -65,4 +84,3 @@ export async function GET(req: Request) {
         return NextResponse.json({ data: {} }, { status: 200 });
     }
 }
-

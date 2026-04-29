@@ -22,13 +22,18 @@
 
 # misc
 .DS_Store
-*.pem
+*.pem 
 
 # debug
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
+
+# python (omr-service)
+omr-service/.venv/
+omr-service/__pycache__/
+omr-service/_pyachace/
 
 # env files (can opt-in for committing if needed)
 .env*

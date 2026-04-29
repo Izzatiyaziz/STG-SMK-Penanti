@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import supabase from "@/lib/supabase";
+import { requireApiRole } from "@/lib/auth";
 
 export const runtime = "nodejs";
 
@@ -37,6 +38,9 @@ function safeDateString(v: unknown) {
 
 export async function POST(req: Request) {
     try {
+        const guard = await requireApiRole("subject coordinator");
+        if ("response" in guard) return guard.response;
+
         const body = await req.json();
         const coordinator_teacher_id = toId(body?.coordinator_teacher_id);
         const exam_id = toId(body?.exam_id);
@@ -47,6 +51,10 @@ export async function POST(req: Request) {
                 { message: "coordinator_teacher_id, exam_id, subject_id diperlukan" },
                 { status: 400 }
             );
+        }
+
+        if (coordinator_teacher_id !== guard.session.user_id) {
+            return NextResponse.json({ message: "Forbidden" }, { status: 403 });
         }
 
         const ok = await isCoordinatorForSubject({
@@ -112,4 +120,3 @@ export async function POST(req: Request) {
         return NextResponse.json({ message: "Server error" }, { status: 500 });
     }
 }
-

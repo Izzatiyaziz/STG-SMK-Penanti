@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import supabase from "@/lib/supabase";
+import supabaseAdmin from "@/lib/supabase-admin";
+import { requireApiRole } from "@/lib/auth";
 
 export const runtime = "nodejs";
 
@@ -14,6 +15,9 @@ function toNumber(v: unknown) {
 
 export async function GET(req: Request) {
     try {
+        const guard = await requireApiRole("teacher");
+        if ("response" in guard) return guard.response;
+
         const { searchParams } = new URL(req.url);
         const teacher_id = toId(searchParams.get("teacher_id"));
         const class_id = toId(searchParams.get("class_id"));
@@ -27,8 +31,12 @@ export async function GET(req: Request) {
             );
         }
 
+        if (teacher_id !== guard.session.user_id) {
+            return NextResponse.json({ message: "Forbidden" }, { status: 403 });
+        }
+
         // Ensure teacher is assigned to this subject+class
-        const { data: assignment, error: assignErr } = await supabase
+        const { data: assignment, error: assignErr } = await supabaseAdmin
             .from("stg_teacher_subject")
             .select("teacher_subject_id")
             .eq("teacher_id", teacher_id)
@@ -44,12 +52,12 @@ export async function GET(req: Request) {
         }
 
         const [{ data: classInfo }, { data: students }] = await Promise.all([
-            supabase
+            supabaseAdmin
                 .from("stg_classes")
                 .select("class_id, class_name, grade")
                 .eq("class_id", class_id)
                 .maybeSingle(),
-            supabase
+            supabaseAdmin
                 .from("stg_students")
                 .select("student_id, fullname")
                 .eq("class_id", class_id),
@@ -81,20 +89,20 @@ export async function GET(req: Request) {
 
         const [{ data: subjectiveMarks }, { data: results }, { data: omrScans }] =
             await Promise.all([
-                supabase
+                supabaseAdmin
                     .from("stg_subjective_marks")
                     .select("student_id")
                     .eq("teacher_id", teacher_id)
                     .eq("subject_id", subject_id)
                     .eq("exam_id", exam_id)
                     .in("student_id", studentIds),
-                supabase
+                supabaseAdmin
                     .from("stg_results")
                     .select("student_id, total, grade, status, subjective_id")
                     .eq("subject_id", subject_id)
                     .eq("exam_id", exam_id)
                     .in("student_id", studentIds),
-                supabase
+                supabaseAdmin
                     .from("stg_omr_scans")
                     .select("student_id")
                     .eq("subject_id", subject_id)
@@ -164,4 +172,3 @@ export async function GET(req: Request) {
         return NextResponse.json({ message: "Server error" }, { status: 500 });
     }
 }
-

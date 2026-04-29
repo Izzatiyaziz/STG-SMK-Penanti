@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import supabase from "@/lib/supabase";
+import { clearSessionCookie } from "@/lib/auth";
 
 export const runtime = "nodejs";
 
@@ -30,10 +31,11 @@ export async function POST(req: Request) {
             );
         }
 
-        return NextResponse.json({ success: true });
+        const response = NextResponse.json({ success: true });
+        clearSessionCookie(response);
+        return response;
     } catch (err) {
         console.error("LOGOUT ERROR:", err);
         return NextResponse.json({ message: "Server error" }, { status: 500 });
     }
 }
-

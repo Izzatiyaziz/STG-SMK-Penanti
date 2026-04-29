@@ -3,10 +3,10 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { ProfileShell } from "@/components/profile/profile-shell";
 
 type Session = {
     user_id: string;
@@ -114,77 +114,73 @@ export default function TeacherProfilePage() {
     }
 
     return (
-        <div className="min-h-screen bg-gradient-to-b from-background to-muted/20 p-4 md:p-6">
-            <div className="max-w-xl mx-auto space-y-6">
-                <Card className="shadow-lg border border-border/50">
-                    <CardHeader>
-                        <CardTitle>Akaun Guru</CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-1 text-sm text-muted-foreground">
-                        <div>
-                            <span className="font-medium text-foreground">
-                                {me?.name ?? "Teacher"}
-                            </span>
+        <ProfileShell
+            accountLabel="Akaun Guru"
+            name={me?.name ?? "Teacher"}
+            email={me?.email}
+            roleLabel="Warga Pengajar"
+            accentLabel="Status"
+            accentValue={forceFirstLogin ? "Persediaan kali pertama" : "Aktif"}
+            note={
+                forceFirstLogin
+                    ? "Anda sedang melengkapkan log masuk kali pertama. Sila tetapkan kata laluan baharu sebelum meneruskan penggunaan sistem."
+                    : "Gunakan halaman ini untuk menyemak maklumat akaun dan memastikan keselamatan akses anda sentiasa terjaga."
+            }
+            securityTitle="Tetapan Kata Laluan"
+            securityDescription={
+                forceFirstLogin
+                    ? "Tetapkan kata laluan baharu untuk mengaktifkan akaun guru anda."
+                    : "Kemas kini kata laluan jika diperlukan untuk mengekalkan keselamatan akaun."
+            }
+            securityContent={
+                <form onSubmit={handleChangePassword}>
+                    <FieldGroup>
+                        {!forceFirstLogin && (
+                            <Field>
+                                <FieldLabel>Kata Laluan Semasa</FieldLabel>
+                                <Input
+                                    type="password"
+                                    value={currentPassword}
+                                    onChange={(e) => setCurrentPassword(e.target.value)}
+                                    required
+                                />
+                            </Field>
+                        )}
+                        <Field>
+                            <FieldLabel>Kata Laluan Baharu</FieldLabel>
+                            <Input
+                                type="password"
+                                value={newPassword}
+                                onChange={(e) => setNewPassword(e.target.value)}
+                                required
+                            />
+                        </Field>
+                        <Field>
+                            <FieldLabel>Sahkan Kata Laluan Baharu</FieldLabel>
+                            <Input
+                                type="password"
+                                value={confirmPassword}
+                                onChange={(e) => setConfirmPassword(e.target.value)}
+                                required
+                            />
+                        </Field>
+
+                        <div className="flex flex-col gap-3 pt-2 sm:flex-row sm:justify-end">
+                            <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() => router.back()}
+                                disabled={loading}
+                            >
+                                Batal
+                            </Button>
+                            <Button type="submit" disabled={loading}>
+                                {loading ? "Menyimpan..." : "Simpan"}
+                            </Button>
                         </div>
-                        {me?.email && <div>{me.email}</div>}
-                    </CardContent>
-                </Card>
-
-                <Card className="shadow-lg border border-border/50">
-                    <CardHeader>
-                        <CardTitle>Tukar Kata Laluan</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                        <form onSubmit={handleChangePassword}>
-                            <FieldGroup>
-                                {!forceFirstLogin && (
-                                    <Field>
-                                        <FieldLabel>Kata Laluan Semasa</FieldLabel>
-                                        <Input
-                                            type="password"
-                                            value={currentPassword}
-                                            onChange={(e) => setCurrentPassword(e.target.value)}
-                                            required
-                                        />
-                                    </Field>
-                                )}
-                                <Field>
-                                    <FieldLabel>Kata Laluan Baharu</FieldLabel>
-                                    <Input
-                                        type="password"
-                                        value={newPassword}
-                                        onChange={(e) => setNewPassword(e.target.value)}
-                                        required
-                                    />
-                                </Field>
-                                <Field>
-                                    <FieldLabel>Sahkan Kata Laluan Baharu</FieldLabel>
-                                    <Input
-                                        type="password"
-                                        value={confirmPassword}
-                                        onChange={(e) => setConfirmPassword(e.target.value)}
-                                        required
-                                    />
-                                </Field>
-
-                                <div className="flex justify-end gap-3 pt-2">
-                                    <Button
-                                        type="button"
-                                        variant="outline"
-                                        onClick={() => router.back()}
-                                        disabled={loading}
-                                    >
-                                        Batal
-                                    </Button>
-                                    <Button type="submit" disabled={loading}>
-                                        {loading ? "Menyimpan..." : "Simpan"}
-                                    </Button>
-                                </div>
-                            </FieldGroup>
-                        </form>
-                    </CardContent>
-                </Card>
-            </div>
-        </div>
+                    </FieldGroup>
+                </form>
+            }
+        />
     );
 }

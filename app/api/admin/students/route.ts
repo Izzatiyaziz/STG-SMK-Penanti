@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import supabase from "@/lib/supabase";
+import { requireApiRole } from "@/lib/auth";
 
 export const runtime = "nodejs";
 
@@ -16,6 +17,9 @@ function deriveLevelFromEnrollment(enrollmentDate: string | null | undefined) {
 
 export async function GET(req: Request) {
     try {
+        const guard = await requireApiRole("admin");
+        if ("response" in guard) return guard.response;
+
         const { searchParams } = new URL(req.url);
         const id = String(searchParams.get("id") ?? "").trim();
 
@@ -114,6 +118,9 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
     try {
+        const guard = await requireApiRole("admin");
+        if ("response" in guard) return guard.response;
+
         const body = await req.json();
 
         const fullname = String(body?.fullname ?? "").trim();
@@ -171,6 +178,9 @@ export async function POST(req: Request) {
 
 export async function PUT(req: Request) {
     try {
+        const guard = await requireApiRole("admin");
+        if ("response" in guard) return guard.response;
+
         const { searchParams } = new URL(req.url);
         const id = String(searchParams.get("id") ?? "").trim();
 
@@ -228,6 +238,9 @@ export async function PUT(req: Request) {
 
 export async function DELETE(req: Request) {
     try {
+        const guard = await requireApiRole("admin");
+        if ("response" in guard) return guard.response;
+
         const { searchParams } = new URL(req.url);
         const id = String(searchParams.get("id") ?? "").trim();
 
@@ -263,4 +276,3 @@ export async function DELETE(req: Request) {
         );
     }
 }
-
