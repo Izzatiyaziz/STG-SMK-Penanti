@@ -175,7 +175,7 @@ export async function POST(req: Request) {
         return NextResponse.json({ success: true, id: data?.teacher_subject_id });
     } catch (err) {
         console.error("TEACHER SUBJECT POST ERROR:", err);
-        return NextResponse.json({ message: "Server error" }, { status: 500 });
+        return NextResponse.json({ message: "Ralat pelayan" }, { status: 500 });
     }
 }
 
@@ -209,6 +209,6 @@ export async function DELETE(req: Request) {
         return NextResponse.json({ success: true });
     } catch (err) {
         console.error("TEACHER SUBJECT DELETE ERROR:", err);
-        return NextResponse.json({ message: "Server error" }, { status: 500 });
+        return NextResponse.json({ message: "Ralat pelayan" }, { status: 500 });
     }
 }

@@ -182,6 +182,6 @@ export async function POST(req: Request) {
         return NextResponse.json({ message: "Peranan tidak sah" }, { status: 400 });
     } catch (err) {
         console.error("LOGIN ERROR:", err);
-        return NextResponse.json({ message: "Server error" }, { status: 500 });
+        return NextResponse.json({ message: "Ralat pelayan" }, { status: 500 });
     }
 }

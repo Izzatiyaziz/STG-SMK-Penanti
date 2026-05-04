@@ -2,6 +2,9 @@ import { NextResponse } from "next/server";
 import supabase from "@/lib/supabase";
 import { requireApiRole } from "@/lib/auth";
 
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const PHONE_REGEX = /^(\+?6?01)[0-9]-?\d{7,8}$/;
+
 export async function PUT(
     req: Request,
     context: { params: Promise<{ id: string }> }
@@ -11,57 +14,73 @@ export async function PUT(
         if ("response" in guard) return guard.response;
 
         const { id: teacherId } = await context.params;
-
         const body = await req.json();
-        const { fullname, email, role } = body;
+        const { fullname, email, phone_number, role, role_names } = body;
 
         const name = typeof fullname === "string" ? fullname.trim() : "";
+        const roleNames = Array.isArray(role_names)
+            ? role_names.map((item) => String(item).trim()).filter(Boolean)
+            : role
+                ? [String(role).trim()]
+                : [];
 
-        if (!teacherId || !name) {
+        if (!teacherId || !name || roleNames.length === 0) {
             return NextResponse.json(
-                { error: "Nama guru tidak sah" },
+                { error: "Nama guru atau peranan tidak sah" },
                 { status: 400 }
             );
         }
 
-        // 1️⃣ Update teacher
+        if (email && !EMAIL_REGEX.test(String(email).trim())) {
+            return NextResponse.json(
+                { error: "Format email tidak sah" },
+                { status: 400 }
+            );
+        }
+
+        if (phone_number && !PHONE_REGEX.test(String(phone_number).trim())) {
+            return NextResponse.json(
+                { error: "Format no. telefon tidak sah" },
+                { status: 400 }
+            );
+        }
+
         const { error: updateErr } = await supabase
             .from("stg_teachers")
             .update({
                 fullname: name,
                 email: email?.trim() || null,
+                phone_number: phone_number?.trim() || null,
             })
             .eq("teacher_id", teacherId);
 
         if (updateErr) throw updateErr;
 
-        // 2️⃣ Get role_id
         const { data: roleData, error: roleErr } = await supabase
             .from("stg_roles")
             .select("role_id")
-            .eq("role_name", role)
-            .single();
+            .in("role_name", roleNames);
 
-        if (roleErr || !roleData) {
+        if (roleErr || !roleData || roleData.length !== roleNames.length) {
             return NextResponse.json(
                 { error: "Role tidak wujud dalam sistem" },
                 { status: 400 }
             );
         }
 
-        // 3️⃣ Reset roles
         await supabase
             .from("stg_teacher_roles")
             .delete()
             .eq("teacher_id", teacherId);
 
-        // 4️⃣ Insert new role
         const { error: insertErr } = await supabase
             .from("stg_teacher_roles")
-            .insert({
-                teacher_id: teacherId,
-                role_id: roleData.role_id,
-            });
+            .insert(
+                roleData.map((roleRow) => ({
+                    teacher_id: teacherId,
+                    role_id: roleRow.role_id,
+                }))
+            );
 
         if (insertErr) throw insertErr;
 
@@ -69,10 +88,10 @@ export async function PUT(
             { message: "Guru berjaya dikemaskini" },
             { status: 200 }
         );
-    } catch (err: any) {
+    } catch (err: unknown) {
         console.error("PUT TEACHER ERROR:", err);
         return NextResponse.json(
-            { error: err.message || "Server error" },
+            { error: err instanceof Error ? err.message : "Ralat pelayan" },
             { status: 500 }
         );
     }
@@ -105,10 +124,10 @@ export async function DELETE(
             { message: "Guru berjaya dipadam" },
             { status: 200 }
         );
-    } catch (err: any) {
+    } catch (err: unknown) {
         console.error("DELETE TEACHER ERROR:", err);
         return NextResponse.json(
-            { error: err.message || "Server error" },
+            { error: err instanceof Error ? err.message : "Ralat pelayan" },
             { status: 500 }
         );
     }

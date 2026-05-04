@@ -24,7 +24,6 @@ import {
     Search,
     Users,
     Filter,
-    MoreVertical,
     Loader2,
     UserPlus,
     RefreshCw,
@@ -32,10 +31,8 @@ import {
     Shield,
     BookOpen,
     Award,
-    ChevronRight,
     Clock,
     Download,
-    Eye,
     Edit,
     Trash2,
     SortAsc,
@@ -53,13 +50,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuSeparator,
-    DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
 import { EditTeacherDialog } from "./edit-teacher-dialog";
 
@@ -69,6 +59,7 @@ type User = {
     identifier: string;
     roles: string[];
     email?: string;
+    phone_number?: string;
     subjects?: string[];
     lastActive?: string;
     status?: "active" | "inactive";
@@ -86,7 +77,7 @@ const LastUpdatedTime = () => {
         return () => clearInterval(interval);
     }, []);
 
-    return <span className="font-medium text-primary">{time || "Loading..."}</span>;
+    return <span className="font-medium text-primary">{time || "Memuatkan..."}</span>;
 };
 
 export default function UsersPage() {
@@ -99,6 +90,7 @@ export default function UsersPage() {
     const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
     const [currentPage, setCurrentPage] = useState(1);
     const [editOpen, setEditOpen] = useState(false);
+    const [deleteOpen, setDeleteOpen] = useState(false);
     const [selectedUser, setSelectedUser] = useState<User | null>(null);
 
     async function fetchUsers() {
@@ -271,30 +263,14 @@ export default function UsersPage() {
         });
     };
 
-    const handleViewUser = (user: User) => {
-        toast.info(`Melihat profil ${user.name}`);
-    };
-
     const handleEditUser = (user: User) => {
-    setSelectedUser(user);
-    setEditOpen(true);
+        setSelectedUser(user);
+        setEditOpen(true);
     };
-
 
     const handleDeleteUser = (user: User) => {
-        toast.error(`Padam ${user.name}?`, {
-            description: "Tindakan ini tidak boleh dipulihkan",
-            action: {
-                label: "Padam",
-                onClick: () => {
-                    toast.success(`${user.name} telah dipadam`);
-                }
-            },
-            cancel: {
-                label: "Batal",
-                onClick: () => {}
-            }
-        });
+        setSelectedUser(user);
+        setDeleteOpen(true);
     };
 
     // ================= TOGGLE SORT =================
@@ -351,7 +327,7 @@ export default function UsersPage() {
                             ) : (
                                 <RefreshCw className="w-4 h-4 mr-2" />
                             )}
-                            Refresh
+                            Muat Semula
                         </Button>
 
                         <Button
@@ -559,13 +535,16 @@ export default function UsersPage() {
                                                     onClick={() => toggleSort("roles")}
                                                     className="p-0 h-auto font-semibold hover:bg-transparent"
                                                 >
-                                                    Peranan
+                                                    Jawatan
                                                     {sortBy === "roles" && (
                                                         sortOrder === "asc" 
                                                             ? <SortAsc className="w-3.5 h-3.5 ml-1" />
                                                             : <SortDesc className="w-3.5 h-3.5 ml-1" />
                                                     )}
                                                 </Button>
+                                            </TableHead>
+                                            <TableHead className="font-semibold text-foreground py-4 text-right pr-6">
+                                                Tindakan
                                             </TableHead>
                                         </TableRow>
                                     </TableHeader>
@@ -706,6 +685,28 @@ export default function UsersPage() {
           })}
         </div>
       </TableCell>
+
+      {/* Tindakan */}
+      <TableCell className="py-4 text-right pr-6">
+        <div className="flex justify-end gap-2">
+          <Button
+            size="icon"
+            variant="outline"
+            className="h-8 w-8 text-blue-600"
+            onClick={() => handleEditUser(user)}
+          >
+            <Edit className="w-4 h-4" />
+          </Button>
+          <Button
+            size="icon"
+            variant="outline"
+            className="h-8 w-8 text-rose-600"
+            onClick={() => handleDeleteUser(user)}
+          >
+            <Trash2 className="w-4 h-4" />
+          </Button>
+        </div>
+      </TableCell>
     </TableRow>
   );
 })
@@ -750,7 +751,7 @@ export default function UsersPage() {
                                         className="h-8"
                                     >
                                         {loading && <Loader2 className="w-3 h-3 mr-2 animate-spin" />}
-                                        Refresh Data
+                                        Muat Semula Data
                                     </Button>
                                 </div>
                             </div>
@@ -760,7 +761,7 @@ export default function UsersPage() {
                                     <div className="text-sm text-muted-foreground">
                                         Showing {(currentPage - 1) * PAGE_SIZE + 1}
                                         {" - "}
-                                        {Math.min(currentPage * PAGE_SIZE, filteredUsers.length)} of {filteredUsers.length} teachers
+                                        {Math.min(currentPage * PAGE_SIZE, filteredUsers.length)} daripada {filteredUsers.length} guru
                                     </div>
                                     <Pagination>
                                         <PaginationContent>
@@ -838,6 +839,8 @@ export default function UsersPage() {
                 <EditTeacherDialog
                     open={editOpen}
                     onOpenChange={setEditOpen}
+                    deleteOpen={deleteOpen}
+                    onDeleteOpenChange={setDeleteOpen}
                     user={selectedUser}
                     onSuccess={fetchUsers}
                     />

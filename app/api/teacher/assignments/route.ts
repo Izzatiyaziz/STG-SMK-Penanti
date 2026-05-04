@@ -16,7 +16,7 @@ export async function GET(req: Request) {
             return NextResponse.json({ data: [] }, { status: 200 });
         }
         if (teacher_id !== guard.session.user_id) {
-            return NextResponse.json({ message: "Forbidden" }, { status: 403 });
+            return NextResponse.json({ message: "Akses ditolak" }, { status: 403 });
         }
 
         const { data: rows, error } = await supabase

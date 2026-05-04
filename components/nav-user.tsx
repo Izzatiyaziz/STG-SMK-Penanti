@@ -24,6 +24,27 @@ import {
 } from "@/components/ui/sidebar";
 import Link from "next/link";
 
+function formatRoleLabel(role?: string) {
+    switch (String(role ?? "").toLowerCase().trim()) {
+        case "admin":
+            return "Pentadbir";
+        case "student":
+            return "Pelajar";
+        case "principal":
+            return "Pengetua";
+        case "class teacher":
+            return "Guru Kelas";
+        case "subject teacher":
+            return "Guru Subjek";
+        case "subject coordinator":
+            return "Penyelaras Subjek";
+        case "teacher":
+            return "Guru";
+        default:
+            return "Jawatan belum ditetapkan";
+    }
+}
+
 export function NavUser({
     user,
 }: {
@@ -31,10 +52,13 @@ export function NavUser({
         name: string;
         email: string;
         avatar: string;
+        role?: string;
     };
 }) {
     const { isMobile } = useSidebar();
     const router = useRouter();
+
+    const roleLabel = formatRoleLabel(user.role);
 
     const handleLogout = async () => {
         try {
@@ -96,7 +120,7 @@ export function NavUser({
                                     {user.name}
                                 </span>
                                 <span className="text-muted-foreground truncate text-xs">
-                                    {user.email}
+                                    {roleLabel}
                                 </span>
                             </div>
 
@@ -126,7 +150,7 @@ export function NavUser({
                                         {user.name}
                                     </span>
                                     <span className="text-xs text-muted-foreground">
-                                        {user.email}
+                                        {roleLabel}
                                     </span>
                                 </div>
                             </div>

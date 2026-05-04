@@ -45,6 +45,27 @@ function toId(v: unknown) {
   return typeof v === "string" ? v.trim() : v == null ? "" : String(v).trim();
 }
 
+function readMarksContext() {
+  try {
+    const raw = localStorage.getItem("stg_marks_context");
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as {
+      class_id?: string;
+      subject_id?: string;
+      exam_id?: string;
+      student_id?: string;
+    };
+    return {
+      class_id: toId(parsed.class_id),
+      subject_id: toId(parsed.subject_id),
+      exam_id: toId(parsed.exam_id),
+      student_id: toId(parsed.student_id),
+    };
+  } catch {
+    return null;
+  }
+}
+
 export default function OMRScanPage() {
   const router = useRouter();
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -105,8 +126,25 @@ export default function OMRScanPage() {
         const aJson = await aRes.json();
         const eJson = await eRes.json();
 
-        setAssignments(Array.isArray(aJson?.data) ? aJson.data : []);
-        setExams(Array.isArray(eJson?.data) ? eJson.data : []);
+        const assignmentList: Assignment[] = Array.isArray(aJson?.data) ? aJson.data : [];
+        const examList: Exam[] = Array.isArray(eJson?.data) ? eJson.data : [];
+        const marksContext = readMarksContext();
+
+        setAssignments(assignmentList);
+        setExams(examList);
+
+        if (marksContext?.class_id && marksContext?.subject_id) {
+          const matchedAssignment = assignmentList.find(
+            (a) =>
+              a.class_id === marksContext.class_id &&
+              a.subject_id === marksContext.subject_id
+          );
+          if (matchedAssignment) setSelectedAssignmentId(matchedAssignment.id);
+        }
+
+        if (marksContext?.exam_id && examList.some((e) => e.id === marksContext.exam_id)) {
+          setSelectedExamId(marksContext.exam_id);
+        }
       } catch {
         setAssignments([]);
         setExams([]);
@@ -129,8 +167,14 @@ export default function OMRScanPage() {
       try {
         const res = await fetch(`/api/teacher/students?class_id=${encodeURIComponent(class_id)}`);
         const json = await res.json();
-        setStudents(Array.isArray(json?.data) ? json.data : []);
-        setSelectedStudentId("");
+        const studentList: Student[] = Array.isArray(json?.data) ? json.data : [];
+        const marksContext = readMarksContext();
+        setStudents(studentList);
+        setSelectedStudentId(
+          marksContext?.student_id && studentList.some((s) => s.id === marksContext.student_id)
+            ? marksContext.student_id
+            : ""
+        );
       } catch {
         setStudents([]);
         setSelectedStudentId("");
@@ -320,7 +364,7 @@ export default function OMRScanPage() {
               <Scan className="w-6 h-6 text-primary" />
             </div>
             <h1 className="text-3xl font-bold tracking-tight">
-              OMR Scanner
+              Pengimbas OMR
             </h1>
           </div>
           <p className="text-muted-foreground mt-1 max-w-2xl">
@@ -599,7 +643,7 @@ export default function OMRScanPage() {
         </div>
 
         <p className="text-center text-sm text-muted-foreground">
-          Sistem OMR Scanner v1.0 • Khas untuk Guru Subjek
+          Sistem Pengimbas OMR v1.0 • Khas untuk Guru Subjek
         </p>
 
       </div>

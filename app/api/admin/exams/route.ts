@@ -46,7 +46,7 @@ export async function POST(req: Request) {
 
     if (!exam_name || !academic_year) {
       return NextResponse.json(
-        { message: "Exam name and academic year are required" },
+        { message: "Nama peperiksaan dan tahun akademik diperlukan" },
         { status: 400 }
       );
     }
@@ -77,7 +77,7 @@ export async function POST(req: Request) {
     );
   } catch {
     return NextResponse.json(
-      { message: "Server error" },
+      { message: "Ralat pelayan" },
       { status: 500 }
     );
   }
@@ -123,7 +123,7 @@ export async function PUT(req: Request) {
 
     if (!exam_name || !academic_year) {
       return NextResponse.json(
-        { message: "Exam name and academic year are required" },
+        { message: "Nama peperiksaan dan tahun akademik diperlukan" },
         { status: 400 }
       );
     }
@@ -144,7 +144,7 @@ export async function PUT(req: Request) {
     return NextResponse.json({ message: "Exam updated successfully" });
   } catch {
     return NextResponse.json(
-      { message: "Server error" },
+      { message: "Ralat pelayan" },
       { status: 500 }
     );
   }
@@ -161,7 +161,7 @@ export async function DELETE(req: Request) {
 
     if (!exam_id) {
       return NextResponse.json(
-        { message: "Exam ID is required" },
+        { message: "ID peperiksaan diperlukan" },
         { status: 400 }
       );
     }
@@ -182,7 +182,7 @@ export async function DELETE(req: Request) {
     return NextResponse.json({ message: "Exam deleted successfully" });
   } catch {
     return NextResponse.json(
-      { message: "Server error" },
+      { message: "Ralat pelayan" },
       { status: 500 }
     );
   }

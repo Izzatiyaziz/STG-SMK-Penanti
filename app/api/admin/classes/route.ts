@@ -81,7 +81,7 @@ export async function POST(req: Request) {
         );
     } catch (err) {
         console.error("ADD CLASS ERROR:", err);
-        return NextResponse.json({ message: "Server error" }, { status: 500 });
+        return NextResponse.json({ message: "Ralat pelayan" }, { status: 500 });
     }
 }
 
@@ -99,7 +99,7 @@ export async function PUT(req: Request) {
 
         if (!class_id || !class_name) {
             return NextResponse.json(
-                { message: "Class ID dan nama kelas diperlukan" },
+                { message: "ID kelas dan nama kelas diperlukan" },
                 { status: 400 }
             );
         }
@@ -120,7 +120,7 @@ export async function PUT(req: Request) {
         return NextResponse.json({ message: "Kelas berjaya dikemaskini" });
     } catch (err) {
         console.error("UPDATE CLASS ERROR:", err);
-        return NextResponse.json({ message: "Server error" }, { status: 500 });
+        return NextResponse.json({ message: "Ralat pelayan" }, { status: 500 });
     }
 }
 
@@ -134,10 +134,35 @@ export async function DELETE(req: Request) {
 
         if (!class_id) {
             return NextResponse.json(
-                { message: "Class ID diperlukan" },
+                { message: "ID kelas diperlukan" },
                 { status: 400 }
             );
         }
+
+        const { count: studentCount, error: studentCountError } = await supabase
+            .from("stg_students")
+            .select("student_id", { count: "exact", head: true })
+            .eq("class_id", class_id);
+
+        if (studentCountError) {
+            console.error("CHECK CLASS STUDENTS ERROR:", studentCountError);
+            return NextResponse.json(
+                { message: "Gagal menyemak pelajar dalam kelas ini" },
+                { status: 500 }
+            );
+        }
+
+        if ((studentCount ?? 0) > 0) {
+            return NextResponse.json(
+                { message: "Kelas ini masih mempunyai pelajar. Keluarkan pelajar daripada kelas dahulu sebelum memadam." },
+                { status: 409 }
+            );
+        }
+
+        await supabase.from("stg_class_teachers").delete().eq("class_id", class_id);
+        await supabase.from("stg_teacher_subject").delete().eq("class_id", class_id);
+        await supabase.from("stg_student_class_history").delete().eq("class_id", class_id);
+        await supabase.from("stg_report_cards").delete().eq("class_id", class_id);
 
         const { error } = await supabase
             .from("stg_classes")
@@ -146,12 +171,16 @@ export async function DELETE(req: Request) {
 
         if (error) {
             console.error("DELETE CLASS ERROR:", error);
-            return NextResponse.json({ message: error.message }, { status: 500 });
+            const message =
+                error.code === "23503"
+                    ? "Kelas ini masih digunakan oleh rekod lain dan tidak boleh dipadam."
+                    : error.message;
+            return NextResponse.json({ message }, { status: 500 });
         }
 
         return NextResponse.json({ message: "Kelas berjaya dipadam" });
     } catch (err) {
         console.error("DELETE CLASS ERROR:", err);
-        return NextResponse.json({ message: "Server error" }, { status: 500 });
+        return NextResponse.json({ message: "Ralat pelayan" }, { status: 500 });
     }
 }

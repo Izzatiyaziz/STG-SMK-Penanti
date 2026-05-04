@@ -35,7 +35,7 @@ export async function GET(req: Request) {
         }
 
         if (teacher_id !== guard.session.user_id) {
-            return NextResponse.json({ message: "Forbidden" }, { status: 403 });
+            return NextResponse.json({ message: "Akses ditolak" }, { status: 403 });
         }
 
         const { data: ct, error: ctErr } = await supabase
@@ -165,6 +165,6 @@ export async function GET(req: Request) {
         });
     } catch (err) {
         console.error("GET report-cards class FAILED:", err);
-        return NextResponse.json({ message: "Server error" }, { status: 500 });
+        return NextResponse.json({ message: "Ralat pelayan" }, { status: 500 });
     }
 }

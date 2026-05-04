@@ -32,7 +32,7 @@ export async function GET(req: Request) {
         }
 
         if (teacher_id !== guard.session.user_id) {
-            return NextResponse.json({ message: "Forbidden" }, { status: 403 });
+            return NextResponse.json({ message: "Akses ditolak" }, { status: 403 });
         }
 
         // Ensure teacher is assigned to this subject+class
@@ -48,7 +48,7 @@ export async function GET(req: Request) {
             return NextResponse.json({ message: assignErr.message }, { status: 500 });
         }
         if (!Array.isArray(assignment) || assignment.length === 0) {
-            return NextResponse.json({ message: "Forbidden" }, { status: 403 });
+            return NextResponse.json({ message: "Akses ditolak" }, { status: 403 });
         }
 
         const [{ data: classInfo }, { data: students }] = await Promise.all([
@@ -169,6 +169,6 @@ export async function GET(req: Request) {
         });
     } catch (err) {
         console.error("GET teacher class-summary FAILED:", err);
-        return NextResponse.json({ message: "Server error" }, { status: 500 });
+        return NextResponse.json({ message: "Ralat pelayan" }, { status: 500 });
     }
 }

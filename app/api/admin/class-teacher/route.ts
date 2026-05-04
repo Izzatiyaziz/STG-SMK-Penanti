@@ -42,7 +42,7 @@ export async function GET(req: Request) {
     return NextResponse.json(data ?? [], { status: 200 });
   } catch (err) {
     console.error("GET class-teacher FAILED:", err);
-    return NextResponse.json({ error: "Server error" }, { status: 500 });
+    return NextResponse.json({ error: "Ralat pelayan" }, { status: 500 });
   }
 }
 
@@ -154,7 +154,7 @@ export async function POST(req: Request) {
     );
   } catch (err: unknown) {
     console.error("POST class-teacher FAILED:", err);
-    return NextResponse.json({ error: "Server error" }, { status: 500 });
+    return NextResponse.json({ error: "Ralat pelayan" }, { status: 500 });
   }
 }
 
@@ -192,6 +192,6 @@ export async function DELETE(req: Request) {
     );
   } catch (err) {
     console.error("DELETE class-teacher FAILED:", err);
-    return NextResponse.json({ error: "Server error" }, { status: 500 });
+    return NextResponse.json({ error: "Ralat pelayan" }, { status: 500 });
   }
 }

@@ -65,7 +65,7 @@ export async function GET(req: Request) {
         }
 
         if (teacher_id !== guard.session.user_id) {
-            return NextResponse.json({ message: "Forbidden", data: [] }, { status: 403 });
+            return NextResponse.json({ message: "Akses ditolak", data: [] }, { status: 403 });
         }
 
         const { data: coordRows, error: coordErr } = await supabase
@@ -354,7 +354,7 @@ export async function POST(req: Request) {
 
         if (nextStatus === "pending") {
             return NextResponse.json(
-                { message: "Invalid action" },
+                { message: "Tindakan tidak sah" },
                 { status: 400 }
             );
         }
@@ -374,7 +374,7 @@ export async function POST(req: Request) {
         }
 
         if (!Array.isArray(coordinatorRows) || coordinatorRows.length === 0) {
-            return NextResponse.json({ message: "Forbidden" }, { status: 403 });
+            return NextResponse.json({ message: "Akses ditolak" }, { status: 403 });
         }
 
         const { data: students, error: studentErr } = await supabase
@@ -423,6 +423,6 @@ export async function POST(req: Request) {
         return NextResponse.json({ success: true });
     } catch (err) {
         console.error("COORDINATOR APPROVAL ACTION ERROR:", err);
-        return NextResponse.json({ message: "Server error" }, { status: 500 });
+        return NextResponse.json({ message: "Ralat pelayan" }, { status: 500 });
     }
 }

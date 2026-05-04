@@ -23,7 +23,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { AlertTriangle, ClipboardList, Save, Send } from "lucide-react";
+import { AlertTriangle, Camera, ClipboardList, Save, Send } from "lucide-react";
 
 type Session = {
     user_id: string;
@@ -95,6 +95,26 @@ function getObjectiveMark(
     return Number.isFinite(value) ? value : null;
 }
 
+function getSubjectiveMark(
+    subjectiveMarks: Record<string, string>,
+    studentId: string
+) {
+    const raw = subjectiveMarks[studentId] ?? "";
+    if (raw === "") return 0;
+    const value = Number(raw);
+    return Number.isFinite(value) ? value : 0;
+}
+
+function getManualObjectiveMark(
+    manualObjectiveMarks: Record<string, string>,
+    studentId: string
+) {
+    const raw = manualObjectiveMarks[studentId] ?? "";
+    if (raw === "") return 0;
+    const value = Number(raw);
+    return Number.isFinite(value) ? value : 0;
+}
+
 export default function SubjectTeacherPage() {
     const router = useRouter();
     const [session, setSession] = useState<Session | null>(null);
@@ -111,6 +131,7 @@ export default function SubjectTeacherPage() {
     const [objectiveMarksByStudentId, setObjectiveMarksByStudentId] = useState<
         Record<string, number>
     >({});
+    const [manualObjectiveMarks, setManualObjectiveMarks] = useState<Record<string, string>>({});
     const [classSummary, setClassSummary] = useState<ClassSummary | null>(null);
 
     const [loading, setLoading] = useState(false);
@@ -355,12 +376,22 @@ export default function SubjectTeacherPage() {
 
                 if (!cancelled) {
                     setClassSummary(sumRes.ok ? (sumJson as ClassSummary) : null);
-                    setObjectiveMarksByStudentId(objJson?.data ?? {});
+                    const objectiveMarks = objJson?.data ?? {};
+                    setObjectiveMarksByStudentId(objectiveMarks);
+                    setManualObjectiveMarks(
+                        Object.fromEntries(
+                            Object.entries(objectiveMarks as Record<string, number>).map(([studentId, mark]) => [
+                                studentId,
+                                String(mark),
+                            ])
+                        )
+                    );
                 }
             } catch {
                 if (!cancelled) {
                     setClassSummary(null);
                     setObjectiveMarksByStudentId({});
+                    setManualObjectiveMarks({});
                 }
             }
         }
@@ -385,7 +416,13 @@ export default function SubjectTeacherPage() {
         const payloadMarks = students.map((s) => {
             const raw = subjectiveMarks[s.id] ?? "";
             const val = raw === "" ? 0 : Number(raw);
-            return { student_id: s.id, subjective_mark: Number.isFinite(val) ? val : 0 };
+            const objectiveRaw = manualObjectiveMarks[s.id] ?? "";
+            const objectiveVal = objectiveRaw === "" ? 0 : Number(objectiveRaw);
+            return {
+                student_id: s.id,
+                subjective_mark: Number.isFinite(val) ? val : 0,
+                objective_mark: Number.isFinite(objectiveVal) ? objectiveVal : 0,
+            };
         });
 
         const invalid = payloadMarks.find(
@@ -393,6 +430,14 @@ export default function SubjectTeacherPage() {
         );
         if (invalid) {
             toast.error(`Markah subjektif mesti 0–${limits.subjectiveMax}`);
+            return;
+        }
+
+        const invalidObjective = payloadMarks.find(
+            (m) => m.objective_mark < 0 || m.objective_mark > limits.objectiveMax
+        );
+        if (invalidObjective) {
+            toast.error(`Markah objektif mesti 0-${limits.objectiveMax}`);
             return;
         }
 
@@ -424,6 +469,20 @@ export default function SubjectTeacherPage() {
         } finally {
             setSubmitLoading(false);
         }
+    }
+
+    function openOmrPage(studentId?: string) {
+        if (!selectedAssignment || !selectedExamId) return;
+        localStorage.setItem(
+            "stg_marks_context",
+            JSON.stringify({
+                class_id: selectedAssignment.class_id,
+                subject_id: selectedAssignment.subject_id,
+                exam_id: selectedExamId,
+                student_id: studentId ?? "",
+            })
+        );
+        router.push("/teacher/omr");
     }
 
     if (!session) return null;
@@ -467,7 +526,7 @@ export default function SubjectTeacherPage() {
                             <div className="flex flex-wrap gap-2 pt-2">
                                 <Button
                                     variant="outline"
-                                    onClick={() => router.push("/teacher/omr")}
+                                    onClick={() => openOmrPage()}
                                 >
                                     Buka OMR
                                 </Button>
@@ -493,7 +552,7 @@ export default function SubjectTeacherPage() {
                         </Card>
                         <Card className="shadow-lg border border-border/50">
                             <CardContent className="p-6">
-                                <div className="text-sm text-muted-foreground">OMR Scan</div>
+                                <div className="text-sm text-muted-foreground">Imbasan OMR</div>
                                 <div className="text-2xl font-bold mt-2">
                                     {classSummary.totals.omr_scanned}/{classSummary.totals.students}
                                 </div>
@@ -509,13 +568,13 @@ export default function SubjectTeacherPage() {
                                 </div>
                                 <div className="flex flex-wrap gap-2 mt-3">
                                     <Badge variant="outline">
-                                        Approved: {classSummary.totals.approved}
+                                        Diluluskan: {classSummary.totals.approved}
                                     </Badge>
                                     <Badge variant="outline">
-                                        Pending: {classSummary.totals.pending}
+                                        Menunggu: {classSummary.totals.pending}
                                     </Badge>
                                     <Badge variant="outline">
-                                        Rejected: {classSummary.totals.rejected}
+                                        Ditolak: {classSummary.totals.rejected}
                                     </Badge>
                                 </div>
                             </CardContent>
@@ -565,12 +624,12 @@ export default function SubjectTeacherPage() {
                             <div className="text-sm text-muted-foreground">Subjek & Kelas</div>
                             <Select value={selectedAssignmentId} onValueChange={setSelectedAssignmentId}>
                                 <SelectTrigger>
-                                    <SelectValue placeholder="Pilih assignment" />
+                                    <SelectValue placeholder="Pilih tugasan" />
                                 </SelectTrigger>
                                 <SelectContent>
                                     {assignments.map((a) => (
                                         <SelectItem key={a.id} value={a.id}>
-                                            {a.subject_name} • T{a.grade ?? "-"} {a.class_name}
+                                            {a.subject_name} • {a.grade ?? "-"} {a.class_name}
                                         </SelectItem>
                                     ))}
                                 </SelectContent>
@@ -581,7 +640,7 @@ export default function SubjectTeacherPage() {
                             <div className="text-sm text-muted-foreground">Status Hantaran</div>
                             <div className="flex flex-wrap items-center gap-2">
                                 <Badge variant="outline">
-                                    {submission.submittedCount}/{submission.totalStudents} marked
+                                    {submission.submittedCount}/{submission.totalStudents} ditanda
                                 </Badge>
                                 {submission.isComplete ? (
                                     <Badge className="bg-green-100 text-green-700">Lengkap</Badge>
@@ -595,48 +654,60 @@ export default function SubjectTeacherPage() {
                                 </span>
                                 {submission.approval.status === "approved" ? (
                                     <Badge className="bg-green-100 text-green-700">
-                                        Approved
+                                        Diluluskan
                                     </Badge>
                                 ) : submission.approval.status === "rejected" ? (
                                     <Badge className="bg-red-100 text-red-700">
-                                        Rejected
+                                        Ditolak
                                     </Badge>
                                 ) : submission.approval.status === "pending" ? (
                                     <Badge className="bg-yellow-100 text-yellow-700">
-                                        Pending
+                                        Menunggu
                                     </Badge>
                                 ) : submission.approval.status === "mixed" ? (
-                                    <Badge variant="outline">Mixed</Badge>
+                                    <Badge variant="outline">Bercampur</Badge>
                                 ) : (
                                     <Badge variant="outline">Belum dihantar</Badge>
                                 )}
                                 {submission.approval.total > 0 && (
                                     <Badge variant="outline">
                                         {submission.approval.approved}/
-                                        {submission.approval.total} approved
+                                        {submission.approval.total} diluluskan
                                     </Badge>
                                 )}
                             </div>
                             <div className="text-xs text-muted-foreground">
-                                Limit: Objektif {limits.objectiveMax} • Subjektif {limits.subjectiveMax}
+                                Had: Objektif {limits.objectiveMax} • Subjektif {limits.subjectiveMax}
                             </div>
                         </div>
                     </CardContent>
                 </Card>
 
-                <Card className="shadow-lg border border-border/50">
-                    <CardHeader>
-                        <CardTitle>
-                            Senarai Pelajar — {selectedAssignment?.class_name ?? "—"}
-                        </CardTitle>
+                <Card className="border-border bg-card shadow-md rounded-xl overflow-hidden">
+                    <CardHeader className="border-b border-border bg-gradient-to-r from-card to-card/80 px-6 py-5">
+                        <div>
+                            <CardTitle className="text-xl font-bold text-foreground flex items-center gap-2">
+                                <ClipboardList className="w-5 h-5 text-primary" />
+                                Senarai Pelajar - {selectedAssignment?.grade ?? "-"} {selectedAssignment?.class_name ?? "-"}
+                            </CardTitle>
+                            <p className="text-sm text-muted-foreground mt-1">
+                                Masukkan markah subjektif dan imbas OMR untuk markah objektif
+                            </p>
+                        </div>
                     </CardHeader>
-                    <CardContent className="p-0">
+                    <CardContent className="p-6">
                         <div className="divide-y md:hidden">
                             {students.map((s) => {
                                 const objectiveMark = getObjectiveMark(
                                     objectiveMarksByStudentId,
                                     s.id
                                 );
+                                const manualObjectiveMark = getManualObjectiveMark(manualObjectiveMarks, s.id);
+                                const subjectiveMark = getSubjectiveMark(subjectiveMarks, s.id);
+                                const totalMark = manualObjectiveMark + subjectiveMark;
+                                const totalMax = limits.objectiveMax + limits.subjectiveMax;
+                                const totalPercent =
+                                    totalMax > 0 ? Math.round((totalMark / totalMax) * 100) : 0;
                                 return (
                                     <div key={s.id} className="space-y-4 p-4">
                                         <div className="space-y-1">
@@ -650,8 +721,38 @@ export default function SubjectTeacherPage() {
                                                 <div className="text-xs text-muted-foreground">
                                                     Objektif
                                                 </div>
-                                                <div className="mt-1 text-lg font-semibold">
-                                                    {objectiveMark ?? "-"}
+                                                <div className="mt-2 flex items-center gap-2">
+                                                    <Input
+                                                        type="number"
+                                                        min={0}
+                                                        max={limits.objectiveMax}
+                                                        className="h-8 w-20 text-center"
+                                                        value={manualObjectiveMarks[s.id] ?? ""}
+                                                        onChange={(e) =>
+                                                            setManualObjectiveMarks((prev) => ({
+                                                                ...prev,
+                                                                [s.id]: e.target.value,
+                                                            }))
+                                                        }
+                                                        placeholder={`0-${limits.objectiveMax}`}
+                                                        title={
+                                                            objectiveMark !== null
+                                                                ? `Markah scan: ${objectiveMark}`
+                                                                : "Masukkan markah objektif manual"
+                                                        }
+                                                    />
+                                                    <Button
+                                                        type="button"
+                                                        variant="outline"
+                                                        size="icon"
+                                                        className="h-8 w-8 border-emerald-500 bg-background text-emerald-600 hover:bg-emerald-50 hover:text-emerald-700"
+                                                        onClick={() => openOmrPage(s.id)}
+                                                        disabled={!selectedAssignment || !selectedExamId}
+                                                        title="Imbas OMR"
+                                                        aria-label={`Imbas OMR untuk ${s.name}`}
+                                                    >
+                                                        <Camera className="h-4 w-4" />
+                                                    </Button>
                                                 </div>
                                             </div>
                                             <div className="rounded-lg border border-border/60 bg-background/70 p-3">
@@ -673,6 +774,22 @@ export default function SubjectTeacherPage() {
                                                     placeholder={`0-${limits.subjectiveMax}`}
                                                 />
                                             </div>
+                                            <div className="rounded-lg border border-border/60 bg-background/70 p-3 col-span-2">
+                                                <div className="text-xs text-muted-foreground">
+                                                    Jumlah Markah
+                                                </div>
+                                                <div className="mt-1 text-lg font-semibold">
+                                                    {totalMark} / {totalMax}
+                                                </div>
+                                            </div>
+                                            <div className="rounded-lg border border-border/60 bg-background/70 p-3 col-span-2">
+                                                <div className="text-xs text-muted-foreground">
+                                                    Peratus
+                                                </div>
+                                                <div className="mt-1 text-lg font-semibold">
+                                                    {totalPercent}%
+                                                </div>
+                                            </div>
                                         </div>
                                     </div>
                                 );
@@ -685,48 +802,102 @@ export default function SubjectTeacherPage() {
                             )}
                         </div>
 
-                        <div className="hidden overflow-x-auto md:block">
+                        <div className="hidden rounded-lg border border-border overflow-hidden md:block">
+                            <div className="overflow-x-auto">
                             <Table>
-                                <TableHeader>
-                                    <TableRow>
-                                        <TableHead>Nama Pelajar</TableHead>
-                                        <TableHead className="text-center">Objektif</TableHead>
-                                        <TableHead className="text-center">Subjektif</TableHead>
+                                <TableHeader className="bg-muted/30">
+                                    <TableRow className="hover:bg-transparent border-b border-border">
+                                        <TableHead className="font-semibold text-foreground py-4">Nama Pelajar</TableHead>
+                                        <TableHead className="font-semibold text-foreground py-4 text-center">Objektif</TableHead>
+                                        <TableHead className="font-semibold text-foreground py-4 text-center">Subjektif</TableHead>
+                                        <TableHead className="font-semibold text-foreground py-4 text-center">Jumlah Markah</TableHead>
+                                        <TableHead className="font-semibold text-foreground py-4 text-center pr-6">Peratus</TableHead>
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
-                                    {students.map((s) => (
-                                        <TableRow key={s.id}>
-                                            <TableCell className="font-medium">
-                                                {s.name}
-                                            </TableCell>
-                                            <TableCell className="text-center text-muted-foreground">
-                                                {getObjectiveMark(objectiveMarksByStudentId, s.id) ?? "-"}
-                                            </TableCell>
-                                            <TableCell className="text-center">
-                                                <Input
-                                                    type="number"
-                                                    min={0}
-                                                    max={limits.subjectiveMax}
-                                                    className="w-28 mx-auto text-center"
-                                                    value={subjectiveMarks[s.id] ?? ""}
-                                                    onChange={(e) =>
-                                                        setSubjectiveMarks((prev) => ({
-                                                            ...prev,
-                                                            [s.id]: e.target.value,
-                                                        }))
-                                                    }
-                                                    placeholder={`0-${limits.subjectiveMax}`}
-                                                />
-                                            </TableCell>
-                                        </TableRow>
-                                    ))}
+                                    {students.map((s) => {
+                                        const objectiveMark = getObjectiveMark(objectiveMarksByStudentId, s.id);
+                                        const manualObjectiveMark = getManualObjectiveMark(manualObjectiveMarks, s.id);
+                                        const subjectiveMark = getSubjectiveMark(subjectiveMarks, s.id);
+                                        const totalMark = manualObjectiveMark + subjectiveMark;
+                                        const totalMax = limits.objectiveMax + limits.subjectiveMax;
+                                        const totalPercent =
+                                            totalMax > 0 ? Math.round((totalMark / totalMax) * 100) : 0;
+
+                                        return (
+                                            <TableRow
+                                                key={s.id}
+                                                className="hover:bg-muted/50 transition-colors border-b border-border last:border-0 group"
+                                            >
+                                                <TableCell className="py-4 font-medium">
+                                                    {s.name}
+                                                </TableCell>
+                                                <TableCell className="py-4 text-center">
+                                                    <div className="flex items-center justify-center gap-2">
+                                                        <Input
+                                                            type="number"
+                                                            min={0}
+                                                            max={limits.objectiveMax}
+                                                            className="h-8 w-24 text-center"
+                                                            value={manualObjectiveMarks[s.id] ?? ""}
+                                                            onChange={(e) =>
+                                                                setManualObjectiveMarks((prev) => ({
+                                                                    ...prev,
+                                                                    [s.id]: e.target.value,
+                                                                }))
+                                                            }
+                                                            placeholder={`0-${limits.objectiveMax}`}
+                                                            title={
+                                                                objectiveMark !== null
+                                                                    ? `Markah scan: ${objectiveMark}`
+                                                                    : "Masukkan markah objektif manual"
+                                                            }
+                                                        />
+                                                        <Button
+                                                            type="button"
+                                                            variant="outline"
+                                                            size="icon"
+                                                            className="h-8 w-8 border-emerald-500 bg-background text-emerald-600 hover:bg-emerald-50 hover:text-emerald-700"
+                                                            onClick={() => openOmrPage(s.id)}
+                                                            disabled={!selectedAssignment || !selectedExamId}
+                                                            title="Imbas OMR"
+                                                            aria-label={`Imbas OMR untuk ${s.name}`}
+                                                        >
+                                                            <Camera className="h-4 w-4" />
+                                                        </Button>
+                                                    </div>
+                                                </TableCell>
+                                                <TableCell className="py-4 text-center">
+                                                    <Input
+                                                        type="number"
+                                                        min={0}
+                                                        max={limits.subjectiveMax}
+                                                        className="w-28 mx-auto text-center"
+                                                        value={subjectiveMarks[s.id] ?? ""}
+                                                        onChange={(e) =>
+                                                            setSubjectiveMarks((prev) => ({
+                                                                ...prev,
+                                                                [s.id]: e.target.value,
+                                                            }))
+                                                        }
+                                                        placeholder={`0-${limits.subjectiveMax}`}
+                                                    />
+                                                </TableCell>
+                                                <TableCell className="py-4 text-center font-medium">
+                                                    {totalMark} / {totalMax}
+                                                </TableCell>
+                                                <TableCell className="py-4 text-center font-medium pr-6">
+                                                    {totalPercent}%
+                                                </TableCell>
+                                            </TableRow>
+                                        );
+                                    })}
 
                                     {!loading && students.length === 0 && (
                                         <TableRow>
                                             <TableCell
-                                                colSpan={3}
-                                                className="text-center text-muted-foreground py-10"
+                                                colSpan={5}
+                                                className="text-center text-muted-foreground py-16"
                                             >
                                                 Tiada pelajar.
                                             </TableCell>
@@ -734,6 +905,7 @@ export default function SubjectTeacherPage() {
                                     )}
                                 </TableBody>
                             </Table>
+                            </div>
                         </div>
                     </CardContent>
                 </Card>

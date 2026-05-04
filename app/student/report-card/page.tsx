@@ -140,7 +140,7 @@ export default function ReportCardPage() {
                         <p><b>Pencapaian Gred Keseluruhan</b> : {summary.gradeSummary}</p>
                         <p><b>Nama Guru Kelas</b> : {student.classTeacher}</p>
                         <p>
-                            <b>Comment</b> :{" "}
+                            <b>Komen</b> :{" "}
                             <span className="italic">
                                 {summary.comment}
                             </span>

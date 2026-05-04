@@ -37,7 +37,7 @@ export async function POST(req: Request) {
         }
 
         if (teacher_id !== guard.session.user_id) {
-            return NextResponse.json({ message: "Forbidden" }, { status: 403 });
+            return NextResponse.json({ message: "Akses ditolak" }, { status: 403 });
         }
 
         // Verify class teacher and fetch class
@@ -119,7 +119,7 @@ export async function POST(req: Request) {
             return NextResponse.json(
                 {
                     message:
-                        "Markah belum diluluskan sepenuhnya. Sila pastikan semua subjek untuk kelas ini sudah approved oleh Penyelaras.",
+                        "Markah belum diluluskan sepenuhnya. Sila pastikan semua subjek untuk kelas ini sudah diluluskan oleh Penyelaras.",
                     pending: pendingOrRejected.length,
                 },
                 { status: 409 }
@@ -145,7 +145,7 @@ export async function POST(req: Request) {
             return NextResponse.json(
                 {
                     message:
-                        "Sebahagian pelajar tiada keputusan approved untuk peperiksaan ini. Tidak boleh jana report card.",
+                        "Sebahagian pelajar tiada keputusan diluluskan untuk peperiksaan ini. Tidak boleh jana kad laporan.",
                     missing_students: missing.slice(0, 10),
                 },
                 { status: 409 }
@@ -246,7 +246,7 @@ export async function POST(req: Request) {
     } catch (err: any) {
         console.error("POST report-cards generate FAILED:", err);
         return NextResponse.json(
-            { message: err.message || "Server error" },
+            { message: err.message || "Ralat pelayan" },
             { status: 500 }
         );
     }

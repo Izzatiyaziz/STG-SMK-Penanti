@@ -14,7 +14,7 @@ export async function GET(
 
         if (!classId) {
             return NextResponse.json(
-                { error: "Class ID missing" },
+                { error: "ID kelas tiada" },
                 { status: 400 }
             );
         }
@@ -28,7 +28,7 @@ export async function GET(
 
         if (classErr || !cls) {
             return NextResponse.json(
-                { error: "Class not found" },
+                { error: "Kelas tidak dijumpai" },
                 { status: 404 }
             );
         }
@@ -56,6 +56,6 @@ export async function GET(
         });
     } catch (err) {
         console.error("CLASS DETAIL API ERROR:", err);
-        return NextResponse.json({ error: "Server error" }, { status: 500 });
+        return NextResponse.json({ error: "Ralat pelayan" }, { status: 500 });
     }
 }

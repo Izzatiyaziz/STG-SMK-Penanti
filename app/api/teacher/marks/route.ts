@@ -32,7 +32,7 @@ export async function POST(req: Request) {
         }
 
         if (teacher_id !== guard.session.user_id) {
-            return NextResponse.json({ message: "Forbidden" }, { status: 403 });
+            return NextResponse.json({ message: "Akses ditolak" }, { status: 403 });
         }
 
         const { data: assignment, error: assignErr } = await supabase
@@ -47,7 +47,7 @@ export async function POST(req: Request) {
             return NextResponse.json({ message: assignErr.message }, { status: 500 });
         }
         if (!Array.isArray(assignment) || assignment.length === 0) {
-            return NextResponse.json({ message: "Forbidden" }, { status: 403 });
+            return NextResponse.json({ message: "Akses ditolak" }, { status: 403 });
         }
 
         // Enforce deadline (per exam + subject settings)
@@ -70,6 +70,7 @@ export async function POST(req: Request) {
             subjectSettingsRaw && typeof subjectSettingsRaw === "object"
                 ? (subjectSettingsRaw as Record<string, unknown>)
                 : {};
+        const objectiveMax = Number(subjectSettings.objective_max ?? 0);
 
         const deadlineRaw = subjectSettings.deadline;
         const deadline =
@@ -97,14 +98,26 @@ export async function POST(req: Request) {
         }
 
         const studentIds = (students ?? [])
-            .map((s: any) => s.student_id as string)
+            .map((s: { student_id?: unknown }) => String(s.student_id ?? "").trim())
             .filter(Boolean);
 
         const markByStudent = new Map<string, number>();
+        const objectiveByStudent = new Map<string, number>();
         for (const m of marks) {
             const sid = String(m?.student_id ?? "").trim();
             const val = Number(m?.subjective_mark ?? 0);
+            const objectiveVal = Number(m?.objective_mark ?? 0);
             if (sid) markByStudent.set(sid, val);
+            if (sid && Number.isFinite(objectiveVal)) objectiveByStudent.set(sid, objectiveVal);
+        }
+
+        for (const [studentId, objectiveMark] of objectiveByStudent) {
+            if (objectiveMark < 0 || (objectiveMax > 0 && objectiveMark > objectiveMax)) {
+                return NextResponse.json(
+                    { message: `Markah objektif tidak sah untuk pelajar ${studentId}` },
+                    { status: 400 }
+                );
+            }
         }
 
         // Save subjective marks + create/update results
@@ -148,16 +161,37 @@ export async function POST(req: Request) {
                 subjective_id = created?.subjective_id ?? null;
             }
 
-            // objective from OMR scans if exists
-            const { data: omr } = await supabase
-                .from("stg_omr_scans")
-                .select("omr_scan_id, objective_total_mark")
-                .eq("student_id", studentId)
-                .eq("subject_id", subject_id)
-                .eq("exam_id", exam_id)
-                .order("scan_date", { ascending: false })
-                .limit(1)
-                .maybeSingle();
+            const manualObjective = objectiveByStudent.get(studentId);
+            let omr: { omr_scan_id?: string | null; objective_total_mark?: number | null } | null = null;
+
+            if (manualObjective !== undefined) {
+                const { data: manualScan, error: manualScanErr } = await supabase
+                    .from("stg_omr_scans")
+                    .insert({
+                        student_id: studentId,
+                        subject_id,
+                        exam_id,
+                        objective_total_mark: manualObjective,
+                        scan_date: new Date().toISOString(),
+                    })
+                    .select("omr_scan_id, objective_total_mark")
+                    .single();
+
+                if (manualScanErr) throw manualScanErr;
+                omr = manualScan;
+            } else {
+                // objective from OMR scans if exists
+                const { data: latestOmr } = await supabase
+                    .from("stg_omr_scans")
+                    .select("omr_scan_id, objective_total_mark")
+                    .eq("student_id", studentId)
+                    .eq("subject_id", subject_id)
+                    .eq("exam_id", exam_id)
+                    .order("scan_date", { ascending: false })
+                    .limit(1)
+                    .maybeSingle();
+                omr = latestOmr;
+            }
 
             const objective_total = Number(omr?.objective_total_mark ?? 0);
             const total = objective_total + subjective_mark;
@@ -199,10 +233,11 @@ export async function POST(req: Request) {
         }
 
         return NextResponse.json({ success: true });
-    } catch (err: any) {
+    } catch (err: unknown) {
         console.error("POST teacher marks FAILED:", err);
+        const message = err instanceof Error ? err.message : "Ralat pelayan";
         return NextResponse.json(
-            { message: err.message || "Server error" },
+            { message },
             { status: 500 }
         );
     }

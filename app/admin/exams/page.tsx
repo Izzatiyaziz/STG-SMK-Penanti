@@ -460,7 +460,7 @@ export default function ExamsPage() {
                             </div>
 
                             <div className="space-y-2">
-                                <Label>Tarikh Deadline</Label>
+                                <Label>Tarikh Akhir</Label>
                                 <Input
                                     type="date"
                                     value={deadline}

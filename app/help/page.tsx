@@ -8,7 +8,7 @@ export default function HelpPage() {
             <div className="max-w-7xl mx-auto">
                 <Card className="shadow-lg border border-border/50">
                     <CardHeader>
-                        <CardTitle>Help</CardTitle>
+                        <CardTitle>Bantuan</CardTitle>
                     </CardHeader>
                     <CardContent className="text-sm text-muted-foreground space-y-2">
                         <div>

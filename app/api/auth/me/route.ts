@@ -25,7 +25,7 @@ export async function POST() {
 
             if (error || !data) {
                 return NextResponse.json(
-                    { message: "User not found" },
+                    { message: "Pengguna tidak dijumpai" },
                     { status: 401 }
                 );
             }
@@ -61,7 +61,7 @@ export async function POST() {
 
             if (error || !data) {
                 return NextResponse.json(
-                    { message: "User not found" },
+                    { message: "Pengguna tidak dijumpai" },
                     { status: 404 }
                 );
             }
@@ -84,7 +84,7 @@ export async function POST() {
 
             if (error || !teacher) {
                 return NextResponse.json(
-                    { message: "User not found" },
+                    { message: "Pengguna tidak dijumpai" },
                     { status: 404 }
                 );
             }
@@ -119,9 +119,9 @@ export async function POST() {
             });
         }
 
-        return NextResponse.json({ message: "Invalid role" }, { status: 400 });
+        return NextResponse.json({ message: "Peranan tidak sah" }, { status: 400 });
     } catch (err) {
         console.error("FETCH ME ERROR:", err);
-        return NextResponse.json({ message: "Server error" }, { status: 500 });
+        return NextResponse.json({ message: "Ralat pelayan" }, { status: 500 });
     }
 }

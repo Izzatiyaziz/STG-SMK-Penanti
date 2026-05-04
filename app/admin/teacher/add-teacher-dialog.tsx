@@ -11,28 +11,10 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-
-import {
-  Select,
-  SelectTrigger,
-  SelectValue,
-  SelectContent,
-  SelectItem,
-} from "@/components/ui/select";
-
-import {
-  UserPlus,
-  Loader2,
-  User,
-  Mail,
-  Phone,
-  BookOpen,
-  RefreshCw,
-  Copy,
-} from "lucide-react"; //
+import { UserPlus, Loader2, User, Mail, Phone } from "lucide-react";
 
 interface AddTeacherDialogProps {
   onSuccess: () => void;
@@ -52,40 +34,68 @@ const ROLE_OPTIONS: { value: TeacherRoleName; label: string }[] = [
   { value: "subject teacher", label: "Guru Subjek" },
 ];
 
-function generateTeacherUsername() {
-  const code = Math.random().toString(16).slice(2, 8).toUpperCase();
-  return `PNT-${code}`; // example: PNT-8F3A12
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const PHONE_REGEX = /^(\+?6?01)[0-9]-?\d{7,8}$/;
+const PHONE_MAX_DIGITS = 12;
+const PHONE_MAX_LENGTH = 14;
+
+function formatPhoneInput(value: string) {
+  let digitCount = 0;
+  let result = "";
+
+  for (const char of value.replace(/[^\d+-]/g, "")) {
+    if (/\d/.test(char)) {
+      if (digitCount >= PHONE_MAX_DIGITS) continue;
+      digitCount += 1;
+    }
+    result += char;
+  }
+
+  return result.slice(0, PHONE_MAX_LENGTH);
 }
 
-function generatePassword() {
-  return Math.random().toString(36).slice(-4) +
-         Math.random().toString(36).slice(-4).toUpperCase() +
-         "@1";
+function generateTeacherUsername() {
+  const code = Math.random().toString(16).slice(2, 8).toUpperCase();
+  return `PNT-${code}`;
 }
 
 export function AddTeacherDialog({ onSuccess, children }: AddTeacherDialogProps) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [generatedId, setGeneratedId] = useState("");
-  const [generatedPwd, setGeneratedPwd] = useState("");
-  const [role, setRole] = useState<TeacherRoleName | "">("");
+  const [roles, setRoles] = useState<TeacherRoleName[]>([]);
+  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [emailTouched, setEmailTouched] = useState(false);
+  const [phoneTouched, setPhoneTouched] = useState(false);
+  const [emailFocused, setEmailFocused] = useState(false);
+  const [phoneFocused, setPhoneFocused] = useState(false);
 
-  
-  // ✅ COPY FUNCTION
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text);
-    toast.success("Berjaya disalin!");
+  const emailError =
+    emailTouched && !emailFocused && email.trim() && !EMAIL_REGEX.test(email.trim())
+      ? "Format email tidak sah. Contoh: guru@penanti.edu.my"
+      : "";
+  const phoneError =
+    phoneTouched && !phoneFocused && phone.trim() && !PHONE_REGEX.test(phone.trim())
+      ? "Format tidak sah. Contoh: 0123456789, 012-3456789 atau +60123456789"
+      : "";
+
+  const toggleRole = (value: TeacherRoleName, checked: boolean) => {
+    setRoles((current) =>
+      checked ? [...current, value] : current.filter((role) => role !== value)
+    );
   };
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
 
-    if (!role) {
-      toast.error("Sila pilih jawatan guru");
+    if (roles.length === 0) {
+      toast.error("Sila pilih sekurang-kurangnya satu jawatan guru");
       return;
     }
-    if (!generatedId || !generatedPwd) {
-      toast.error("ID atau password belum dijana");
+
+    if (!generatedId) {
+      toast.error("ID Staff belum dijana");
       return;
     }
 
@@ -102,9 +112,19 @@ export function AddTeacherDialog({ onSuccess, children }: AddTeacherDialogProps)
       return;
     }
 
-    // ✅ Auto-create username for database
-    //const username = generateTeacherUsername();
-    //const username = generatedId;
+    if (email && !EMAIL_REGEX.test(email)) {
+      setEmailTouched(true);
+      toast.error("Format email tidak sah");
+      setLoading(false);
+      return;
+    }
+
+    if (phone && !PHONE_REGEX.test(phone)) {
+      setPhoneTouched(true);
+      toast.error("Format no. telefon tidak sah");
+      setLoading(false);
+      return;
+    }
 
     try {
       const res = await fetch("/api/admin/teacher", {
@@ -112,12 +132,11 @@ export function AddTeacherDialog({ onSuccess, children }: AddTeacherDialogProps)
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           username: generatedId,
-          password: generatedPwd,
           fullname,
           email: email || null,
           phone_number: phone || null,
-          role_name: role,
-          is_first_login: true, // ✅ IMPORTANT
+          role_names: roles,
+          is_first_login: true,
         }),
       });
 
@@ -128,14 +147,10 @@ export function AddTeacherDialog({ onSuccess, children }: AddTeacherDialogProps)
         return;
       }
 
-      // ✅ SHOW staff ID + temp password
-      toast.success("Akaun berjaya dibuat", {
-       // description: `ID Staff: ${generatedId} | Password: ${generatedPwd}`,
-      });
-
+      toast.success("Akaun berjaya dibuat");
       setOpen(false);
       onSuccess?.();
-    } catch (error) {
+    } catch {
       toast.error("Ralat rangkaian. Sila cuba lagi.");
     } finally {
       setLoading(false);
@@ -143,14 +158,20 @@ export function AddTeacherDialog({ onSuccess, children }: AddTeacherDialogProps)
   }
 
   return (
-    <Dialog open={open} 
-    onOpenChange={(val) => {
+    <Dialog
+      open={open}
+      onOpenChange={(val) => {
         setOpen(val);
 
-        // ✅ GENERATE staff ID bila buka dialog
         if (val) {
           setGeneratedId(generateTeacherUsername());
-          setGeneratedPwd(generatePassword());
+          setRoles([]);
+          setEmail("");
+          setPhone("");
+          setEmailTouched(false);
+          setPhoneTouched(false);
+          setEmailFocused(false);
+          setPhoneFocused(false);
         }
       }}
     >
@@ -181,50 +202,16 @@ export function AddTeacherDialog({ onSuccess, children }: AddTeacherDialogProps)
           </p>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-5">
-            {/* ✅ NEW: STAFF ID DISPLAY */}
-<div className="grid grid-cols-1 gap-4 rounded-xl bg-muted p-4 sm:grid-cols-2">
-            <div>
-              <Label className="text-xs">Staff ID</Label>
-              <div className="font-mono font-bold text-primary">
-                {generatedId}
-              </div>
-            </div>
-
-            <div>
-              <Label className="text-xs">Password</Label>
-
-              <div className="flex items-center gap-2">
-                <code className="font-mono font-bold text-primary">
-                  {generatedPwd}
-                </code>
-
-                {/* COPY */}
-                <button
-                  type="button"
-                  onClick={() => copyToClipboard(generatedPwd)}
-                >
-                  <Copy className="w-4 h-4" />
-                </button>
-
-                {/* REGENERATE */}
-                <button
-                  type="button"
-                  onClick={() => setGeneratedPwd(generatePassword())}
-                >
-                  <RefreshCw className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
+        <form onSubmit={handleSubmit} noValidate className="space-y-5">
+          <div className="rounded-xl bg-muted p-4">
+            <Label className="text-xs">Staff ID</Label>
+            <div className="font-mono font-bold text-primary">{generatedId}</div>
           </div>
 
-          {/* PERSONAL INFO */}
           <div className="space-y-4">
             <div className="flex items-center gap-2 mb-2">
               <User className="w-4 h-4 text-primary" />
-              <h3 className="font-semibold text-foreground">
-                Maklumat Peribadi
-              </h3>
+              <h3 className="font-semibold text-foreground">Maklumat Peribadi</h3>
             </div>
 
             <div className="grid gap-4">
@@ -250,10 +237,25 @@ export function AddTeacherDialog({ onSuccess, children }: AddTeacherDialogProps)
                   <Input
                     id="email"
                     name="email"
-                    type="email"
+                    type="text"
+                    inputMode="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    onFocus={() => setEmailFocused(true)}
+                    onBlur={() => {
+                      setEmailFocused(false);
+                      setEmailTouched(true);
+                    }}
                     placeholder="guru@penanti.edu.my"
-                    className="rounded-xl border-2 border-border/30 focus:border-primary/50 h-11"
+                    title="Masukkan format email yang sah"
+                    aria-invalid={Boolean(emailError)}
+                    className={`rounded-xl border-2 focus:border-primary/50 h-11 ${
+                      emailError ? "border-red-400" : "border-border/30"
+                    }`}
                   />
+                  {emailError && (
+                    <p className="text-xs font-medium text-red-600">{emailError}</p>
+                  )}
                 </div>
 
                 <div className="space-y-2">
@@ -264,39 +266,47 @@ export function AddTeacherDialog({ onSuccess, children }: AddTeacherDialogProps)
                   <Input
                     id="phone"
                     name="phone"
-                    placeholder="01X-XXXX XXX"
-                    className="rounded-xl border-2 border-border/30 focus:border-primary/50 h-11"
+                    value={phone}
+                    onChange={(e) => setPhone(formatPhoneInput(e.target.value))}
+                    onFocus={() => setPhoneFocused(true)}
+                    onBlur={() => {
+                      setPhoneFocused(false);
+                      setPhoneTouched(true);
+                    }}
+                    placeholder="0123456789"
+                    inputMode="tel"
+                    maxLength={PHONE_MAX_LENGTH}
+                    title="Masukkan nombor telefon Malaysia yang sah, contoh 0123456789"
+                    aria-invalid={Boolean(phoneError)}
+                    className={`rounded-xl border-2 focus:border-primary/50 h-11 ${
+                      phoneError ? "border-red-400" : "border-border/30"
+                    }`}
                   />
+                  {phoneError && (
+                    <p className="text-xs font-medium text-red-600">{phoneError}</p>
+                  )}
                 </div>
               </div>
             </div>
           </div>
 
-          {/* ROLE */}
           <div className="space-y-4">
             <div className="space-y-2">
               <Label className="text-sm font-medium">Jawatan</Label>
-
-              <Select
-                value={role}
-                onValueChange={(val) => setRole(val as TeacherRoleName)}
-              >
-                <SelectTrigger className="w-full rounded-xl border-2 border-border/30 focus:border-primary/50 h-11">
-                  <SelectValue placeholder="Pilih jawatan..." />
-                </SelectTrigger>
-
-                <SelectContent className="rounded-xl border-2 border-border">
-                  {ROLE_OPTIONS.map((r) => (
-                    <SelectItem key={r.value} value={r.value}>
-                      {r.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <div className="grid gap-3 rounded-xl border-2 border-border/30 p-3">
+                {ROLE_OPTIONS.map((r) => (
+                  <label key={r.value} className="flex items-center gap-3 text-sm">
+                    <Checkbox
+                      checked={roles.includes(r.value)}
+                      onCheckedChange={(checked) => toggleRole(r.value, checked === true)}
+                    />
+                    <span>{r.label}</span>
+                  </label>
+                ))}
+              </div>
             </div>
           </div>
 
-          {/* ACTION BUTTONS */}
           <div className="flex flex-col gap-3 pt-2 sm:flex-row">
             <Button
               type="button"
@@ -329,7 +339,7 @@ export function AddTeacherDialog({ onSuccess, children }: AddTeacherDialogProps)
 
           <div className="pt-2 border-t border-border/20">
             <p className="text-xs text-muted-foreground text-center">
-              Guru boleh tukar kata laluan pada log masuk pertama.
+              Password sementara akan dijana oleh sistem dan dihantar melalui email.
             </p>
           </div>
         </form>

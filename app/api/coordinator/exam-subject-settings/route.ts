@@ -54,7 +54,7 @@ export async function POST(req: Request) {
         }
 
         if (coordinator_teacher_id !== guard.session.user_id) {
-            return NextResponse.json({ message: "Forbidden" }, { status: 403 });
+            return NextResponse.json({ message: "Akses ditolak" }, { status: 403 });
         }
 
         const ok = await isCoordinatorForSubject({
@@ -62,7 +62,7 @@ export async function POST(req: Request) {
             subject_id,
         });
         if (!ok) {
-            return NextResponse.json({ message: "Forbidden" }, { status: 403 });
+            return NextResponse.json({ message: "Akses ditolak" }, { status: 403 });
         }
 
         const objective_questions = safeNumber(body?.objective_questions);
@@ -117,6 +117,6 @@ export async function POST(req: Request) {
         return NextResponse.json({ success: true, subject_settings: nextSubjectSettings });
     } catch (err) {
         console.error("POST coordinator exam-subject-settings FAILED:", err);
-        return NextResponse.json({ message: "Server error" }, { status: 500 });
+        return NextResponse.json({ message: "Ralat pelayan" }, { status: 500 });
     }
 }

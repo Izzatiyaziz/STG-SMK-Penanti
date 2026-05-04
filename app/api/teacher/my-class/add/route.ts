@@ -31,7 +31,7 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: assignmentErr.message }, { status: 500 });
         }
         if (!Array.isArray(assignment) || assignment.length === 0) {
-            return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+            return NextResponse.json({ error: "Akses ditolak" }, { status: 403 });
         }
 
         const { error } = await supabase
@@ -46,6 +46,6 @@ export async function POST(req: Request) {
         return NextResponse.json({ success: true });
     } catch (err) {
         console.error("POST my-class/add FAILED:", err);
-        return NextResponse.json({ error: "Server error" }, { status: 500 });
+        return NextResponse.json({ error: "Ralat pelayan" }, { status: 500 });
     }
 }

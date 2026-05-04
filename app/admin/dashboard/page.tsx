@@ -28,7 +28,7 @@ const LastUpdatedTime = () => {
     const interval = setInterval(update, 60000);
     return () => clearInterval(interval);
   }, []);
-  return <span className="font-medium text-primary">{time || "Loading..."}</span>;
+  return <span className="font-medium text-primary">{time || "Memuatkan..."}</span>;
 };
 
 export default function AdminDashboardPage() {

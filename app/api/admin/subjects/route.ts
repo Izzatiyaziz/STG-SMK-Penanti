@@ -109,7 +109,7 @@ export async function POST(req: Request) {
 			{ status: 201 },
 		);
 	} catch {
-		return NextResponse.json({ message: "Server error" }, { status: 500 });
+		return NextResponse.json({ message: "Ralat pelayan" }, { status: 500 });
 	}
 }
 
@@ -123,7 +123,7 @@ export async function PUT(req: Request) {
 
 		if (!subject_id || !subject_name) {
 			return NextResponse.json(
-				{ message: "Subject ID dan nama subjek diperlukan" },
+				{ message: "ID subjek dan nama subjek diperlukan" },
 				{ status: 400 },
 			);
 		}
@@ -140,7 +140,7 @@ export async function PUT(req: Request) {
 
 		return NextResponse.json({ message: "Subjek berjaya dikemas kini" });
 	} catch {
-		return NextResponse.json({ message: "Server error" }, { status: 500 });
+		return NextResponse.json({ message: "Ralat pelayan" }, { status: 500 });
 	}
 }
 
@@ -159,6 +159,21 @@ export async function DELETE(req: Request) {
 			);
 		}
 
+		await supabase
+			.from("stg_subject_coordinators")
+			.delete()
+			.eq("subject_id", subject_id);
+
+		await supabase
+			.from("stg_teacher_subject")
+			.delete()
+			.eq("subject_id", subject_id);
+
+		await supabase
+			.from("stg_answer_schema")
+			.delete()
+			.eq("subject_id", subject_id);
+
 		const { error } = await supabase
 			.from("stg_subjects")
 			.delete()
@@ -166,11 +181,15 @@ export async function DELETE(req: Request) {
 
 		if (error) {
 			console.error("DELETE SUBJECT ERROR:", error);
-			return NextResponse.json({ message: error.message }, { status: 500 });
+			const message =
+				error.code === "23503"
+					? "Subjek ini masih digunakan oleh rekod markah, OMR, keputusan, atau laporan dan tidak boleh dipadam."
+					: error.message;
+			return NextResponse.json({ message }, { status: 500 });
 		}
 
 		return NextResponse.json({ message: "Subjek berjaya dipadam" });
 	} catch {
-		return NextResponse.json({ message: "Server error" }, { status: 500 });
+		return NextResponse.json({ message: "Ralat pelayan" }, { status: 500 });
 	}
 }

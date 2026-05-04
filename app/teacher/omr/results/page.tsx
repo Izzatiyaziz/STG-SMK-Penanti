@@ -114,9 +114,9 @@ export default function OMRResultsPage() {
                   <Badge variant="outline">Kosong: {summary.blank}</Badge>
                   <Badge variant="outline">Ambigu: {summary.ambiguous}</Badge>
                   {summary.persisted ? (
-                    <Badge>OMR Scan Saved</Badge>
+                    <Badge>Imbasan OMR Disimpan</Badge>
                   ) : (
-                    <Badge variant="destructive">OMR Scan Not Saved</Badge>
+                    <Badge variant="destructive">Imbasan OMR Tidak Disimpan</Badge>
                   )}
                   {summary.resultSaved ? (
                     <Badge>Saved to Result Table</Badge>

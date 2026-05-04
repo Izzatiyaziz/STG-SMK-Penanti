@@ -39,7 +39,7 @@ export async function GET(req: Request) {
             return NextResponse.json({ message: assignmentErr.message }, { status: 500 });
         }
         if (!Array.isArray(assignment) || assignment.length === 0) {
-            return NextResponse.json({ message: "Forbidden" }, { status: 403 });
+            return NextResponse.json({ message: "Akses ditolak" }, { status: 403 });
         }
 
         const { data: students } = await supabaseAdmin

@@ -29,7 +29,7 @@ export async function GET() {
 
     return NextResponse.json(data ?? [], { status: 200 });
   } catch {
-    return NextResponse.json({ error: "Server error" }, { status: 500 });
+    return NextResponse.json({ error: "Ralat pelayan" }, { status: 500 });
   }
 }
 
@@ -123,7 +123,7 @@ export async function POST(req: Request) {
     );
   } catch (err: any) {
     console.error("POST subject-coordinator FAILED:", err);
-    return NextResponse.json({ error: "Server error" }, { status: 500 });
+    return NextResponse.json({ error: "Ralat pelayan" }, { status: 500 });
   }
   
 }
@@ -157,10 +157,10 @@ export async function DELETE(req: Request) {
     }
 
     return NextResponse.json(
-      { success: true, message: "Coordinator berjaya dipadam ✅" },
+      { success: true, message: "Penyelaras berjaya dipadam ✅" },
       { status: 200 }
     );
   } catch {
-    return NextResponse.json({ error: "Server error" }, { status: 500 });
+    return NextResponse.json({ error: "Ralat pelayan" }, { status: 500 });
   }
 }

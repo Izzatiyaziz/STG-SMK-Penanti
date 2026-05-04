@@ -77,6 +77,7 @@ export async function GET(req: Request) {
           username,
           fullname,
           email,
+          phone_number,
           stg_teacher_roles (
             stg_roles (
               role_name
@@ -95,6 +96,7 @@ export async function GET(req: Request) {
                 name: t.fullname,
                 identifier: t.username ?? t.teacher_id,
                 email: t.email,
+                phone_number: t.phone_number,
                 roles: (t.stg_teacher_roles || []).map(
                     (tr: any) => tr?.stg_roles?.role_name
                 ),

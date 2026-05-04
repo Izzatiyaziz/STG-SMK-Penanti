@@ -39,6 +39,7 @@ type UserProfile = {
 	name: string;
 	email: string;
 	avatar: string;
+	role?: string;
 	roles?: string[];
 };
 
@@ -207,7 +208,7 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
 				{documents.length > 0 && <NavDocuments items={documents} />}
 			</SidebarContent>
 			<SidebarFooter>
-				<NavUser user={user} />
+				<NavUser user={{ ...user, role: session.role || session.userType }} />
 			</SidebarFooter>
 		</Sidebar>
 	);

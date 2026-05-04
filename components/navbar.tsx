@@ -24,9 +24,9 @@ interface NavItem {
 }
 
 const navItems: NavItem[] = [
-  { name: "Home", href: "/", icon: <Home className="h-4 w-4" /> },
+  { name: "Laman Utama", href: "/", icon: <Home className="h-4 w-4" /> },
   { name: "Dashboard", href: "/dashboard", icon: <Settings className="h-4 w-4" /> },
-  { name: "Profile", href: "/profile", icon: <User className="h-4 w-4" /> },
+  { name: "Profil", href: "/profile", icon: <User className="h-4 w-4" /> },
   { name: "Settings", href: "/settings", icon: <Settings className="h-4 w-4" /> },
 ];
 
@@ -91,7 +91,7 @@ export function Navbar() {
             <div className="relative">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
-                placeholder="Search..."
+                placeholder="Cari..."
                 className="pl-10 w-[200px] lg:w-[300px]"
               />
             </div>
@@ -117,7 +117,7 @@ export function Navbar() {
                 <DropdownMenuSeparator />
                 <DropdownMenuItem>
                   <Link href="/profile" className="w-full">
-                    Profile
+                    Profil
                   </Link>
                 </DropdownMenuItem>
                 <DropdownMenuItem>
@@ -171,7 +171,7 @@ function MobileNav() {
       {/* Search Bar in Mobile */}
       <div className="relative mb-6">
         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-        <Input placeholder="Search..." className="pl-10" />
+        <Input placeholder="Cari..." className="pl-10" />
       </div>
 
       {/* Mobile Navigation Items */}
@@ -211,7 +211,7 @@ function MobileNav() {
           <Button variant="outline" className="w-full justify-start" asChild>
             <Link href="/profile">
               <User className="mr-2 h-4 w-4" />
-              Profile
+              Profil
             </Link>
           </Button>
           <Button variant="outline" className="w-full justify-start" asChild>

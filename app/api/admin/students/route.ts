@@ -110,7 +110,7 @@ export async function GET(req: Request) {
     } catch (err: any) {
         console.error("GET STUDENTS ERROR:", err);
         return NextResponse.json(
-            { success: false, message: "Server error", error: err.message },
+            { success: false, message: "Ralat pelayan", error: err.message },
             { status: 500 }
         );
     }
@@ -170,7 +170,7 @@ export async function POST(req: Request) {
     } catch (err: any) {
         console.error("ADD STUDENT ERROR:", err);
         return NextResponse.json(
-            { message: "Server error", error: err.message },
+            { message: "Ralat pelayan", error: err.message },
             { status: 500 }
         );
     }
@@ -186,7 +186,7 @@ export async function PUT(req: Request) {
 
         if (!id) {
             return NextResponse.json(
-                { message: "Student ID required" },
+                { message: "ID pelajar diperlukan" },
                 { status: 400 }
             );
         }
@@ -230,7 +230,7 @@ export async function PUT(req: Request) {
     } catch (err: any) {
         console.error("UPDATE STUDENT ERROR:", err);
         return NextResponse.json(
-            { message: "Server error", error: err.message },
+            { message: "Ralat pelayan", error: err.message },
             { status: 500 }
         );
     }
@@ -246,7 +246,7 @@ export async function DELETE(req: Request) {
 
         if (!id) {
             return NextResponse.json(
-                { message: "Student ID required" },
+                { message: "ID pelajar diperlukan" },
                 { status: 400 }
             );
         }
@@ -271,7 +271,7 @@ export async function DELETE(req: Request) {
     } catch (err: any) {
         console.error("DELETE STUDENT ERROR:", err);
         return NextResponse.json(
-            { message: "Server error", error: err.message },
+            { message: "Ralat pelayan", error: err.message },
             { status: 500 }
         );
     }

@@ -111,18 +111,25 @@ export default function ClassTeacherReportPage() {
 		async function loadExams() {
 			try {
 				const res = await fetch("/api/admin/exams", { cache: "no-store" });
-				const json = await res.json();
-				const list: Exam[] = (json ?? [])
-					.map((e: any) => ({
-						id: String(e.id ?? ""),
-						name: String(e.name ?? ""),
-						academic_year: String(e.academic_year ?? ""),
-					}))
+				const json: unknown = await res.json();
+				const list: Exam[] = (Array.isArray(json) ? json : [])
+					.map((entry) => {
+						const e = entry as {
+							id?: unknown;
+							name?: unknown;
+							academic_year?: unknown;
+						};
+						return {
+							id: String(e.id ?? ""),
+							name: String(e.name ?? ""),
+							academic_year: String(e.academic_year ?? ""),
+						};
+					})
 					.filter((e: Exam) => Boolean(e.id));
 
 				if (cancelled) return;
 				setExams(list);
-				if (!examId && list.length > 0) setExamId(list[0].id);
+				setExamId((current) => current || list[0]?.id || "");
 			} catch {
 				if (!cancelled) setExams([]);
 			}
@@ -310,7 +317,7 @@ export default function ClassTeacherReportPage() {
 						disabled={generating || loading || !examId}
 					>
 						<FileText className="w-4 h-4 mr-2" />
-						{generating ? "Menjana..." : "Jana Report Card (Semua)"}
+						{generating ? "Menjana..." : "Jana Kad Laporan (Semua)"}
 					</Button>
 				</div>
 
@@ -353,7 +360,7 @@ export default function ClassTeacherReportPage() {
 
 							<div className="p-4 rounded-lg bg-muted/30 border">
 								<p className="text-sm italic">
-									{student.comment || "Comment belum diisi."}
+									{student.comment || "Komen belum diisi."}
 								</p>
 							</div>
 
@@ -366,7 +373,7 @@ export default function ClassTeacherReportPage() {
 										setCommentText(student.comment || "");
 									}}
 								>
-									Comment (Manual)
+									Komen (Manual)
 								</Button>
 							</div>
 						</CardContent>
@@ -376,8 +383,8 @@ export default function ClassTeacherReportPage() {
 				{!loading && students.length === 0 && (
 					<Card className="shadow-lg border border-border/50">
 						<CardContent className="p-6 text-sm text-muted-foreground">
-							Belum ada report card untuk peperiksaan ini. Klik{" "}
-							<b>Jana Report Card (Semua)</b> selepas semua markah sudah approved.
+							Belum ada kad laporan untuk peperiksaan ini. Klik{" "}
+							<b>Jana Kad Laporan (Semua)</b> selepas semua markah sudah diluluskan.
 						</CardContent>
 					</Card>
 				)}
@@ -388,9 +395,9 @@ export default function ClassTeacherReportPage() {
 				>
 					<DialogContent className="sm:max-w-[520px] rounded-xl">
 						<DialogHeader>
-							<DialogTitle>Comment Report Card</DialogTitle>
+							<DialogTitle>Komen Kad Laporan</DialogTitle>
 							<DialogDescription>
-								Comment akan disimpan untuk pelajar ini bagi peperiksaan yang dipilih.
+								Komen akan disimpan untuk pelajar ini bagi peperiksaan yang dipilih.
 							</DialogDescription>
 						</DialogHeader>
 
@@ -400,7 +407,7 @@ export default function ClassTeacherReportPage() {
 						</div>
 
 						<div className="space-y-2">
-							<div className="text-sm text-muted-foreground">Comment</div>
+							<div className="text-sm text-muted-foreground">Komen</div>
 							<Input
 								value={commentText}
 								onChange={(e) => setCommentText(e.target.value)}

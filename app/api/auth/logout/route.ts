@@ -36,6 +36,6 @@ export async function POST(req: Request) {
         return response;
     } catch (err) {
         console.error("LOGOUT ERROR:", err);
-        return NextResponse.json({ message: "Server error" }, { status: 500 });
+        return NextResponse.json({ message: "Ralat pelayan" }, { status: 500 });
     }
 }

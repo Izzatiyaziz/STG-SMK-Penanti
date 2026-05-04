@@ -341,7 +341,7 @@ export default function AnswerSchemesPage() {
 							<div className="flex items-center gap-2">
 								<Badge variant="outline">{objectiveQuestions || 0}</Badge>
 								{loading && (
-									<span className="text-sm text-muted-foreground">Loading...</span>
+									<span className="text-sm text-muted-foreground">Memuatkan...</span>
 								)}
 							</div>
 						</div>

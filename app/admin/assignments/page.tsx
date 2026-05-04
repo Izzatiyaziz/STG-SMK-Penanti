@@ -276,7 +276,7 @@ export default function AdminAssignmentsPage() {
                                             colSpan={4}
                                             className="text-center text-muted-foreground py-10"
                                         >
-                                            Loading...
+                                            Memuatkan...
                                         </TableCell>
                                     </TableRow>
                                 )}

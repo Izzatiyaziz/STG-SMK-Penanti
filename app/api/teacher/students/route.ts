@@ -33,7 +33,7 @@ export async function GET(req: Request) {
             (!Array.isArray(classTeacher) || classTeacher.length === 0) &&
             (!Array.isArray(subjectTeacher) || subjectTeacher.length === 0)
         ) {
-            return NextResponse.json({ message: "Forbidden" }, { status: 403 });
+            return NextResponse.json({ message: "Akses ditolak" }, { status: 403 });
         }
 
         const { data, error } = await supabase

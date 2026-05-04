@@ -15,7 +15,7 @@ export default function AdminUsersPage() {
                     </div>
                     <div>
                         <h1 className="text-3xl font-bold tracking-tight">
-                            User Management
+                            Pengurusan Pengguna
                         </h1>
                         <p className="text-muted-foreground">
                             Urus Guru dan Pelajar dalam satu tempat.

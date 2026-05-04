@@ -172,7 +172,7 @@ export async function requireApiRole(
 
     if (!sessionHasRole(session, allowed)) {
         return {
-            response: NextResponse.json({ message: "Forbidden" }, { status: 403 }),
+            response: NextResponse.json({ message: "Akses ditolak" }, { status: 403 }),
         };
     }
 

@@ -38,7 +38,7 @@ export async function POST(req: Request) {
         }
 
         if (teacher_id !== guard.session.user_id) {
-            return NextResponse.json({ message: "Forbidden" }, { status: 403 });
+            return NextResponse.json({ message: "Akses ditolak" }, { status: 403 });
         }
 
         // Use approved results for report card
@@ -55,7 +55,7 @@ export async function POST(req: Request) {
 
         if (!results || results.length === 0) {
             return NextResponse.json(
-                { message: "Tiada keputusan approved untuk peperiksaan ini" },
+                { message: "Tiada keputusan diluluskan untuk peperiksaan ini" },
                 { status: 400 }
             );
         }
@@ -158,7 +158,7 @@ export async function POST(req: Request) {
     } catch (err: any) {
         console.error("POST report card comment FAILED:", err);
         return NextResponse.json(
-            { message: err.message || "Server error" },
+            { message: err.message || "Ralat pelayan" },
             { status: 500 }
         );
     }

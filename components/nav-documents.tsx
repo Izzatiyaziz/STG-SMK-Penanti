@@ -65,7 +65,7 @@ export function NavDocuments({ items }: { items: DocumentItem[] }) {
                                 <DropdownMenuSeparator />
                                 <DropdownMenuItem variant="destructive">
                                     <Trash />
-                                    <span>Delete</span>
+                                    <span>Padam</span>
                                 </DropdownMenuItem>
                             </DropdownMenuContent>
                         </DropdownMenu>

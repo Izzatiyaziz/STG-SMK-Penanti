@@ -47,7 +47,7 @@ export async function GET(req: Request) {
 		}
 
 		if (teacher_id !== guard.session.user_id) {
-			return NextResponse.json({ message: "Forbidden" }, { status: 403 });
+			return NextResponse.json({ message: "Akses ditolak" }, { status: 403 });
 		}
 
 		const ok = await isCoordinatorForSubject({
@@ -55,7 +55,7 @@ export async function GET(req: Request) {
 			subject_id,
 		});
 		if (!ok) {
-			return NextResponse.json({ message: "Forbidden" }, { status: 403 });
+			return NextResponse.json({ message: "Akses ditolak" }, { status: 403 });
 		}
 
 		const [{ data: subject }, { data: exam }, { data: coordTeacher }] =
@@ -321,6 +321,6 @@ export async function GET(req: Request) {
 		});
 	} catch (err) {
 		console.error("GET coordinator dashboard FAILED:", err);
-		return NextResponse.json({ message: "Server error" }, { status: 500 });
+		return NextResponse.json({ message: "Ralat pelayan" }, { status: 500 });
 	}
 }

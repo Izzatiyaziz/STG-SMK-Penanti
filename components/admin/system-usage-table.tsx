@@ -88,7 +88,7 @@ export default function AdminSystemUsageTable({
                     colSpan={6}
                     className="text-center text-muted-foreground py-10"
                   >
-                    Loading...
+                    Memuatkan...
                   </TableCell>
                 </TableRow>
               )}

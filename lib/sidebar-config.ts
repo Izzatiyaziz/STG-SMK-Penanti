@@ -37,7 +37,7 @@ export const teacherRoleConfig = {
                 icon: LayoutDashboard,
             },
             {
-                title: "Pelajar Kelas Saya",
+                title: "Pengurusan Pelajar Kelas",
                 url: "/teacher/my-class",
                 icon: Users,
             },
@@ -59,7 +59,7 @@ export const teacherRoleConfig = {
                 icon: LayoutDashboard,
             },
             {
-                title: "Subjek Saya",
+                title: "Pemarkahan Markah",
                 url: "/teacher/my-subject",
                 icon: Folder,
             },
@@ -86,20 +86,20 @@ export const teacherRoleConfig = {
                 icon: LayoutDashboard,
             },
             {
-                title: "Pending Approvals",
-                url: "/coordinator/approvals",
-                icon: ListChecks,
-            },
-            {
                 title: "Pengurusan Guru",
                 url: "/coordinator/assignments",
                 icon: LiaChalkboardTeacherSolid,
             },
             {
+                title: "Kelulusan",
+                url: "/coordinator/approvals",
+                icon: ListChecks,
+            },
+           /* {
                 title: "Imbasan OMR",
                 url: "/teacher/omr",
                 icon: Camera,
-            },
+            },*/
             {
                 title: "Laporan",
                 url: "/coordinator/reports",
@@ -132,10 +132,10 @@ export const sidebarConfig = {
                 url: "/admin/users",
                 icon: Users,
                 items: [
-                    {
+                    /*{
                         title: "Semua Pengguna",
                         url: "/admin/users",
-                    },
+                    },*/
                     {
                         title: "Guru",
                         url: "/admin/teacher",
@@ -156,11 +156,11 @@ export const sidebarConfig = {
                 url: "/admin/subjects",
                 icon: Folder,
             },
-            {
+           /* {
                 title: "Peperiksaan",
                 url: "/admin/exams",
                 icon: FileCheck2,
-            },
+            },*/
             // {
             //     title: "Assign Guru",
             //     url: "/admin/assignments",

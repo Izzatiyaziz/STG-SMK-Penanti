@@ -4,6 +4,14 @@ import { requireApiRole } from "@/lib/auth";
 
 export const runtime = "nodejs";
 
+type StudentRow = {
+    student_id: string;
+    fullname: string | null;
+    ic_number: string | null;
+    level: string | number | null;
+    enrollment_date: string | null;
+};
+
 export async function GET(req: Request) {
     try {
         const guard = await requireApiRole("class teacher");
@@ -20,7 +28,7 @@ export async function GET(req: Request) {
         // Available students = same level and not assigned to any class
         const { data, error } = await supabase
             .from("stg_students")
-            .select("student_id, fullname, ic_number")
+            .select("student_id, fullname, ic_number, level, enrollment_date")
             .eq("level", grade)
             .is("class_id", null)
             .order("fullname", { ascending: true });
@@ -30,10 +38,12 @@ export async function GET(req: Request) {
         }
 
         return NextResponse.json(
-            (data ?? []).map((s: any) => ({
+            ((data ?? []) as StudentRow[]).map((s) => ({
                 id: s.student_id,
                 name: s.fullname,
                 identifier: s.ic_number,
+                level: s.level ? String(s.level) : null,
+                enrollment_date: s.enrollment_date ?? null,
             }))
         );
     } catch (err) {

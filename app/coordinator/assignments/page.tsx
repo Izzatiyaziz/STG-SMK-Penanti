@@ -4,7 +4,34 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+	Dialog,
+	DialogContent,
+	DialogFooter,
+	DialogHeader,
+	DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+	Pagination,
+	PaginationContent,
+	PaginationEllipsis,
+	PaginationItem,
+	PaginationLink,
+	PaginationNext,
+	PaginationPrevious,
+} from "@/components/ui/pagination";
+import {
+	Select,
+	SelectContent,
+	SelectItem,
+	SelectTrigger,
+	SelectValue,
+} from "@/components/ui/select";
 import {
 	Table,
 	TableBody,
@@ -13,15 +40,19 @@ import {
 	TableHeader,
 	TableRow,
 } from "@/components/ui/table";
-import { Button } from "@/components/ui/button";
 import {
-	Select,
-	SelectContent,
-	SelectItem,
-	SelectTrigger,
-	SelectValue,
-} from "@/components/ui/select";
-import { Users, ClipboardList, UserCheck, Download } from "lucide-react";
+	BookOpen,
+	Clock,
+	ClipboardList,
+	Download,
+	Filter,
+	RefreshCw,
+	School,
+	Search,
+	Shield,
+	UserMinus,
+	UserPlus,
+} from "lucide-react";
 
 type Session = {
 	user_id: string;
@@ -42,20 +73,47 @@ type CoordinatorAssignmentData = {
 	assignments: Assignment[];
 };
 
+type SubjectResponse = {
+	data?: { id?: unknown; name?: unknown }[];
+};
+
+type ApiMessage = {
+	message?: string;
+};
+
+function getTimeLabel() {
+	return new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
+
+const LastUpdatedTime = () => {
+	const [time, setTime] = useState(() => getTimeLabel());
+
+	useEffect(() => {
+		const interval = setInterval(() => {
+			setTime(getTimeLabel());
+		}, 60000);
+		return () => clearInterval(interval);
+	}, []);
+
+	return <span className="font-medium text-primary">{time || "Memuatkan..."}</span>;
+};
+
 export default function SubjectCoordinatorAssignmentsPage() {
+	const PAGE_SIZE = 8;
 	const router = useRouter();
 	const [session, setSession] = useState<Session | null>(null);
 	const [sessionReady, setSessionReady] = useState(false);
 
 	const [subjects, setSubjects] = useState<Subject[]>([]);
 	const [selectedSubjectId, setSelectedSubjectId] = useState("");
-
 	const [data, setData] = useState<CoordinatorAssignmentData | null>(null);
 	const [loading, setLoading] = useState(false);
 	const [savingClassId, setSavingClassId] = useState<string | null>(null);
-	const [pendingTeacherByClass, setPendingTeacherByClass] = useState<
-		Record<string, string>
-	>({});
+	const [searchQuery, setSearchQuery] = useState("");
+	const [filterGrade, setFilterGrade] = useState("all");
+	const [currentPage, setCurrentPage] = useState(1);
+	const [assigning, setAssigning] = useState<ClassRow | null>(null);
+	const [selectedTeacherId, setSelectedTeacherId] = useState("");
 
 	useEffect(() => {
 		try {
@@ -78,9 +136,7 @@ export default function SubjectCoordinatorAssignmentsPage() {
 			return;
 		}
 
-		const role = String(session.role ?? "")
-			.toLowerCase()
-			.trim();
+		const role = String(session.role ?? "").toLowerCase().trim();
 		if (role !== "subject coordinator") {
 			toast.error("Anda tidak dibenarkan akses halaman ini");
 			router.replace("/teacher/dashboard");
@@ -95,9 +151,9 @@ export default function SubjectCoordinatorAssignmentsPage() {
 				const res = await fetch(
 					`/api/coordinator/subjects?teacher_id=${teacherId}`,
 				);
-				const json = await res.json();
+				const json = (await res.json()) as SubjectResponse;
 				const list: Subject[] = (json?.data ?? [])
-					.map((s: any) => ({
+					.map((s) => ({
 						id: String(s.id ?? ""),
 						name: String(s.name ?? ""),
 					}))
@@ -107,8 +163,7 @@ export default function SubjectCoordinatorAssignmentsPage() {
 				setSubjects(list);
 				if (!selectedSubjectId && list.length > 0) setSelectedSubjectId(list[0].id);
 			} catch {
-				if (cancelled) return;
-				setSubjects([]);
+				if (!cancelled) setSubjects([]);
 			}
 		}
 
@@ -118,40 +173,39 @@ export default function SubjectCoordinatorAssignmentsPage() {
 		};
 	}, [router, session, sessionReady, selectedSubjectId]);
 
+	async function fetchAssignmentData(subjectId = selectedSubjectId) {
+		if (!session || !subjectId) return;
+
+		setLoading(true);
+		try {
+			const res = await fetch(
+				`/api/coordinator/teacher-subject?coordinator_teacher_id=${session.user_id}&subject_id=${subjectId}`,
+			);
+			const json = (await res.json()) as CoordinatorAssignmentData;
+			if (!res.ok) {
+				toast.error((json as ApiMessage)?.message ?? "Gagal memuatkan data");
+				return;
+			}
+			setData(json);
+		} catch {
+			setData(null);
+		} finally {
+			setLoading(false);
+		}
+	}
+
 	useEffect(() => {
 		if (!session || !selectedSubjectId) return;
-
-		const teacherId = session.user_id;
-		let cancelled = false;
-
-		async function load() {
-			setLoading(true);
-			try {
-				const res = await fetch(
-					`/api/coordinator/teacher-subject?coordinator_teacher_id=${teacherId}&subject_id=${selectedSubjectId}`,
-				);
-				const json = (await res.json()) as CoordinatorAssignmentData;
-				if (!res.ok) {
-					toast.error((json as any)?.message ?? "Gagal memuatkan data");
-					return;
-				}
-				if (cancelled) return;
-				setData(json);
-			} catch {
-				if (!cancelled) setData(null);
-			} finally {
-				if (!cancelled) setLoading(false);
-			}
-		}
-
-		load();
-		return () => {
-			cancelled = true;
-		};
+		fetchAssignmentData(selectedSubjectId);
+		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [session, selectedSubjectId]);
 
 	useEffect(() => {
-		setPendingTeacherByClass({});
+		setSearchQuery("");
+		setFilterGrade("all");
+		setCurrentPage(1);
+		setAssigning(null);
+		setSelectedTeacherId("");
 	}, [selectedSubjectId]);
 
 	const assignmentTeacherByClassId = useMemo(() => {
@@ -169,12 +223,102 @@ export default function SubjectCoordinatorAssignmentsPage() {
 		return m;
 	}, [data?.teachers]);
 
-	async function saveAssignmentForClass(classId: string) {
-		if (!session || !selectedSubjectId) return;
+	const filteredRows = useMemo(() => {
+		let filtered = data?.classes ?? [];
 
-		const nextTeacherId = pendingTeacherByClass[classId] ?? "";
-		setSavingClassId(classId);
+		if (filterGrade !== "all") {
+			filtered = filtered.filter((row) => row.grade === Number(filterGrade));
+		}
 
+		if (searchQuery.trim()) {
+			const query = searchQuery.toLowerCase().trim();
+			filtered = filtered.filter((row) => row.name.toLowerCase().includes(query));
+		}
+
+		return filtered;
+	}, [data?.classes, filterGrade, searchQuery]);
+
+	const gradeOptions = useMemo(() => {
+		return Array.from(new Set((data?.classes ?? []).map((row) => row.grade)))
+			.filter((grade) => Number.isFinite(Number(grade)))
+			.sort((a, b) => Number(a) - Number(b));
+	}, [data?.classes]);
+
+	useEffect(() => {
+		setCurrentPage(1);
+	}, [filterGrade, searchQuery]);
+
+	useEffect(() => {
+		const totalPages = Math.max(1, Math.ceil(filteredRows.length / PAGE_SIZE));
+		if (currentPage > totalPages) setCurrentPage(totalPages);
+	}, [currentPage, filteredRows.length]);
+
+	const totalPages = Math.max(1, Math.ceil(filteredRows.length / PAGE_SIZE));
+	const paginatedRows = useMemo(() => {
+		const startIndex = (currentPage - 1) * PAGE_SIZE;
+		return filteredRows.slice(startIndex, startIndex + PAGE_SIZE);
+	}, [currentPage, filteredRows]);
+
+	const paginationItems = useMemo(() => {
+		if (totalPages <= 5) {
+			return Array.from({ length: totalPages }, (_, index) => index + 1);
+		}
+
+		if (currentPage <= 3) return [1, 2, 3, 4, "ellipsis", totalPages] as const;
+		if (currentPage >= totalPages - 2) {
+			return [1, "ellipsis", totalPages - 3, totalPages - 2, totalPages - 1, totalPages] as const;
+		}
+
+		return [1, "ellipsis-left", currentPage - 1, currentPage, currentPage + 1, "ellipsis-right", totalPages] as const;
+	}, [currentPage, totalPages]);
+
+	const getGradeColor = (grade: number) => {
+		switch (grade) {
+			case 1:
+				return "bg-emerald-100 text-emerald-700 border-emerald-200";
+			case 2:
+				return "bg-blue-100 text-blue-700 border-blue-200";
+			case 3:
+				return "bg-amber-100 text-amber-700 border-amber-200";
+			case 4:
+				return "bg-purple-100 text-purple-700 border-purple-200";
+			case 5:
+				return "bg-rose-100 text-rose-700 border-rose-200";
+			default:
+				return "bg-gray-100 text-gray-700 border-gray-200";
+		}
+	};
+
+	const getGradeDotColor = (grade: number) => {
+		switch (grade) {
+			case 1:
+				return "bg-emerald-500";
+			case 2:
+				return "bg-blue-500";
+			case 3:
+				return "bg-amber-500";
+			case 4:
+				return "bg-purple-500";
+			case 5:
+				return "bg-rose-500";
+			default:
+				return "bg-gray-500";
+		}
+	};
+
+	function openAssignDialog(classItem: ClassRow) {
+		setAssigning(classItem);
+		setSelectedTeacherId(assignmentTeacherByClassId.get(classItem.id) ?? "");
+	}
+
+	function handleExport() {
+		window.print();
+	}
+
+	async function saveAssignmentForClass() {
+		if (!session || !selectedSubjectId || !assigning) return;
+
+		setSavingClassId(assigning.id);
 		const toastId = toast.loading("Menyimpan assignment...");
 		try {
 			const res = await fetch("/api/coordinator/teacher-subject", {
@@ -183,8 +327,8 @@ export default function SubjectCoordinatorAssignmentsPage() {
 				body: JSON.stringify({
 					coordinator_teacher_id: session.user_id,
 					subject_id: selectedSubjectId,
-					class_id: classId,
-					teacher_id: nextTeacherId, // empty => unassign
+					class_id: assigning.id,
+					teacher_id: selectedTeacherId,
 				}),
 			});
 
@@ -195,18 +339,43 @@ export default function SubjectCoordinatorAssignmentsPage() {
 			}
 
 			toast.success("Disimpan", { id: toastId });
-			setPendingTeacherByClass((prev) => {
-				const next = { ...prev };
-				delete next[classId];
-				return next;
+			setAssigning(null);
+			setSelectedTeacherId("");
+			await fetchAssignmentData();
+		} catch {
+			toast.error("Ralat sistem", { id: toastId });
+		} finally {
+			setSavingClassId(null);
+		}
+	}
+
+	async function removeAssignmentForClass() {
+		if (!session || !selectedSubjectId || !assigning) return;
+
+		setSavingClassId(assigning.id);
+		const toastId = toast.loading("Membuang assignment...");
+		try {
+			const res = await fetch("/api/coordinator/teacher-subject", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({
+					coordinator_teacher_id: session.user_id,
+					subject_id: selectedSubjectId,
+					class_id: assigning.id,
+					teacher_id: "",
+				}),
 			});
 
-			// reload latest assignments
-			const reload = await fetch(
-				`/api/coordinator/teacher-subject?coordinator_teacher_id=${session.user_id}&subject_id=${selectedSubjectId}`,
-			);
-			const reJson = (await reload.json()) as CoordinatorAssignmentData;
-			if (reload.ok) setData(reJson);
+			const json = await res.json();
+			if (!res.ok) {
+				toast.error(json?.message ?? "Gagal", { id: toastId });
+				return;
+			}
+
+			toast.success("Assignment dibuang", { id: toastId });
+			setAssigning(null);
+			setSelectedTeacherId("");
+			await fetchAssignmentData();
 		} catch {
 			toast.error("Ralat sistem", { id: toastId });
 		} finally {
@@ -218,176 +387,489 @@ export default function SubjectCoordinatorAssignmentsPage() {
 	if (!session) return null;
 
 	return (
-		<div className="min-h-screen bg-gradient-to-b from-background to-muted/20 p-4 md:p-6">
-			<div className="max-w-7xl mx-auto space-y-6">
-				{/* ================= HEADER ================= */}
-				<div className="space-y-1">
-					<div className="flex items-center gap-3">
-						<div className="p-2 rounded-xl bg-primary/10">
-							<ClipboardList className="w-6 h-6 text-primary" />
+		<div className="min-h-screen bg-background p-4 md:p-6">
+			<div className="max-w-7xl mx-auto space-y-8">
+				<div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+					<div className="space-y-3">
+						<div className="flex items-center gap-4">
+							<div className="p-3 rounded-2xl bg-gradient-to-br from-primary/10 to-primary/5 border border-primary/20 shadow-sm">
+								<ClipboardList className="w-7 h-7 text-primary" />
+							</div>
+							<div>
+								<h1 className="text-xl font-bold text-foreground">
+									Pengurusan Guru Subjek
+								</h1>
+								<p className="text-muted-foreground font-medium mt-1">
+									Melantik guru subjek mengikut kelas yang ditetapkan
+								</p>
+							</div>
 						</div>
-						<h1 className="text-3xl font-bold tracking-tight">
-							Pengurusan Guru Subjek
-						</h1>
+						<div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
+							<div className="flex items-center gap-1">
+								<Shield className="w-3.5 h-3.5" />
+								<span>Data Guru Terkawal</span>
+							</div>
+							<div className="w-1 h-1 rounded-full bg-muted" />
+							<div className="flex items-center gap-1">
+								<Clock className="w-3.5 h-3.5" />
+								<span>Kemas kini: <LastUpdatedTime /></span>
+							</div>
+						</div>
 					</div>
-					<p className="text-muted-foreground">
-						Assign guru mengikut kelas untuk subjek yang anda selaras
-					</p>
+
+					<div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+						<div className="inline-flex h-10 w-full items-center gap-2 rounded-md border border-border bg-background px-4 text-sm font-medium text-foreground shadow-xs sm:w-auto sm:max-w-[260px]">
+							<BookOpen className="h-4 w-4 shrink-0 text-primary" />
+							<span className="truncate">
+								{data?.subject?.name ?? subjects[0]?.name ?? "Tiada subjek"}
+							</span>
+						</div>
+						<Button
+							variant="outline"
+							onClick={() => fetchAssignmentData()}
+							disabled={loading || !selectedSubjectId}
+							className="border-border hover:bg-accent hover:text-accent-foreground shadow-xs"
+						>
+							{loading ? (
+								<RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+							) : (
+								<RefreshCw className="w-4 h-4 mr-2" />
+							)}
+							Muat Semula
+						</Button>
+						<Button
+							variant="outline"
+							onClick={handleExport}
+							disabled={loading || filteredRows.length === 0}
+							className="border-border hover:bg-accent hover:text-accent-foreground shadow-xs"
+						>
+							<Download className="w-4 h-4 mr-2" />
+							Eksport
+						</Button>
+					</div>
 				</div>
 
-				{/* ================= SUBJECT PICKER ================= */}
-				<Card className="shadow-lg border border-border/50">
-					<CardContent className="flex flex-col gap-4 p-5 sm:p-6 md:flex-row md:items-center md:justify-between">
-						<div className="space-y-1">
-							<p className="text-sm text-muted-foreground">Subjek Seliaan</p>
-							<div className="flex w-full items-center gap-2">
-								<Select value={selectedSubjectId} onValueChange={setSelectedSubjectId}>
-									<SelectTrigger className="w-full sm:max-w-[320px]">
-										<SelectValue placeholder="Pilih subjek" />
-									</SelectTrigger>
-									<SelectContent>
-										{subjects.map((s) => (
-											<SelectItem key={s.id} value={s.id}>
-												{s.name}
-											</SelectItem>
-										))}
-									</SelectContent>
-								</Select>
-							</div>
-							{subjects.length === 0 && (
-								<p className="text-xs text-muted-foreground">
-									Tiada subjek diset sebagai penyelaras untuk akaun ini.
+				<Card className="border-border bg-card shadow-md rounded-xl overflow-hidden">
+					<CardHeader className="border-b border-border bg-gradient-to-r from-card to-card/80 px-6 py-5">
+						<div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+							<div>
+								<CardTitle className="text-xl font-bold text-foreground flex items-center gap-2">
+									<Filter className="w-5 h-5 text-primary" />
+									Senarai Kelas
+								</CardTitle>
+								<p className="text-sm text-muted-foreground mt-1">
+									Urus lantikan guru subjek bagi {data?.subject?.name ?? "subjek dipilih"}
 								</p>
-							)}
+							</div>
+							<div className="flex flex-wrap items-center gap-3">
+								<Badge variant="outline" className="border-primary/30 bg-primary/5 text-primary font-medium">
+									<Filter className="w-3 h-3 mr-1" />
+									{filteredRows.length} kelas ditemui
+								</Badge>
+							</div>
 						</div>
-
-						<div className="text-sm text-muted-foreground">
-							{data?.coordinator?.name ? (
-								<span className="inline-flex items-center gap-2">
-									<UserCheck className="w-4 h-4 text-primary" />
-									{data.coordinator.name}
-								</span>
-							) : null}
-						</div>
-					</CardContent>
-				</Card>
-
-				{/* ================= COORDINATOR INFO ================= */}
-				<Card className="shadow-lg border border-border/50">
-					<CardContent className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
-						<div className="min-w-0">
-							<p className="text-sm text-muted-foreground">Subject Coordinator</p>
-							<h3 className="mt-2 truncate text-xl font-semibold">
-								{data?.coordinator?.name ?? ""}
-							</h3>
-							<p className="text-sm text-muted-foreground mt-1">
-								Subjek: {data?.subject?.name ?? ""}
-							</p>
-						</div>
-						<UserCheck className="w-6 h-6 text-primary" />
-					</CardContent>
-				</Card>
-
-				{/* ================= ASSIGNMENT TABLE ================= */}
-				<Card className="shadow-lg border border-border/50">
-					<CardHeader>
-						<CardTitle className="flex items-center gap-2">
-							<Users className="w-5 h-5 text-primary" />
-							Assign Guru Mengikut Kelas
-						</CardTitle>
 					</CardHeader>
 
-					<CardContent className="p-0">
-						<Table>
-							<TableHeader>
-								<TableRow>
-									<TableHead>Tingkatan</TableHead>
-									<TableHead>Kelas</TableHead>
-									<TableHead>Guru Subjek</TableHead>
-									<TableHead className="text-right">Tindakan</TableHead>
-								</TableRow>
-							</TableHeader>
+					<CardContent className="p-6">
+						<div className="flex flex-col lg:flex-row gap-4 mb-6">
+							<div className="flex-1 relative">
+								<Search className="absolute left-3.5 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+								<Input
+									placeholder="Cari kelas..."
+									value={searchQuery}
+									onChange={(e) => setSearchQuery(e.target.value)}
+									className="pl-10 h-11 rounded-lg border-border bg-background focus:border-primary focus:ring-primary/20"
+								/>
+							</div>
 
-							<TableBody>
-								{(data?.classes ?? []).map((cls) => {
-									const assignedTeacherId = assignmentTeacherByClassId.get(cls.id) ?? "";
-									const pendingTeacherId =
-										pendingTeacherByClass[cls.id] ?? assignedTeacherId;
-									const changed = pendingTeacherId !== assignedTeacherId;
-									const saving = savingClassId === cls.id;
-
-									return (
-										<TableRow key={cls.id}>
-											<TableCell className="font-medium">{cls.grade}</TableCell>
-
-											<TableCell>{cls.name}</TableCell>
-
-											<TableCell>
-												<Select
-													value={pendingTeacherId || "__none__"}
-													onValueChange={(v) =>
-														setPendingTeacherByClass((prev) => ({
-															...prev,
-															[cls.id]: v === "__none__" ? "" : v,
-														}))
-													}
-													disabled={loading || saving || !selectedSubjectId}
-												>
-													<SelectTrigger className="w-full sm:max-w-[340px]">
-														<SelectValue placeholder="Pilih guru" />
-													</SelectTrigger>
-													<SelectContent>
-														<SelectItem value="__none__">Tidak diassign</SelectItem>
-														{(data?.teachers ?? []).map((t) => (
-															<SelectItem key={t.id} value={t.id}>
-																{t.name}
-															</SelectItem>
-														))}
-													</SelectContent>
-												</Select>
-												{assignedTeacherId && (
-													<div className="text-xs text-muted-foreground mt-1">
-														Current: {teacherNameById.get(assignedTeacherId) ?? ""}
+							<div className="flex flex-col sm:flex-row gap-3">
+								<div className="w-full sm:w-[200px]">
+									<Select value={filterGrade} onValueChange={setFilterGrade}>
+										<SelectTrigger className="h-11 rounded-lg border-border bg-background">
+											<SelectValue placeholder="Pilih Tingkatan" />
+										</SelectTrigger>
+										<SelectContent className="rounded-lg border-border">
+											<SelectItem value="all">
+												<div className="flex items-center gap-2">
+													<School className="w-4 h-4" />
+													Semua Tingkatan
+												</div>
+											</SelectItem>
+											{gradeOptions.map((grade) => (
+												<SelectItem key={grade} value={String(grade)}>
+													<div className="flex items-center gap-2">
+														<div className={`w-2 h-2 rounded-full ${getGradeDotColor(grade)}`} />
+														Tingkatan {grade}
 													</div>
-												)}
-											</TableCell>
+												</SelectItem>
+											))}
+										</SelectContent>
+									</Select>
+								</div>
 
-											<TableCell className="text-right">
-												<Button
-													size="sm"
-													onClick={() => saveAssignmentForClass(cls.id)}
-													disabled={!changed || saving || loading || !selectedSubjectId}
-												>
-													{saving ? "Menyimpan..." : "Simpan"}
-												</Button>
-											</TableCell>
+								<Button
+									variant="outline"
+									onClick={() => {
+										setSearchQuery("");
+										setFilterGrade("all");
+									}}
+									className="h-11 rounded-lg border-border hover:bg-accent hover:text-accent-foreground"
+								>
+									Reset
+								</Button>
+							</div>
+						</div>
+
+						<div className="rounded-lg border border-border overflow-hidden">
+							<div className="overflow-x-auto">
+								<Table>
+									<TableHeader className="bg-muted/30">
+										<TableRow className="hover:bg-transparent border-b border-border">
+											<TableHead className="font-semibold text-foreground py-4 w-16 text-center">
+												#
+											</TableHead>
+											<TableHead className="font-semibold text-foreground py-4">
+												Tingkatan
+											</TableHead>
+											<TableHead className="font-semibold text-foreground py-4">
+												Nama Kelas
+											</TableHead>
+											<TableHead className="font-semibold text-foreground py-4">
+												Guru Subjek
+											</TableHead>
+											<TableHead className="font-semibold text-foreground py-4 text-right pr-6">
+												Tindakan
+											</TableHead>
 										</TableRow>
-									);
-								})}
+									</TableHeader>
 
-								{!loading && (data?.classes?.length ?? 0) === 0 && (
-									<TableRow>
-										<TableCell
-											colSpan={4}
-											className="text-center text-muted-foreground py-10"
-										>
-											Tiada kelas.
-										</TableCell>
-									</TableRow>
-								)}
-							</TableBody>
-						</Table>
+									<TableBody>
+										{loading ? (
+											<TableRow>
+												<TableCell colSpan={5} className="py-16">
+													<div className="flex flex-col items-center justify-center gap-4">
+														<RefreshCw className="w-10 h-10 animate-spin text-primary" />
+														<div className="text-center">
+															<p className="font-semibold text-foreground">Memuatkan data kelas...</p>
+															<p className="text-sm text-muted-foreground mt-1">Sila tunggu sebentar</p>
+														</div>
+													</div>
+												</TableCell>
+											</TableRow>
+										) : filteredRows.length === 0 ? (
+											<TableRow>
+												<TableCell colSpan={5} className="py-16">
+													<div className="flex flex-col items-center justify-center gap-4">
+														<div className="p-4 rounded-full bg-muted/50">
+															<School className="w-12 h-12 text-muted-foreground/50" />
+														</div>
+														<div className="text-center">
+															<p className="font-semibold text-foreground">Tiada kelas dijumpai</p>
+															<p className="text-sm text-muted-foreground mt-1 max-w-md">
+																{searchQuery || filterGrade !== "all"
+																	? "Tiada kelas yang sepadan dengan carian anda"
+																	: "Tiada kelas tersedia untuk subjek ini"}
+															</p>
+														</div>
+													</div>
+												</TableCell>
+											</TableRow>
+										) : (
+											paginatedRows.map((classItem, index) => {
+												const displayIndex = (currentPage - 1) * PAGE_SIZE + index + 1;
+												const assignedTeacherId = assignmentTeacherByClassId.get(classItem.id) ?? "";
+												const assignedTeacherName = assignedTeacherId
+													? teacherNameById.get(assignedTeacherId) ?? ""
+													: "";
+
+												return (
+													<TableRow
+														key={classItem.id}
+														className="hover:bg-muted/50 transition-colors border-b border-border last:border-0 group"
+													>
+														<TableCell
+															className="py-4 text-center cursor-pointer"
+															onClick={() => openAssignDialog(classItem)}
+														>
+															<div className="font-medium text-muted-foreground group-hover:text-primary transition-colors">
+																{displayIndex}
+															</div>
+														</TableCell>
+														<TableCell className="py-4">
+															<Badge className={`px-3 py-1.5 rounded-md font-medium border ${getGradeColor(classItem.grade)}`}>
+																Tingkatan {classItem.grade}
+															</Badge>
+														</TableCell>
+														<TableCell
+															className="py-4 cursor-pointer"
+															onClick={() => openAssignDialog(classItem)}
+														>
+															<div className="flex items-center gap-3">
+																<div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary/20 to-primary/10 border border-primary/20 flex items-center justify-center shadow-xs">
+																	<span className="font-semibold text-primary text-sm">
+																		{classItem.name.charAt(0)}
+																	</span>
+																</div>
+																<div className="font-semibold text-foreground group-hover:text-primary transition-colors">
+																	{classItem.name}
+																</div>
+															</div>
+														</TableCell>
+														<TableCell className="py-4">
+															{assignedTeacherName ? (
+																<div className="flex items-center gap-2">
+																	<div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center shadow-sm border border-blue-200">
+																		<span className="text-blue-600 font-semibold text-sm">
+																			{assignedTeacherName.charAt(0)}
+																		</span>
+																	</div>
+																	<div className="font-medium text-foreground">
+																		{assignedTeacherName}
+																	</div>
+																</div>
+															) : (
+																<div className="flex items-center gap-2 text-muted-foreground">
+																	<div className="w-8 h-8 rounded-full bg-gray-50 flex items-center justify-center border border-dashed border-gray-300">
+																		<UserPlus className="w-4 h-4 text-gray-400" />
+																	</div>
+																	<span className="italic text-sm">Belum dilantik</span>
+																</div>
+															)}
+														</TableCell>
+														<TableCell className="py-4 text-right pr-6">
+															<div className="flex justify-end gap-2">
+																<Button
+																	size="icon"
+																	variant="outline"
+																	className="h-8 w-8 text-primary"
+																	onClick={() => openAssignDialog(classItem)}
+																	title={assignedTeacherId ? "Tukar guru subjek" : "Lantik guru subjek"}
+																	aria-label={assignedTeacherId ? "Tukar guru subjek" : "Lantik guru subjek"}
+																>
+																	<UserPlus className="w-4 h-4" />
+																</Button>
+															</div>
+														</TableCell>
+													</TableRow>
+												);
+											})
+										)}
+									</TableBody>
+								</Table>
+							</div>
+						</div>
 					</CardContent>
+
+					<div className="border-t border-border bg-muted/20 px-6 py-4">
+						<div className="flex flex-col gap-4 text-sm">
+							<div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+								<div className="flex items-center gap-2 text-muted-foreground">
+									<div className="flex items-center gap-1">
+										<span className="font-semibold text-foreground">{filteredRows.length}</span>
+										<span>daripada</span>
+										<span className="font-semibold text-foreground">{data?.classes.length ?? 0}</span>
+										<span>kelas dipaparkan</span>
+									</div>
+									{filterGrade !== "all" && (
+										<Badge variant="secondary" className="ml-2">
+											Tingkatan {filterGrade}
+										</Badge>
+									)}
+								</div>
+								<div className="flex items-center gap-4">
+									<div className="flex items-center gap-2 text-muted-foreground">
+										<Clock className="w-4 h-4" />
+										<span>Kemas kini: <LastUpdatedTime /></span>
+									</div>
+									<Button
+										variant="ghost"
+										size="sm"
+										onClick={() => fetchAssignmentData()}
+										disabled={loading || !selectedSubjectId}
+										className="h-8"
+									>
+										{loading && <RefreshCw className="w-3 h-3 mr-2 animate-spin" />}
+										Muat Semula Data
+									</Button>
+								</div>
+							</div>
+
+							{!loading && totalPages > 1 && (
+								<div className="flex flex-col gap-3 border-t border-border/60 pt-4">
+									<div className="text-sm text-muted-foreground">
+										Menunjukkan {(currentPage - 1) * PAGE_SIZE + 1}
+										{" - "}
+										{Math.min(currentPage * PAGE_SIZE, filteredRows.length)} daripada {filteredRows.length} kelas
+									</div>
+									<Pagination>
+										<PaginationContent>
+											<PaginationItem>
+												<PaginationPrevious
+													href="#"
+													onClick={(e) => {
+														e.preventDefault();
+														setCurrentPage((page) => Math.max(1, page - 1));
+													}}
+													className={currentPage === 1 ? "pointer-events-none opacity-50" : undefined}
+												/>
+											</PaginationItem>
+
+											{paginationItems.map((item, idx) => {
+												if (typeof item !== "number") {
+													return (
+														<PaginationItem key={`${item}-${idx}`}>
+															<PaginationEllipsis />
+														</PaginationItem>
+													);
+												}
+
+												return (
+													<PaginationItem key={item}>
+														<PaginationLink
+															href="#"
+															isActive={currentPage === item}
+															onClick={(e) => {
+																e.preventDefault();
+																setCurrentPage(item);
+															}}
+														>
+															{item}
+														</PaginationLink>
+													</PaginationItem>
+												);
+											})}
+
+											<PaginationItem>
+												<PaginationNext
+													href="#"
+													onClick={(e) => {
+														e.preventDefault();
+														setCurrentPage((page) => Math.min(totalPages, page + 1));
+													}}
+													className={currentPage === totalPages ? "pointer-events-none opacity-50" : undefined}
+												/>
+											</PaginationItem>
+										</PaginationContent>
+									</Pagination>
+								</div>
+							)}
+						</div>
+					</div>
 				</Card>
 
-				{/* ================= ACTION ================= */}
-				<div className="flex justify-end">
-					<Button variant="outline" className="w-full sm:w-auto">
-						<Download className="w-4 h-4 mr-2" />
-						Export in PDF
-					</Button>
+				<div className="text-center pt-6">
+					<div className="inline-flex items-center gap-2 text-sm text-muted-foreground bg-card/50 backdrop-blur-sm px-4 py-2 rounded-full border border-border">
+						<Shield className="w-4 h-4" />
+						<span>Sistem Pengurusan Guru Subjek v2.0 - Data guru terkawal sepenuhnya</span>
+					</div>
 				</div>
 			</div>
+
+			<Dialog
+				open={Boolean(assigning)}
+				onOpenChange={(open) => {
+					if (!open) {
+						setAssigning(null);
+						setSelectedTeacherId("");
+					}
+				}}
+			>
+				<DialogContent className="sm:max-w-[500px]">
+					<DialogHeader>
+						<DialogTitle className="flex items-center gap-2 font-bold">
+							<UserPlus className="w-5 h-5 text-primary" />
+							Lantikan Guru Subjek
+						</DialogTitle>
+					</DialogHeader>
+
+					<div className="space-y-5 py-4">
+						<div className="grid grid-cols-2 gap-4">
+							<div className="space-y-2">
+								<Label className="flex items-center gap-1 text-muted-foreground">
+									<School className="w-3.5 h-3.5" /> Nama Kelas
+								</Label>
+								<div className="h-11 px-3 flex items-center rounded-md border border-border bg-muted/30 font-medium">
+									{assigning?.name}
+								</div>
+							</div>
+							<div className="space-y-2">
+								<Label className="flex items-center gap-1 text-muted-foreground">
+									<Filter className="w-3.5 h-3.5" /> Tingkatan
+								</Label>
+								<div className="h-11 px-3 flex items-center rounded-md border border-border bg-muted/30 font-medium">
+									Tingkatan {assigning?.grade}
+								</div>
+							</div>
+						</div>
+
+						<div className="space-y-2">
+							<Label className="flex items-center gap-1">
+								<ClipboardList className="w-3.5 h-3.5" /> Subjek
+							</Label>
+							<div className="h-11 px-3 flex items-center rounded-md border border-border bg-muted/30 font-medium">
+								{data?.subject?.name ?? ""}
+							</div>
+						</div>
+
+						<div className="space-y-2">
+							<Label className="flex items-center gap-1">
+								<UserPlus className="w-3.5 h-3.5" /> Pilih Guru Subjek <span className="text-red-500">*</span>
+							</Label>
+							<Select value={selectedTeacherId} onValueChange={setSelectedTeacherId}>
+								<SelectTrigger className="h-11 border-border">
+									<SelectValue placeholder="Pilih guru subjek" />
+								</SelectTrigger>
+								<SelectContent>
+									{(data?.teachers.length ?? 0) === 0 ? (
+										<SelectItem value="none" disabled>Tiada guru subjek ditemui</SelectItem>
+									) : (
+										data?.teachers.map((teacher) => (
+											<SelectItem key={teacher.id} value={teacher.id}>
+												{teacher.name}
+											</SelectItem>
+										))
+									)}
+								</SelectContent>
+							</Select>
+						</div>
+					</div>
+
+					<DialogFooter>
+						<div className="flex w-full flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-between">
+							<div>
+								{assigning?.id && assignmentTeacherByClassId.has(assigning.id) && (
+									<Button
+										type="button"
+										variant="destructive"
+										onClick={removeAssignmentForClass}
+										disabled={savingClassId === assigning.id}
+									>
+										<UserMinus className="w-4 h-4 mr-2" />
+										Buang Lantikan
+									</Button>
+								)}
+							</div>
+
+							<div className="flex gap-2">
+								<Button
+									type="button"
+									variant="outline"
+									onClick={() => setAssigning(null)}
+								>
+									Batal
+								</Button>
+								<Button
+									onClick={saveAssignmentForClass}
+									disabled={!selectedTeacherId || savingClassId === assigning?.id}
+									className="bg-primary px-8"
+								>
+									{savingClassId === assigning?.id ? "Menyimpan..." : "Simpan"}
+								</Button>
+							</div>
+						</div>
+					</DialogFooter>
+				</DialogContent>
+			</Dialog>
 		</div>
 	);
 }

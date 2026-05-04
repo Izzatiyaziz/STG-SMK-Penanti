@@ -43,6 +43,6 @@ export async function POST() {
         return NextResponse.json({ success: true, updated });
     } catch (err) {
         console.error("RECALC LEVELS ERROR:", err);
-        return NextResponse.json({ message: "Server error" }, { status: 500 });
+        return NextResponse.json({ message: "Ralat pelayan" }, { status: 500 });
     }
 }

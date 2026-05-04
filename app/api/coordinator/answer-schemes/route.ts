@@ -29,7 +29,7 @@ export async function GET(req: Request) {
         }
 
         const ok = await isCoordinatorForSubject(guard.session.user_id, subject_id);
-        if (!ok) return NextResponse.json({ message: "Forbidden" }, { status: 403 });
+        if (!ok) return NextResponse.json({ message: "Akses ditolak" }, { status: 403 });
 
         const { data, error } = await supabaseAdmin
             .from("stg_answer_schema")
@@ -73,7 +73,7 @@ export async function POST(req: Request) {
         }
 
         const ok = await isCoordinatorForSubject(guard.session.user_id, subject_id);
-        if (!ok) return NextResponse.json({ message: "Forbidden" }, { status: 403 });
+        if (!ok) return NextResponse.json({ message: "Akses ditolak" }, { status: 403 });
 
         const payload = answers
             .map((a: any) => ({
@@ -114,7 +114,7 @@ export async function POST(req: Request) {
         const message =
             err instanceof Error && err.message
                 ? err.message
-                : "Server error";
+                : "Ralat pelayan";
         return NextResponse.json({ message }, { status: 500 });
     }
 }

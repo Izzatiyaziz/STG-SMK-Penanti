@@ -4,6 +4,14 @@ import { requireApiRole } from "@/lib/auth";
 
 export const runtime = "nodejs";
 
+type StudentRow = {
+    student_id: string;
+    fullname: string | null;
+    ic_number: string | null;
+    level: string | number | null;
+    enrollment_date: string | null;
+};
+
 // GET: fetch class assigned to this class teacher + current students
 export async function GET(req: Request) {
     try {
@@ -20,7 +28,7 @@ export async function GET(req: Request) {
             );
         }
         if (teacher_id !== guard.session.user_id) {
-            return NextResponse.json({ message: "Forbidden" }, { status: 403 });
+            return NextResponse.json({ message: "Akses ditolak" }, { status: 403 });
         }
 
         const { data: assignment, error: aErr } = await supabase
@@ -48,7 +56,7 @@ export async function GET(req: Request) {
 
         const { data: students, error: sErr } = await supabase
             .from("stg_students")
-            .select("student_id, fullname, ic_number")
+            .select("student_id, fullname, ic_number, level, enrollment_date")
             .eq("class_id", assignment.class_id)
             .order("fullname", { ascending: true });
 
@@ -60,15 +68,17 @@ export async function GET(req: Request) {
             class: cls
                 ? { id: cls.class_id, name: cls.class_name, grade: String(cls.grade) }
                 : { id: assignment.class_id, name: "", grade: "" },
-            students: (students ?? []).map((s: any) => ({
+            students: ((students ?? []) as StudentRow[]).map((s) => ({
                 id: s.student_id,
                 name: s.fullname,
                 identifier: s.ic_number,
+                level: s.level ? String(s.level) : null,
+                enrollment_date: s.enrollment_date ?? null,
             })),
         });
     } catch (err) {
         console.error("GET teacher/class-teacher FAILED:", err);
-        return NextResponse.json({ error: "Server error" }, { status: 500 });
+        return NextResponse.json({ error: "Ralat pelayan" }, { status: 500 });
     }
 }
 
@@ -150,6 +160,6 @@ export async function POST(req: Request) {
         );
     } catch (err) {
         console.error("POST teacher/class-teacher FAILED:", err);
-        return NextResponse.json({ error: "Server error" }, { status: 500 });
+        return NextResponse.json({ error: "Ralat pelayan" }, { status: 500 });
     }
 }

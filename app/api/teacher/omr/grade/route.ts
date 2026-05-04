@@ -48,7 +48,7 @@ export async function POST(req: Request) {
         const template_height = Number(body?.template_height ?? 2000);
 
         if (teacher_id !== guard.session.user_id) {
-            return NextResponse.json({ message: "Forbidden" }, { status: 403 });
+            return NextResponse.json({ message: "Akses ditolak" }, { status: 403 });
         }
 
         if (!teacher_id || !subject_id || !exam_id || !class_id || !image_base64) {
@@ -72,7 +72,7 @@ export async function POST(req: Request) {
 
         if (assignErr) return NextResponse.json({ message: assignErr.message }, { status: 500 });
         if (!Array.isArray(assignment) || assignment.length === 0) {
-            return NextResponse.json({ message: "Forbidden" }, { status: 403 });
+            return NextResponse.json({ message: "Akses ditolak" }, { status: 403 });
         }
 
         const { data: answerRows, error: answerErr } = await supabaseAdmin
@@ -275,6 +275,6 @@ export async function POST(req: Request) {
         });
     } catch (err) {
         console.error("POST teacher/omr/grade FAILED:", err);
-        return NextResponse.json({ message: "Server error" }, { status: 500 });
+        return NextResponse.json({ message: "Ralat pelayan" }, { status: 500 });
     }
 }

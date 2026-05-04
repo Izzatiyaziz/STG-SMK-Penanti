@@ -30,7 +30,7 @@ export async function POST(req: Request) {
             guard.session.userType !== userType ||
             String(guard.session.user_id) !== user_id
         ) {
-            return NextResponse.json({ message: "Forbidden" }, { status: 403 });
+            return NextResponse.json({ message: "Akses ditolak" }, { status: 403 });
         }
 
         if (!new_password) {
@@ -59,7 +59,7 @@ export async function POST(req: Request) {
 
             if (error || !teacher) {
                 return NextResponse.json(
-                    { message: "User not found" },
+                    { message: "Pengguna tidak dijumpai" },
                     { status: 404 }
                 );
             }
@@ -114,7 +114,7 @@ export async function POST(req: Request) {
 
             if (error || !admin) {
                 return NextResponse.json(
-                    { message: "User not found" },
+                    { message: "Pengguna tidak dijumpai" },
                     { status: 404 }
                 );
             }
@@ -152,7 +152,7 @@ export async function POST(req: Request) {
 
             if (error || !student) {
                 return NextResponse.json(
-                    { message: "User not found" },
+                    { message: "Pengguna tidak dijumpai" },
                     { status: 404 }
                 );
             }
@@ -188,9 +188,9 @@ export async function POST(req: Request) {
             return NextResponse.json({ success: true });
         }
 
-        return NextResponse.json({ message: "Invalid userType" }, { status: 400 });
+        return NextResponse.json({ message: "Jenis pengguna tidak sah" }, { status: 400 });
     } catch (err) {
         console.error("CHANGE PASSWORD ERROR:", err);
-        return NextResponse.json({ message: "Server error" }, { status: 500 });
+        return NextResponse.json({ message: "Ralat pelayan" }, { status: 500 });
     }
 }
