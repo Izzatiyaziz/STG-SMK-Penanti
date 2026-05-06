@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(& \"c:\\\\Users\\\\SCSM11\\\\Desktop\\\\Developer\\\\client\\\\STG-SMK-Penanti\\\\omr-service\\\\.venv\\\\Scripts\\\\Activate.ps1\")"
+    ]
+  }
+}

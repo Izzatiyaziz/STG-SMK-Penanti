@@ -288,13 +288,20 @@ export default function SubjectCoordinatorApprovalPage() {
 			}
 
 			const nextStatus = action === "approve" ? "approved" : "rejected";
-			toast.success(action === "approve" ? "Diluluskan" : "Ditolak", { id: toastId });
+			const updatedCount = Number(json?.updated ?? 0);
+			toast.success(
+				action === "approve"
+					? `Diluluskan${updatedCount > 0 ? ` (${updatedCount} rekod)` : ""}`
+					: `Ditolak${updatedCount > 0 ? ` (${updatedCount} rekod)` : ""}`,
+				{ id: toastId },
+			);
 			setSelected(null);
 			setData((prev) =>
 				prev.map((row) =>
 					row.id === submission.id ? { ...row, status: nextStatus } : row,
 				),
 			);
+			await fetchApprovals();
 		} catch {
 			toast.error("Ralat sistem", { id: toastId });
 		}
