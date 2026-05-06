@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import json
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -9,11 +10,34 @@ from typing import Any
 import cv2
 import numpy as np
 from fastapi import FastAPI, HTTPException, UploadFile, File, Form
-from pydantic import BaseModel, Field
 from fastapi.responses import HTMLResponse
+from pydantic import BaseModel, Field
 
+try:
+    from dotenv import load_dotenv
+except ImportError:
+    def load_dotenv() -> bool:
+        return False
+
+try:
+    from jamaibase import JamAI, types as p
+except ImportError:
+    JamAI = None
+    p = None
+
+load_dotenv()
 
 app = FastAPI(title="STG OMR Service", version="0.1.0")
+
+JAMAI_PROJECT_ID = os.getenv("JAMAI_PROJECT_ID", "").strip()
+JAMAI_PAT = os.getenv("JAMAI_PAT", "").strip()
+JAMAI_REPORT_TABLE_ID = os.getenv("JAMAI_SYMPTOM_TABLE_ID", "std_report").strip() or "std_report"
+JAMAI_TABLE_TYPE_ACTION = p.TableType.ACTION if p is not None else None
+jamai_client = (
+    JamAI(project_id=JAMAI_PROJECT_ID, token=JAMAI_PAT)
+    if JamAI is not None and JAMAI_PROJECT_ID and JAMAI_PAT
+    else None
+)
 
 
 class BubblePoint(BaseModel):
@@ -29,15 +53,32 @@ class QuestionTemplate(BaseModel):
     D: BubblePoint
 
 
+class AnswerRegion(BaseModel):
+    x: int = Field(ge=0)
+    y: int = Field(ge=0)
+    width: int = Field(ge=1)
+    height: int = Field(ge=1)
+
+
 class OMRGradeRequest(BaseModel):
     image_base64: str
     template_width: int = Field(default=1400, ge=800, le=4000)
     template_height: int = Field(default=2000, ge=800, le=5000)
     corners: dict[str, list[int]] | None = None
+    answer_region: AnswerRegion | None = None
     template: dict[str, QuestionTemplate]
     answer_key: dict[str, str]
-    min_mark_threshold: float = Field(default=0.36, ge=0.05, le=0.95)
-    ambiguity_gap: float = Field(default=0.10, ge=0.01, le=0.95)
+    min_mark_threshold: float = Field(default=0.55, ge=0.05, le=0.95)
+    ambiguity_gap: float = Field(default=0.12, ge=0.01, le=0.95)
+
+
+class ReportCommentRequest(BaseModel):
+    prompt_input: str = Field(min_length=2)
+
+
+class ReportCommentResponse(BaseModel):
+    ai_comment: str
+    source: str
 
 
 class QuestionResult(BaseModel):
@@ -67,6 +108,70 @@ class OrderedCorners:
     bottom_left: np.ndarray
 
 
+def _build_spm_80_template_bundle() -> dict[str, Any]:
+    """
+    Built-in preset for the SPM-style 80-question sheet shown in the app.
+
+    Coordinates are defined in the canonical warped sheet space and assume:
+    - sheet width = 955
+    - sheet height = 1280
+    - four answer columns
+    - twenty questions per column
+    """
+
+    template_width = 955
+    template_height = 1280
+
+    answer_region = {
+        "x": 350,
+        "y": 300,
+        "width": 580,
+        "height": 900,
+    }
+
+    # Real SPM objective area layout from the provided sheet:
+    # - left major column: 1..30
+    # - middle major column: 31..60
+    # - right major column: 61..80
+    option_x = {
+        0: {"A": 389, "B": 429, "C": 469, "D": 508},
+        1: {"A": 592, "B": 633, "C": 673, "D": 713},
+        2: {"A": 795, "B": 835, "C": 877, "D": 917},
+    }
+    base_y = [320, 343, 366, 388, 410]
+    group_offsets = [0, 156, 312, 468, 623, 778]
+    row_y = [base_y[row] + group_offsets[group] for group in range(6) for row in range(5)]
+
+    template: dict[str, Any] = {}
+    answer_key: dict[str, str] = {}
+    radius = 11
+
+    for question_no in range(1, 81):
+        if question_no <= 30:
+            col = 0
+            row = question_no - 1
+        elif question_no <= 60:
+            col = 1
+            row = question_no - 31
+        else:
+            col = 2
+            row = question_no - 61
+        y = row_y[row]
+        template[str(question_no)] = {
+            opt: {"x": x, "y": y, "r": radius}
+            for opt, x in option_x[col].items()
+        }
+        answer_key[str(question_no)] = "A"
+
+    return {
+        "template_width": template_width,
+        "template_height": template_height,
+        "answer_region": answer_region,
+        "template": template,
+        "answer_key": answer_key,
+    }
+
+
 def _decode_base64_image(image_b64: str) -> np.ndarray:
     payload = image_b64.split(",", 1)[1] if "," in image_b64 else image_b64
     try:
@@ -90,15 +195,17 @@ def _decode_image_bytes(binary: bytes) -> np.ndarray:
 
 
 def _load_default_template_bundle() -> dict[str, Any]:
-    # Local dev convenience: allow testing without manually crafting JSON payloads.
+    # Local dev convenience: prefer a checked-in JSON file, but fall back to the
+    # built-in SPM preset so the service still works out of the box.
     path = Path(__file__).with_name("template.sample.json")
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
+        bundle = json.loads(path.read_text(encoding="utf-8"))
+        template = bundle.get("template")
+        if isinstance(template, dict) and len(template) >= 80:
+            return bundle
+        return _build_spm_80_template_bundle()
     except FileNotFoundError as exc:
-        raise HTTPException(
-            status_code=500,
-            detail="template.sample.json not found on server",
-        ) from exc
+        return _build_spm_80_template_bundle()
     except Exception as exc:
         raise HTTPException(
             status_code=500,
@@ -117,96 +224,133 @@ def _order_points(pts: np.ndarray) -> OrderedCorners:
     )
 
 
+def _validate_quad(pts: np.ndarray, image_shape: tuple[int, int]) -> bool:
+    """Reject degenerate quads that cannot represent an OMR sheet."""
+    img_h, img_w = image_shape
+    img_area = float(img_h * img_w)
+    area = float(cv2.contourArea(pts.reshape(-1, 1, 2).astype(np.float32)))
+    if area < img_area * 0.10:
+        return False
+    x, y, w, h = cv2.boundingRect(pts.astype(np.int32))
+    # Reject near-degenerate aspect ratios (e.g. a vertical/horizontal stripe)
+    if max(w, h) / max(min(w, h), 1) > 5.0:
+        return False
+    return True
+
+
+def _check_warp_quality(warped: np.ndarray, min_std: float = 8.0) -> bool:
+    """Return False when warped image has near-zero contrast (degenerate transform)."""
+    gray = cv2.cvtColor(warped, cv2.COLOR_BGR2GRAY) if warped.ndim == 3 else warped
+    return float(gray.std()) >= min_std
+
+
+def _largest_quad_from_contours(
+    contours: list[np.ndarray],
+    image_shape: tuple[int, int],
+) -> np.ndarray | None:
+    """
+    Return the best quadrilateral candidate for the sheet border.
+
+    A thick border becomes a *stroke* after thresholding so its contour area
+    can be small even though it spans most of the image. Score by bounding-rect area.
+    """
+    if not contours:
+        return None
+
+    img_h, img_w = image_shape
+    img_area = float(img_h * img_w)
+
+    best: np.ndarray | None = None
+    best_score = 0.0
+
+    for contour in contours:
+        x, y, w, h = cv2.boundingRect(contour)
+        score = float(w * h)
+        if score <= best_score:
+            continue
+        if score < img_area * 0.10:
+            continue
+
+        hull = cv2.convexHull(contour)
+        peri = cv2.arcLength(hull, True)
+        approx = cv2.approxPolyDP(hull, 0.02 * peri, True)
+
+        if len(approx) == 4:
+            best = approx.reshape(4, 2).astype(np.float32)
+            best_score = score
+            continue
+
+        rect = cv2.minAreaRect(hull)
+        box = cv2.boxPoints(rect).astype(np.float32)
+        best = box
+        best_score = score
+
+    return best
+
+
 def _find_sheet_corners(image: np.ndarray) -> OrderedCorners:
     """
-    Try to detect the sheet/border as a quadrilateral.
+    Detect sheet border as a quadrilateral using a 4-strategy cascade.
 
-    We first try a robust "dark border" approach (thresholding) which works well
-    with thick black borders. If that fails, we fall back to an edge-based method.
+    Order: CLAHE+Otsu → adaptive threshold → relaxed Canny → full-frame fallback.
+    Each candidate is validated so a degenerate (stripe) warp cannot pass through.
     """
-
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    blur = cv2.GaussianBlur(gray, (5, 5), 0)
 
-    def _largest_quad_from_contours(
-        contours: list[np.ndarray],
-        image_shape: tuple[int, int],
-    ) -> np.ndarray | None:
-        """
-        Return the best quadrilateral candidate for the sheet border.
+    # CLAHE improves contrast across varied lighting before thresholding.
+    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+    enhanced = clahe.apply(gray)
+    blur = cv2.GaussianBlur(enhanced, (5, 5), 0)
 
-        Important: a thick border often becomes a *stroke* after thresholding,
-        meaning its contour area can be small even though it spans most of the image.
-        Because of that, we score contours by their *bounding rectangle area*.
-        """
-
-        if not contours:
-            return None
-
-        img_h, img_w = image_shape
-        img_area = float(img_h * img_w)
-
-        best: np.ndarray | None = None
-        best_score = 0.0
-
-        for contour in contours:
-            x, y, w, h = cv2.boundingRect(contour)
-            score = float(w * h)
-            if score <= best_score:
-                continue
-
-            # Ignore tiny candidates.
-            if score < img_area * 0.10:
-                continue
-
-            # Use convex hull, then approximate to 4 points.
-            hull = cv2.convexHull(contour)
-            peri = cv2.arcLength(hull, True)
-            approx = cv2.approxPolyDP(hull, 0.02 * peri, True)
-
-            if len(approx) == 4:
-                best = approx.reshape(4, 2).astype(np.float32)
-                best_score = score
-                continue
-
-            # Fallback: a rotated bounding box (always 4 points).
-            rect = cv2.minAreaRect(hull)
-            box = cv2.boxPoints(rect).astype(np.float32)
-            best = box
-            best_score = score
-
-        return best
-
-    # 1) Border-first: threshold dark pixels (great for thick black borders)
+    # 1) Otsu inverse on CLAHE image — best for thick black borders.
     try:
         thr = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)[1]
-        thr = cv2.morphologyEx(
-            thr,
-            cv2.MORPH_CLOSE,
-            np.ones((7, 7), np.uint8),
-            iterations=2,
-        )
+        thr = cv2.morphologyEx(thr, cv2.MORPH_CLOSE, np.ones((7, 7), np.uint8), iterations=2)
         contours, _ = cv2.findContours(thr, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         page = _largest_quad_from_contours(contours, gray.shape)
-        if page is not None:
+        if page is not None and _validate_quad(page, gray.shape):
             return _order_points(page)
     except Exception:
         pass
 
-    # 2) Fallback: edge-based (works if thresholding is noisy)
-    edges = cv2.Canny(blur, 60, 180)
-    edges = cv2.morphologyEx(
-        edges,
-        cv2.MORPH_CLOSE,
-        np.ones((5, 5), np.uint8),
-        iterations=1,
-    )
-    contours, _ = cv2.findContours(edges, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
-    page = _largest_quad_from_contours(contours, gray.shape)
+    # 2) Adaptive threshold — handles uneven / side lighting.
+    try:
+        adp = cv2.adaptiveThreshold(
+            blur, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 21, 10
+        )
+        adp = cv2.morphologyEx(adp, cv2.MORPH_CLOSE, np.ones((9, 9), np.uint8), iterations=3)
+        adp = cv2.morphologyEx(adp, cv2.MORPH_OPEN, np.ones((5, 5), np.uint8), iterations=1)
+        contours, _ = cv2.findContours(adp, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        page = _largest_quad_from_contours(contours, gray.shape)
+        if page is not None and _validate_quad(page, gray.shape):
+            return _order_points(page)
+    except Exception:
+        pass
 
-    if page is None:
-        raise HTTPException(status_code=422, detail="Sheet contour not found")
-    return _order_points(page)
+    # 3) Canny edge detection with relaxed thresholds.
+    try:
+        edges = cv2.Canny(blur, 30, 90)
+        edges = cv2.morphologyEx(edges, cv2.MORPH_CLOSE, np.ones((5, 5), np.uint8), iterations=2)
+        contours, _ = cv2.findContours(edges, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+        page = _largest_quad_from_contours(contours, gray.shape)
+        if page is not None and _validate_quad(page, gray.shape):
+            return _order_points(page)
+    except Exception:
+        pass
+
+    # 4) Full-frame fallback — when the sheet fills the entire camera frame.
+    h, w = gray.shape
+    margin = int(min(h, w) * 0.01)
+    fallback = np.array(
+        [
+            [margin, margin],
+            [w - margin, margin],
+            [w - margin, h - margin],
+            [margin, h - margin],
+        ],
+        dtype=np.float32,
+    )
+    return _order_points(fallback)
 
 
 def _warp_sheet(
@@ -267,14 +411,38 @@ def _fill_ratio(gray: np.ndarray, center: BubblePoint) -> float:
     if inner_mask.sum() == 0 or bg_mask.sum() == 0:
         return 0.0
 
-    inner_mean = float(roi_blur[inner_mask].mean())  # 0..255
-    bg_mean = float(roi_blur[bg_mask].mean())  # 0..255
+    inner_pixels = roi_blur[inner_mask]
+    bg_pixels = roi_blur[bg_mask]
+    inner_mean = float(inner_pixels.mean())  # 0..255
+    bg_mean = float(bg_pixels.mean())  # 0..255
     if bg_mean <= 1.0:
         return 0.0
 
-    # 0 = same brightness as surrounding ring (empty), 1 = very dark (filled).
-    ratio = (bg_mean - inner_mean) / bg_mean
-    return float(max(0.0, min(1.0, ratio)))
+    # Empty circles still have a printed outline. Count how much of the inner area is
+    # meaningfully darker than the nearby paper, then combine that with mean contrast.
+    local_dark_threshold = max(0.0, bg_mean - max(18.0, bg_mean * 0.12))
+    dark_fraction = float((inner_pixels < local_dark_threshold).mean())
+    contrast_ratio = (bg_mean - inner_mean) / bg_mean
+
+    score = (contrast_ratio * 0.6) + (dark_fraction * 0.4)
+    return float(max(0.0, min(1.0, score)))
+
+
+def _apply_answer_region_mask(gray: np.ndarray, region: AnswerRegion | None) -> np.ndarray:
+    if region is None:
+        return gray
+
+    x0 = max(0, int(region.x))
+    y0 = max(0, int(region.y))
+    x1 = min(gray.shape[1], x0 + int(region.width))
+    y1 = min(gray.shape[0], y0 + int(region.height))
+
+    if x0 >= x1 or y0 >= y1:
+        return gray
+
+    masked = np.full_like(gray, 255)
+    masked[y0:y1, x0:x1] = gray[y0:y1, x0:x1]
+    return masked
 
 
 def _normalize_option(value: str | None) -> str | None:
@@ -284,9 +452,60 @@ def _normalize_option(value: str | None) -> str | None:
     return upper if upper in {"A", "B", "C", "D"} else None
 
 
+def _extract_column_text(columns: dict[str, Any], name: str) -> str | None:
+    value = columns.get(name)
+    if value is None:
+        return None
+    if hasattr(value, "text"):
+        text = str(value.text).strip()
+        return text or None
+    text = str(value).strip()
+    return text or None
+
+
+def _generate_report_comment(prompt_input: str) -> str:
+    if jamai_client is None or p is None or JAMAI_TABLE_TYPE_ACTION is None:
+        raise HTTPException(status_code=503, detail="JamAI is not configured on the Python service")
+
+    try:
+        response = jamai_client.table.add_table_rows(
+            table_type=JAMAI_TABLE_TYPE_ACTION,
+            request=p.RowAddRequest(
+                table_id=JAMAI_REPORT_TABLE_ID,
+                data=[{"prompt_input": prompt_input}],
+                stream=False,
+            ),
+        )
+        result = response[0] if isinstance(response, tuple) else response
+        if not getattr(result, "rows", None):
+            raise HTTPException(status_code=502, detail="JamAI returned no rows")
+
+        row = result.rows[0]
+        columns = getattr(row, "columns", {}) or {}
+        ai_comment = _extract_column_text(columns, "ai_comment")
+        if not ai_comment:
+            raise HTTPException(status_code=502, detail="JamAI response missing ai_comment")
+        return ai_comment
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"JamAI request failed: {exc}") from exc
+
+
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@app.post("/report-comment", response_model=ReportCommentResponse)
+def report_comment(req: ReportCommentRequest) -> Any:
+    ai_comment = _generate_report_comment(req.prompt_input.strip())
+    return ReportCommentResponse(ai_comment=ai_comment, source="jamai")
+
+
+@app.get("/template/spm-80")
+def spm_80_template() -> dict[str, Any]:
+    return _build_spm_80_template_bundle()
 
 
 @app.get("/demo", response_class=HTMLResponse)
@@ -322,10 +541,10 @@ def demo() -> str:
       <textarea name="template_json" placeholder='{"template_width":1400,"template_height":2000,"template":{...},"answer_key":{...}}'></textarea>
 
       <label>Min Mark Threshold</label>
-      <input type="number" name="min_mark_threshold" value="0.36" step="0.01" min="0.05" max="0.95" />
+      <input type="number" name="min_mark_threshold" value="0.55" step="0.01" min="0.05" max="0.95" />
 
       <label>Ambiguity Gap</label>
-      <input type="number" name="ambiguity_gap" value="0.10" step="0.01" min="0.01" max="0.95" />
+      <input type="number" name="ambiguity_gap" value="0.12" step="0.01" min="0.01" max="0.95" />
 
       <button type="submit">Grade</button>
     </form>
@@ -339,8 +558,8 @@ def demo() -> str:
 async def grade_file(
     image: UploadFile = File(...),
     template_json: str | None = Form(default=None),
-    min_mark_threshold: float = Form(default=0.36),
-    ambiguity_gap: float = Form(default=0.10),
+    min_mark_threshold: float = Form(default=0.55),
+    ambiguity_gap: float = Form(default=0.12),
 ) -> Any:
     binary = await image.read()
     # Validate early that the uploaded payload is actually an image OpenCV can decode.
@@ -392,7 +611,17 @@ def grade(req: OMRGradeRequest) -> Any:
         ordered = _find_sheet_corners(image)
 
     warped = _warp_sheet(image, ordered, req.template_width, req.template_height)
+    if not _check_warp_quality(warped):
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "Sheet alignment failed: warped image has insufficient contrast. "
+                "Ensure the full sheet border is visible, lighting is even, and "
+                "the sheet is not heavily folded or glare-affected."
+            ),
+        )
     gray = cv2.cvtColor(warped, cv2.COLOR_BGR2GRAY)
+    gray = _apply_answer_region_mask(gray, req.answer_region)
 
     total = 0
     correct = 0

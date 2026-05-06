@@ -13,6 +13,20 @@ type OMRTemplateMap = Record<
         D: { x: number; y: number; r?: number };
     }
 >;
+type AnswerRegion = { x: number; y: number; width: number; height: number };
+
+type ExamSubjectSettings = Record<string, { objective_max?: number; objective_questions?: number }>;
+type ScanInsertRow = { omr_scan_id?: unknown } | null;
+type OMRServiceResultRow = {
+    question_no?: unknown;
+    detected_option?: unknown;
+    expected_option?: unknown;
+    status?: unknown;
+    confidence?: unknown;
+    ratios?: unknown;
+};
+type SubjectiveRow = { subjective_id?: unknown; subjective_mark?: unknown } | null;
+type ExistingResultRow = { result_id?: unknown } | null;
 
 function toId(v: unknown) {
     return typeof v === "string" ? v.trim() : v == null ? "" : String(v).trim();
@@ -21,6 +35,11 @@ function toId(v: unknown) {
 function toNumber(v: unknown) {
     const n = typeof v === "number" ? v : Number(v);
     return Number.isFinite(n) ? n : 0;
+}
+
+function normalizeOption(v: unknown) {
+    const upper = String(v ?? "").trim().toUpperCase();
+    return ["A", "B", "C", "D"].includes(upper) ? upper : "";
 }
 
 function gradeFromTotal(total: number) {
@@ -46,6 +65,7 @@ export async function POST(req: Request) {
         const template = (body?.template ?? {}) as OMRTemplateMap;
         const template_width = Number(body?.template_width ?? 1400);
         const template_height = Number(body?.template_height ?? 2000);
+        const answer_region = body?.answer_region as AnswerRegion | undefined;
 
         if (teacher_id !== guard.session.user_id) {
             return NextResponse.json({ message: "Akses ditolak" }, { status: 403 });
@@ -90,14 +110,35 @@ export async function POST(req: Request) {
             );
         }
 
+        const validAnswerRows = answerRows.filter((row: { question_no: number; correct_answer: string }) => (
+            toNumber(row.question_no) > 0 && normalizeOption(row.correct_answer) !== ""
+        ));
+
         const answer_key = Object.fromEntries(
-            answerRows.map((row: { question_no: number; correct_answer: string }) => [
+            validAnswerRows.map((row: { question_no: number; correct_answer: string }) => [
                 String(row.question_no),
-                String(row.correct_answer ?? "").toUpperCase().trim(),
+                normalizeOption(row.correct_answer),
             ])
         );
+        if (validAnswerRows.length === 0) {
+            return NextResponse.json(
+                { message: "Skema jawapan objektif tidak sah atau belum lengkap" },
+                { status: 400 }
+            );
+        }
+        const allowedQuestionIds = new Set(Object.keys(answer_key));
+        const filteredTemplate = Object.fromEntries(
+            Object.entries(template).filter(([questionId]) => allowedQuestionIds.has(questionId))
+        ) as OMRTemplateMap;
 
         const omrServiceUrl = process.env.OMR_SERVICE_URL || "http://127.0.0.1:8001";
+        if (Object.keys(filteredTemplate).length === 0) {
+            return NextResponse.json(
+                { message: "Template OMR tidak sepadan dengan skema jawapan semasa" },
+                { status: 400 }
+            );
+        }
+
         const res = await fetch(`${omrServiceUrl}/grade`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -105,10 +146,11 @@ export async function POST(req: Request) {
                 image_base64,
                 template_width,
                 template_height,
-                template,
+                answer_region,
+                template: filteredTemplate,
                 answer_key,
-                min_mark_threshold: body?.min_mark_threshold ?? 0.36,
-                ambiguity_gap: body?.ambiguity_gap ?? 0.1,
+                min_mark_threshold: body?.min_mark_threshold ?? 0.55,
+                ambiguity_gap: body?.ambiguity_gap ?? 0.12,
             }),
         });
 
@@ -138,13 +180,14 @@ export async function POST(req: Request) {
             const subjectSettings =
                 examRow &&
                 typeof examRow === "object" &&
-                (examRow as any).subject_settings &&
-                typeof (examRow as any).subject_settings === "object"
-                    ? (examRow as any).subject_settings
+                "subject_settings" in examRow &&
+                examRow.subject_settings &&
+                typeof examRow.subject_settings === "object"
+                    ? (examRow.subject_settings as ExamSubjectSettings)
                     : {};
 
             const settingsForSubject =
-                subjectSettings && typeof subjectSettings === "object" ? (subjectSettings as any)[subject_id] : null;
+                subjectSettings && typeof subjectSettings === "object" ? subjectSettings[subject_id] ?? null : null;
 
             const objectiveMax = toNumber(settingsForSubject?.objective_max) || total_questions || 0;
             const objectiveQuestions = toNumber(settingsForSubject?.objective_questions) || total_questions || 0;
@@ -177,12 +220,12 @@ export async function POST(req: Request) {
                 });
             }
 
-            const omr_scan_id = toId((scanRow as any)?.omr_scan_id);
+            const omr_scan_id = toId((scanRow as ScanInsertRow)?.omr_scan_id);
             persisted = omr_scan_id ? { omr_scan_id } : null;
 
-            const results = Array.isArray(json?.results) ? json.results : [];
+            const results = Array.isArray(json?.results) ? (json.results as OMRServiceResultRow[]) : [];
             if (omr_scan_id && results.length > 0) {
-                const answerRows = results.map((r: any) => ({
+                const answerRows = results.map((r: OMRServiceResultRow) => ({
                     omr_scan_id,
                     question_no: toNumber(r?.question_no),
                     detected_option: r?.detected_option ?? null,
@@ -214,8 +257,8 @@ export async function POST(req: Request) {
                     console.warn("Failed to load subjective mark while saving OMR result:", subjectiveErr.message);
                     resultWarning = "OMR scan saved, but failed to read subjective mark for result sync.";
                 } else {
-                    const subjective_id = toId((subjectiveRow as any)?.subjective_id) || null;
-                    const subjective_mark = toNumber((subjectiveRow as any)?.subjective_mark);
+                    const subjective_id = toId((subjectiveRow as SubjectiveRow)?.subjective_id) || null;
+                    const subjective_mark = toNumber((subjectiveRow as SubjectiveRow)?.subjective_mark);
                     const total = objective_total_mark + subjective_mark;
                     const grade = gradeFromTotal(total);
 
@@ -230,7 +273,7 @@ export async function POST(req: Request) {
                     if (existingResultErr) {
                         console.warn("Failed to lookup existing result while saving OMR result:", existingResultErr.message);
                         resultWarning = "OMR scan saved, but failed to sync stg_results.";
-                    } else if ((existingResult as any)?.result_id) {
+                    } else if ((existingResult as ExistingResultRow)?.result_id) {
                         const { error: updateResultErr } = await supabaseAdmin
                             .from("stg_results")
                             .update({
@@ -240,7 +283,7 @@ export async function POST(req: Request) {
                                 grade,
                                 status: "pending",
                             })
-                            .eq("result_id", (existingResult as any).result_id);
+                            .eq("result_id", (existingResult as ExistingResultRow)?.result_id);
 
                         if (updateResultErr) {
                             console.warn("Failed to update result after OMR save:", updateResultErr.message);

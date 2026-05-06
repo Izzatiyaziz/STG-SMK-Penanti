@@ -78,7 +78,7 @@ export async function POST(req: Request) {
                     .order("fullname", { ascending: true }),
                 supabase
                     .from("stg_report_cards")
-                    .select("student_id, ai_comment")
+                    .select("student_id, ai_comment, prompt_input, comment_mode")
                     .eq("class_id", class_id)
                     .eq("exam_id", exam_id),
             ]);
@@ -101,7 +101,7 @@ export async function POST(req: Request) {
 
         const { data: allResults, error: rErr } = await supabase
             .from("stg_results")
-            .select("student_id, subject_id, total, grade, status, subjective_id")
+            .select("result_id, student_id, subject_id, total, grade, status, subjective_id, approval_date")
             .eq("exam_id", exam_id)
             .in("student_id", studentIds);
 
@@ -109,10 +109,47 @@ export async function POST(req: Request) {
             return NextResponse.json({ message: rErr.message }, { status: 500 });
         }
 
-        const pendingOrRejected = (Array.isArray(allResults) ? allResults : []).filter((r: any) => {
-            const hasSubjective = Boolean(r?.subjective_id);
+        const statusRank = (status: string) => {
+            if (status === "approved") return 3;
+            if (status === "pending") return 2;
+            if (status === "rejected") return 1;
+            return 0;
+        };
+
+        const normalizedResults = (Array.isArray(allResults) ? allResults : []).filter((r: any) => {
+            return Boolean(toId(r?.student_id) && toId(r?.subject_id) && toId(r?.subjective_id));
+        });
+
+        const latestResultByStudentSubject = new Map<string, any>();
+        for (const row of normalizedResults) {
+            const key = `${toId(row?.student_id)}|${toId(row?.subject_id)}`;
+            const current = latestResultByStudentSubject.get(key);
+            const nextStatus = String(row?.status ?? "pending").trim();
+            const currentStatus = String(current?.status ?? "").trim();
+            const nextApprovalDate = toId(row?.approval_date);
+            const currentApprovalDate = toId(current?.approval_date);
+
+            if (!current) {
+                latestResultByStudentSubject.set(key, row);
+                continue;
+            }
+
+            if (statusRank(nextStatus) > statusRank(currentStatus)) {
+                latestResultByStudentSubject.set(key, row);
+                continue;
+            }
+
+            if (statusRank(nextStatus) === statusRank(currentStatus) && nextApprovalDate > currentApprovalDate) {
+                latestResultByStudentSubject.set(key, row);
+                continue;
+            }
+        }
+
+        const canonicalResults = Array.from(latestResultByStudentSubject.values());
+
+        const pendingOrRejected = canonicalResults.filter((r: any) => {
             const status = String(r?.status ?? "pending").trim();
-            return hasSubjective && (status === "pending" || status === "rejected");
+            return status === "pending" || status === "rejected";
         });
 
         if (pendingOrRejected.length > 0) {
@@ -126,10 +163,9 @@ export async function POST(req: Request) {
             );
         }
 
-        const approvedResults = (Array.isArray(allResults) ? allResults : []).filter((r: any) => {
-            const hasSubjective = Boolean(r?.subjective_id);
+        const approvedResults = canonicalResults.filter((r: any) => {
             const status = String(r?.status ?? "pending").trim();
-            return hasSubjective && status === "approved";
+            return status === "approved";
         });
 
         const approvedByStudent = new Map<string, any[]>();
@@ -170,12 +206,17 @@ export async function POST(req: Request) {
             if (id) subjectNameById.set(id, name);
         }
 
-        const existingCommentByStudentId = new Map<string, string>();
+        const existingCardByStudentId = new Map<string, { comment: string; prompt_input: unknown; comment_mode: string }>();
         for (const c of Array.isArray(existingCards) ? existingCards : []) {
             if (!c || typeof c !== "object") continue;
             const sid = toId((c as any).student_id);
             const comment = String((c as any).ai_comment ?? "").trim();
-            if (sid && comment) existingCommentByStudentId.set(sid, comment);
+            if (!sid) continue;
+            existingCardByStudentId.set(sid, {
+                comment,
+                prompt_input: (c as any).prompt_input ?? null,
+                comment_mode: String((c as any).comment_mode ?? "manual").trim() || "manual",
+            });
         }
 
         const computed = studentList.map((s) => {
@@ -198,7 +239,9 @@ export async function POST(req: Request) {
                 student_name: s.name,
                 subjects: subjectsOut,
                 average_mark: avg,
-                comment: existingCommentByStudentId.get(s.id) ?? "",
+                comment: existingCardByStudentId.get(s.id)?.comment ?? "",
+                prompt_input: existingCardByStudentId.get(s.id)?.prompt_input ?? null,
+                comment_mode: existingCardByStudentId.get(s.id)?.comment_mode ?? "manual",
             };
         });
 
@@ -220,6 +263,8 @@ export async function POST(req: Request) {
             average_mark: Number.isFinite(s.average_mark) ? s.average_mark : null,
             class_position: positionByStudent.get(s.student_id) ?? null,
             ai_comment: s.comment || null,
+            prompt_input: s.prompt_input,
+            comment_mode: s.comment_mode,
             generated_date: new Date().toISOString(),
         }));
 

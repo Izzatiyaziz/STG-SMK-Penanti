@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import supabase from "@/lib/supabase";
+import supabaseAdmin from "@/lib/supabase-admin";
 import { requireApiRole } from "@/lib/auth";
 
 export const runtime = "nodejs";
@@ -46,6 +47,13 @@ function normalizeStatus(raw: string | null): ApprovalStatus | "all" {
         return raw;
     if (raw === "all") return "all";
     return "pending";
+}
+
+function statusRank(status: string | null | undefined) {
+    if (status === "approved") return 3;
+    if (status === "pending") return 2;
+    if (status === "rejected") return 1;
+    return 0;
 }
 
 export async function GET(req: Request) {
@@ -110,17 +118,57 @@ export async function GET(req: Request) {
             );
         }
 
+        const canonicalResultsMap = new Map<string, Record<string, unknown>>();
+        for (const row of Array.isArray(results) ? results : []) {
+            if (!row || typeof row !== "object") continue;
+
+            const studentId = toId((row as { student_id?: unknown }).student_id);
+            const subjectId = toId((row as { subject_id?: unknown }).subject_id);
+            const examId = toId((row as { exam_id?: unknown }).exam_id);
+            const resultId = toId((row as { result_id?: unknown }).result_id);
+            const statusValue = toId((row as { status?: unknown }).status);
+
+            if (!studentId || !subjectId || !examId || !resultId) continue;
+
+            const key = [studentId, subjectId, examId].join("|");
+            const existing = canonicalResultsMap.get(key);
+
+            if (!existing) {
+                canonicalResultsMap.set(key, row as Record<string, unknown>);
+                continue;
+            }
+
+            const existingStatus = toId(existing.status);
+            const currentRank = statusRank(statusValue);
+            const existingRank = statusRank(existingStatus);
+
+            if (currentRank > existingRank) {
+                canonicalResultsMap.set(key, row as Record<string, unknown>);
+                continue;
+            }
+
+            if (currentRank === existingRank) {
+                const currentResultId = resultId;
+                const existingResultId = toId(existing.result_id);
+                if (currentResultId > existingResultId) {
+                    canonicalResultsMap.set(key, row as Record<string, unknown>);
+                }
+            }
+        }
+
+        const canonicalResults = Array.from(canonicalResultsMap.values());
+
         const studentIds = Array.from(
-            new Set((results ?? []).map((r) => r.student_id as string))
+            new Set(canonicalResults.map((r) => toId(r.student_id)))
         ).filter(Boolean);
         const examIds = Array.from(
-            new Set((results ?? []).map((r) => r.exam_id as string))
+            new Set(canonicalResults.map((r) => toId(r.exam_id)))
         ).filter(Boolean);
         const omrIds = Array.from(
-            new Set((results ?? []).map((r) => r.omr_scan_id as string))
+            new Set(canonicalResults.map((r) => toId(r.omr_scan_id)))
         ).filter(Boolean);
         const subjectiveIds = Array.from(
-            new Set((results ?? []).map((r) => r.subjective_id as string))
+            new Set(canonicalResults.map((r) => toId(r.subjective_id)))
         ).filter(Boolean);
 
         const [{ data: students }, { data: classes }, { data: subjects }, { data: exams }, { data: omrScans }, { data: subjectiveMarks }] =
@@ -242,7 +290,7 @@ export async function GET(req: Request) {
             return "approved";
         };
 
-        for (const row of Array.isArray(results) ? results : []) {
+        for (const row of canonicalResults) {
             if (!row || typeof row !== "object") continue;
 
             const result_id = toId((row as { result_id?: unknown }).result_id);
@@ -377,7 +425,7 @@ export async function POST(req: Request) {
             return NextResponse.json({ message: "Akses ditolak" }, { status: 403 });
         }
 
-        const { data: students, error: studentErr } = await supabase
+        const { data: students, error: studentErr } = await supabaseAdmin
             .from("stg_students")
             .select("student_id")
             .eq("class_id", class_id);
@@ -400,18 +448,45 @@ export async function POST(req: Request) {
             return NextResponse.json({ success: true, updated: 0 });
         }
 
-        const { error: updateErr } = await supabase
+        const { data: pendingRows, error: pendingErr } = await supabaseAdmin
+            .from("stg_results")
+            .select("result_id")
+            .eq("subject_id", subject_id)
+            .eq("exam_id", exam_id)
+            .eq("status", "pending")
+            .not("subjective_id", "is", null)
+            .in("student_id", studentIds);
+
+        if (pendingErr) {
+            return NextResponse.json(
+                { message: pendingErr.message },
+                { status: 500 }
+            );
+        }
+
+        const resultIds = (Array.isArray(pendingRows) ? pendingRows : [])
+            .map((row: unknown) => {
+                if (!row || typeof row !== "object") return "";
+                return toId((row as { result_id?: unknown }).result_id);
+            })
+            .filter(Boolean);
+
+        if (resultIds.length === 0) {
+            return NextResponse.json({
+                success: true,
+                updated: 0,
+                message: "Tiada markah pending untuk dikemas kini",
+            });
+        }
+
+        const { data: updatedRows, error: updateErr } = await supabaseAdmin
             .from("stg_results")
             .update({
                 status: nextStatus,
                 approval_date: new Date().toISOString(),
             })
-            .eq("subject_id", subject_id)
-            .eq("exam_id", exam_id)
-            .eq("status", "pending")
-            // Only approve/reject submitted subjective results
-            .not("subjective_id", "is", null)
-            .in("student_id", studentIds);
+            .in("result_id", resultIds)
+            .select("result_id");
 
         if (updateErr) {
             return NextResponse.json(
@@ -420,7 +495,10 @@ export async function POST(req: Request) {
             );
         }
 
-        return NextResponse.json({ success: true });
+        return NextResponse.json({
+            success: true,
+            updated: Array.isArray(updatedRows) ? updatedRows.length : 0,
+        });
     } catch (err) {
         console.error("COORDINATOR APPROVAL ACTION ERROR:", err);
         return NextResponse.json({ message: "Ralat pelayan" }, { status: 500 });
