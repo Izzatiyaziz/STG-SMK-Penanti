@@ -95,7 +95,7 @@ export async function POST(req: Request) {
       return NextResponse.json(
         {
           success: true,
-          message: "Penyelaras subjek berjaya dikemaskini ✅",
+          message: "Panitia subjek berjaya dikemaskini ✅",
           coordinator: updatedRow,
         },
         { status: 200 }
@@ -116,7 +116,7 @@ export async function POST(req: Request) {
     return NextResponse.json(
       {
         success: true,
-        message: "Penyelaras subjek berjaya dilantik ✅",
+        message: "Panitia subjek berjaya dilantik ✅",
         coordinator: insertedRow,
       },
       { status: 201 }

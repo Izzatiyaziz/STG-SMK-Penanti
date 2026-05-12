@@ -39,13 +39,20 @@ import {
     PaginationPrevious,
 } from "@/components/ui/pagination";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Trash2, Edit, UserPlus, UserMinus, Search, RefreshCw, School, Users, Clock, Shield, Filter } from "lucide-react";
+import { Plus, Trash2, Edit, UserPlus, UserMinus, Search, RefreshCw, School, Users, Clock, Shield, Filter, GraduationCap, AlertCircle } from "lucide-react";
 
 type ClassRow = {
     id: string;
     name: string;
     grade: number;
     studentCount: number;
+};
+
+const normalizeSpaces = (value: string) => value.replace(/\s+/g, " ").trim();
+const isWordsOnlyName = (value: string) => {
+    const normalized = normalizeSpaces(value);
+    if (!normalized) return false;
+    return /^[\p{L}]+(?: [\p{L}]+)*$/u.test(normalized);
 };
 
 type TeacherOption = {
@@ -71,16 +78,20 @@ const LastUpdatedTime = () => {
 };
 
 export default function AdminClassesPage() {
-    const PAGE_SIZE = 8;
+    const PAGE_SIZE = 10;
     const [rows, setRows] = useState<ClassRow[]>([]);
     const [loading, setLoading] = useState(false);
     const [searchQuery, setSearchQuery] = useState("");
     const [filterGrade, setFilterGrade] = useState<string>("all");
+    const [filterClassName, setFilterClassName] = useState<string>("all");
     const [currentPage, setCurrentPage] = useState(1);
     const [addOpen, setAddOpen] = useState(false);
+    const [addName, setAddName] = useState("");
+    const [addNameTouched, setAddNameTouched] = useState(false);
 
     const [editing, setEditing] = useState<ClassRow | null>(null);
     const [editName, setEditName] = useState("");
+    const [editNameTouched, setEditNameTouched] = useState(false);
     const [editGrade, setEditGrade] = useState<number>(1);
     const [deleting, setDeleting] = useState<ClassRow | null>(null);
 
@@ -90,6 +101,25 @@ export default function AdminClassesPage() {
     >({});
     const [assigning, setAssigning] = useState<ClassRow | null>(null);
     const [selectedTeacherId, setSelectedTeacherId] = useState<string>("");
+    const [isChangingClassTeacher, setIsChangingClassTeacher] = useState(false);
+
+    const addNameNormalized = normalizeSpaces(addName);
+    const addNameError =
+        addNameTouched && !addNameNormalized
+            ? "Nama kelas diperlukan."
+            : addNameTouched && !isWordsOnlyName(addNameNormalized)
+                ? "Nama kelas hanya boleh mengandungi huruf"
+                : "";
+    const addNameIsValid = Boolean(addNameNormalized) && isWordsOnlyName(addNameNormalized);
+
+    const editNameNormalized = normalizeSpaces(editName);
+    const editNameError =
+        editNameTouched && !editNameNormalized
+            ? "Nama kelas diperlukan."
+            : editNameTouched && !isWordsOnlyName(editNameNormalized)
+                ? "Nama kelas hanya boleh mengandungi huruf"
+                : "";
+    const editNameIsValid = Boolean(editNameNormalized) && isWordsOnlyName(editNameNormalized);
 
     async function fetchClasses() {
         setLoading(true);
@@ -185,6 +215,12 @@ export default function AdminClassesPage() {
         fetchClassTeachers();
     }, []);
 
+    const classNameOptions = useMemo(() => {
+        const uniqueNames = new Set<string>();
+        for (const row of rows) uniqueNames.add(row.name);
+        return Array.from(uniqueNames).sort((a, b) => a.localeCompare(b));
+    }, [rows]);
+
     // Filtered rows based on search and grade filter
     const filteredRows = useMemo(() => {
         let filtered = rows;
@@ -192,6 +228,11 @@ export default function AdminClassesPage() {
         // Filter by grade
         if (filterGrade !== "all") {
             filtered = filtered.filter((row) => row.grade === parseInt(filterGrade));
+        }
+
+        // Filter by class name (exact match)
+        if (filterClassName !== "all") {
+            filtered = filtered.filter((row) => row.name === filterClassName);
         }
 
         // Filter by search query (class name)
@@ -203,12 +244,12 @@ export default function AdminClassesPage() {
         }
 
         return filtered;
-    }, [rows, filterGrade, searchQuery]);
+    }, [rows, filterGrade, filterClassName, searchQuery]);
 
     // Reset to page 1 when filters change
     useEffect(() => {
         setCurrentPage(1);
-    }, [filterGrade, searchQuery]);
+    }, [filterGrade, filterClassName, searchQuery]);
 
     useEffect(() => {
         const totalPages = Math.max(1, Math.ceil(filteredRows.length / PAGE_SIZE));
@@ -239,10 +280,17 @@ export default function AdminClassesPage() {
         return [1, "ellipsis-left", currentPage - 1, currentPage, currentPage + 1, "ellipsis-right", totalPages] as const;
     }, [currentPage, totalPages]);
 
-    const classTeacherOptions = useMemo(
-        () => teachers.filter((teacher) => teacher.roles?.includes("class teacher")),
-        [teachers]
-    );
+    const classTeacherOptions = useMemo(() => {
+        const base = teachers.filter((teacher) => teacher.roles?.includes("class teacher"));
+        const assignedTeacherIds = new Set(Object.values(classTeacherByClassId));
+        const currentTeacherForClass = assigning?.id ? classTeacherByClassId[assigning.id] ?? "" : "";
+
+        // Only show unassigned teachers. Keep current teacher in list so the selected value
+        // can still display even when dropdown is locked.
+        return base.filter(
+            (t) => !assignedTeacherIds.has(t.id) || (currentTeacherForClass && t.id === currentTeacherForClass)
+        );
+    }, [teachers, classTeacherByClassId, assigning?.id]);
 
     // Grade color helper
     const getGradeColor = (grade: number) => {
@@ -290,10 +338,11 @@ export default function AdminClassesPage() {
         e.preventDefault();
         const form = e.currentTarget;
         const fd = new FormData(form);
-        const class_name = String(fd.get("class_name") ?? "").trim();
+        const class_name = normalizeSpaces(addName || String(fd.get("class_name") ?? ""));
         const grade = Number(fd.get("grade") ?? 1);
 
-        if (!class_name) return;
+        setAddNameTouched(true);
+        if (!class_name || !isWordsOnlyName(class_name)) return;
 
         const toastId = toast.loading("Menambah kelas...");
         try {
@@ -309,6 +358,8 @@ export default function AdminClassesPage() {
             }
             toast.success("Kelas berjaya ditambah", { id: toastId });
             form.reset();
+            setAddName("");
+            setAddNameTouched(false);
             setAddOpen(false);
             await fetchClasses();
             await fetchClassTeachers();
@@ -319,6 +370,8 @@ export default function AdminClassesPage() {
 
     async function handleSaveEdit() {
         if (!editing) return;
+        setEditNameTouched(true);
+        if (!editNameIsValid) return;
         const toastId = toast.loading("Menyimpan...");
         try {
             const res = await fetch("/api/admin/classes", {
@@ -326,7 +379,7 @@ export default function AdminClassesPage() {
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     class_id: editing.id,
-                    class_name: editName,
+                    class_name: editNameNormalized,
                     grade: editGrade,
                 }),
             });
@@ -385,6 +438,7 @@ export default function AdminClassesPage() {
             toast.success(json?.message ?? "Berjaya", { id: toastId });
             setAssigning(null);
             setSelectedTeacherId("");
+            setIsChangingClassTeacher(false);
             fetchClassTeachers();
         } catch {
             toast.error("Ralat sistem", { id: toastId });
@@ -405,7 +459,12 @@ export default function AdminClassesPage() {
                 return;
             }
             toast.success(json?.message ?? "Berjaya", { id: toastId });
-            setAssigning(null);
+            // Kekalkan dialog terbuka supaya admin boleh terus buat lantikan baharu.
+            setClassTeacherByClassId((prev) => {
+                const next = { ...prev };
+                delete next[assigning.id];
+                return next;
+            });
             setSelectedTeacherId("");
             fetchClassTeachers();
         } catch {
@@ -420,6 +479,16 @@ export default function AdminClassesPage() {
         const teacher = teachers.find((t) => t.id === teacherId);
         return teacher?.name ?? "—";
     };
+
+    const currentTeacherForAssigningClass =
+        assigning?.id ? classTeacherByClassId[assigning.id] ?? "" : "";
+    const isClassTeacherSelectLocked =
+        Boolean(currentTeacherForAssigningClass) && !isChangingClassTeacher;
+    const isAssignSaveDisabled =
+        isClassTeacherSelectLocked ||
+        !selectedTeacherId ||
+        (currentTeacherForAssigningClass !== "" &&
+            selectedTeacherId === currentTeacherForAssigningClass);
 
     return (
         <div className="min-h-screen bg-background p-4 md:p-6">
@@ -436,7 +505,7 @@ export default function AdminClassesPage() {
                                     Pengurusan Kelas
                                 </h1>
                                 <p className="text-muted-foreground font-medium mt-1">
-                                    Urus kelas mengikut tingkatan
+                                    Mengurus senarai kelas dan tetapkan guru kelas mengikut tingkatan
                                 </p>
                             </div>
                         </div>
@@ -471,7 +540,16 @@ export default function AdminClassesPage() {
                             Muat Semula
                         </Button>
 
-                        <Dialog open={addOpen} onOpenChange={setAddOpen}>
+                        <Dialog
+                            open={addOpen}
+                            onOpenChange={(open) => {
+                                setAddOpen(open);
+                                if (!open) {
+                                    setAddName("");
+                                    setAddNameTouched(false);
+                                }
+                            }}
+                        >
                             <DialogTrigger asChild>
                                 <Button className="bg-primary hover:bg-primary/90 text-primary-foreground shadow-sm">
                                     <Plus className="w-4 h-4 mr-2" />
@@ -498,13 +576,7 @@ export default function AdminClassesPage() {
                                                 Maklumat Kelas
                                             </h3>
                                         </div>
-                                        <div className="space-y-2">
-                                            <Label className="flex items-center gap-1">
-                                                Nama Kelas <span className="text-red-500">*</span>
-                                            </Label>
-                                            <Input name="class_name" placeholder="contoh: Ibnu Khaldun" required className="rounded-xl border-2 border-border/30 focus:border-primary/50 h-11" />
-                                        </div>
-                                        <div className="space-y-2">
+                                                                                <div className="space-y-2">
                                             <Label className="flex items-center gap-1">
                                                 Tingkatan <span className="text-red-500">*</span>
                                             </Label>
@@ -521,6 +593,34 @@ export default function AdminClassesPage() {
                                                 </SelectContent>
                                             </Select>
                                         </div>
+                                        <div className="space-y-2">
+                                            <Label className="flex items-center gap-1">
+                                                Nama Kelas <span className="text-red-500">*</span>
+                                            </Label>
+                                            <Input
+                                                name="class_name"
+                                                value={addName}
+                                                onChange={(e) => {
+                                                    const next = e.target.value;
+                                                    setAddName(next);
+                                                    if (/\d/.test(next)) setAddNameTouched(true);
+                                                }}
+                                                onBlur={() => setAddNameTouched(true)}
+                                                placeholder="contoh: Ibnu Khaldun"
+                                                required
+                                                aria-invalid={Boolean(addNameError)}
+                                                className={`rounded-xl border-2 focus:border-primary/50 h-11 ${
+                                                    addNameError ? "border-red-400" : "border-border/30"
+                                                }`}
+                                            />
+                                            {addNameError && (
+                                                <div className="flex items-start gap-2 text-xs bg-red-50 text-red-700 border border-red-200 px-2 py-1.5 rounded-md">
+                                                    <AlertCircle className="w-3.5 h-3.5 text-red-600 mt-0.5 flex-shrink-0" />
+                                                    <span className="leading-4">{addNameError}</span>
+                                                </div>
+                                            )}
+                                        </div>
+
                                     </div>
                                     <div className="flex flex-col gap-3 pt-4 sm:flex-row">
                                         <Button
@@ -531,7 +631,11 @@ export default function AdminClassesPage() {
                                         >
                                             Batal
                                         </Button>
-                                        <Button type="submit" className="flex-1 rounded-xl h-11 bg-gradient-to-r from-primary to-primary/90 hover:from-primary/95 hover:to-primary/80 shadow-lg font-medium">
+                                        <Button
+                                            type="submit"
+                                            disabled={!addNameIsValid}
+                                            className="flex-1 rounded-xl h-11 bg-gradient-to-r from-primary to-primary/90 hover:from-primary/95 hover:to-primary/80 shadow-lg font-medium"
+                                        >
                                             <Plus className="w-4 h-4 mr-2" />
                                             Simpan Kelas
                                         </Button>
@@ -558,7 +662,7 @@ export default function AdminClassesPage() {
                             <div className="flex items-center gap-3">
                                 <Badge variant="outline" className="border-primary/30 bg-primary/5 text-primary font-medium">
                                     <Filter className="w-3 h-3 mr-1" />
-                                    {filteredRows.length} kelas ditemui
+                                    {filteredRows.length} kelas
                                 </Badge>
                             </div>
                         </div>
@@ -588,7 +692,7 @@ export default function AdminClassesPage() {
                                         <SelectContent className="rounded-lg border-border">
                                             <SelectItem value="all">
                                                 <div className="flex items-center gap-2">
-                                                    <School className="w-4 h-4" />
+                                                    <GraduationCap className="w-4 h-4" />
                                                     Semua Tingkatan
                                                 </div>
                                             </SelectItem>
@@ -626,11 +730,34 @@ export default function AdminClassesPage() {
                                     </Select>
                                 </div>
 
+                                {/* CLASS NAME FILTER */}
+                                <div className="w-full sm:w-[180px]">
+                                    <Select value={filterClassName} onValueChange={setFilterClassName}>
+                                        <SelectTrigger className="h-11 rounded-lg border-border bg-background">
+                                            <SelectValue placeholder="Pilih Kelas" />
+                                        </SelectTrigger>
+                                        <SelectContent className="rounded-lg border-border max-h-72 overflow-y-auto">
+                                            <SelectItem value="all">
+                                                <div className="flex items-center gap-2">
+                                                    <School className="w-4 h-4" />
+                                                    Semua Kelas
+                                                </div>
+                                            </SelectItem>
+                                            {classNameOptions.map((name) => (
+                                                <SelectItem key={name} value={name}>
+                                                    {name}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+
                                 <Button
                                     variant="outline"
                                     onClick={() => {
                                         setSearchQuery("");
                                         setFilterGrade("all");
+                                        setFilterClassName("all");
                                     }}
                                     className="h-11 rounded-lg border-border hover:bg-accent hover:text-accent-foreground"
                                 >
@@ -691,12 +818,12 @@ export default function AdminClassesPage() {
                                                         <div className="text-center">
                                                             <p className="font-semibold text-foreground">Tiada kelas dijumpai</p>
                                                             <p className="text-sm text-muted-foreground mt-1 max-w-md">
-                                                                {searchQuery || filterGrade !== "all" 
+                                                                {searchQuery || filterGrade !== "all" || filterClassName !== "all"
                                                                     ? "Tiada kelas yang sepadan dengan carian anda"
                                                                     : "Mulakan dengan menambah kelas pertama"}
                                                             </p>
                                                         </div>
-                                                        {!searchQuery && filterGrade === "all" && (
+                                                        {!searchQuery && filterGrade === "all" && filterClassName === "all" && (
                                                             <Button
                                                                 className="bg-primary hover:bg-primary/90 text-primary-foreground"
                                                                 onClick={() => setAddOpen(true)}
@@ -722,6 +849,7 @@ export default function AdminClassesPage() {
                                                             className="py-4 text-center cursor-pointer"
                                                             onClick={() => {
                                                                 setAssigning(classItem);
+                                                                setIsChangingClassTeacher(false);
                                                                 setSelectedTeacherId(
                                                                     classTeacherByClassId[classItem.id] ?? ""
                                                                 );
@@ -747,6 +875,7 @@ export default function AdminClassesPage() {
                                                             className="py-4 cursor-pointer"
                                                             onClick={() => {
                                                                 setAssigning(classItem);
+                                                                setIsChangingClassTeacher(false);
                                                                 setSelectedTeacherId(
                                                                     classTeacherByClassId[classItem.id] ?? ""
                                                                 );
@@ -812,6 +941,7 @@ export default function AdminClassesPage() {
                                                                     className="h-8 w-8 text-primary"
                                                                     onClick={() => {
                                                                         setAssigning(classItem);
+                                                                        setIsChangingClassTeacher(false);
                                                                         setSelectedTeacherId(
                                                                             classTeacherByClassId[classItem.id] ?? ""
                                                                         );
@@ -837,6 +967,7 @@ export default function AdminClassesPage() {
                                                                         setEditing(classItem);
                                                                         setEditName(classItem.name);
                                                                         setEditGrade(classItem.grade);
+                                                                        setEditNameTouched(false);
                                                                     }}
                                                                     title="Kemaskini kelas"
                                                                     aria-label="Kemaskini kelas"
@@ -871,10 +1002,13 @@ export default function AdminClassesPage() {
                             <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
                                 <div className="flex items-center gap-2 text-muted-foreground">
                                     <div className="flex items-center gap-1">
-                                        <span className="font-semibold text-foreground">{filteredRows.length}</span>
+                                        <span>Menunjukkan</span>
+                                        <span className="font-semibold text-foreground">{(currentPage - 1) * PAGE_SIZE + 1}
+                                        {" - "}
+                                        {Math.min(currentPage * PAGE_SIZE, filteredRows.length)} </span>
                                         <span>daripada</span>
                                         <span className="font-semibold text-foreground">{rows.length}</span>
-                                        <span>kelas dipaparkan</span>
+                                        <span>kelas</span>
                                     </div>
                                     {filterGrade !== "all" && (
                                         <Badge variant="secondary" className="ml-2">
@@ -905,11 +1039,6 @@ export default function AdminClassesPage() {
 
                             {!loading && totalPages > 1 && (
                                 <div className="flex flex-col gap-3 border-t border-border/60 pt-4">
-                                    <div className="text-sm text-muted-foreground">
-                                        Menunjukkan {(currentPage - 1) * PAGE_SIZE + 1}
-                                        {" - "}
-                                        {Math.min(currentPage * PAGE_SIZE, filteredRows.length)} daripada {filteredRows.length} kelas
-                                    </div>
                                     <Pagination>
                                         <PaginationContent>
                                             <PaginationItem>
@@ -986,7 +1115,15 @@ export default function AdminClassesPage() {
             </div>
 
             {/* EDIT DIALOG */}
-            <Dialog open={Boolean(editing)} onOpenChange={() => setEditing(null)}>
+            <Dialog
+                open={Boolean(editing)}
+                onOpenChange={(open) => {
+                    if (!open) {
+                        setEditing(null);
+                        setEditNameTouched(false);
+                    }
+                }}
+            >
                 <DialogContent className="sm:max-w-[500px]">
                     <DialogHeader>
                         <DialogTitle className="flex items-center gap-2 font-bold">
@@ -996,40 +1133,49 @@ export default function AdminClassesPage() {
                     </DialogHeader>
                     <div className="space-y-5 py-4">
                         <div className="space-y-4">
-                            <div className="space-y-2">
-                                <Label className="flex items-center gap-1">
-                                    <School className="w-3.5 h-3.5" /> Nama Kelas
-                                </Label>
-                                <Input
-                                    value={editName}
-                                    onChange={(e) => setEditName(e.target.value)}
-                                    className="h-11"
-                                />
-                            </div>
-                            <div className="space-y-2">
-                                <Label className="flex items-center gap-1">
-                                    <Filter className="w-3.5 h-3.5" /> Tingkatan
-                                </Label>
-                                <Select value={editGrade.toString()} onValueChange={(v) => setEditGrade(Number(v))}>
-                                    <SelectTrigger className="h-11">
-                                        <SelectValue />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        {[1, 2, 3, 4, 5].map((g) => (
-                                            <SelectItem key={g} value={g.toString()}>
-                                                Tingkatan {g}
-                                            </SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
+                            <div className="grid gap-4 sm:grid-cols-2">
+                                <div className="space-y-2">
+                                    <Label className="flex items-center gap-1">
+                                        <Filter className="w-3.5 h-3.5" /> Tingkatan
+                                    </Label>
+                                    <Input value={`Tingkatan ${editGrade}`} disabled className="h-11 bg-muted/50" />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label className="flex items-center gap-1">
+                                        <School className="w-3.5 h-3.5" /> Nama Kelas
+                                    </Label>
+                                    <Input
+                                        value={editName}
+                                        onChange={(e) => {
+                                            const next = e.target.value;
+                                            setEditName(next);
+                                            if (/\d/.test(next)) setEditNameTouched(true);
+                                        }}
+                                        onBlur={() => setEditNameTouched(true)}
+                                        aria-invalid={Boolean(editNameError)}
+                                        className={`h-11 ${editNameError ? "border-red-400" : ""}`}
+                                    />
+                                    {editNameError && (
+                                        <div className="flex items-start gap-2 text-xs bg-red-50 text-red-700 border border-red-200 px-2 py-1.5 rounded-md">
+                                            <AlertCircle className="w-3.5 h-3.5 text-red-600 mt-0.5 flex-shrink-0" />
+                                            <span className="leading-4">{editNameError}</span>
+                                        </div>
+                                    )}
+                                </div>
                             </div>
                         </div>
                     </div>
                     <DialogFooter>
-                        <Button variant="outline" onClick={() => setEditing(null)}>
+                        <Button
+                            variant="outline"
+                            onClick={() => {
+                                setEditing(null);
+                                setEditNameTouched(false);
+                            }}
+                        >
                             Batal
                         </Button>
-                        <Button onClick={handleSaveEdit} disabled={!editName} className="bg-primary px-8">
+                        <Button onClick={handleSaveEdit} disabled={!editNameIsValid} className="bg-primary px-8">
                             Simpan
                         </Button>
                     </DialogFooter>
@@ -1063,6 +1209,7 @@ export default function AdminClassesPage() {
                     if (!open) {
                         setAssigning(null);
                         setSelectedTeacherId("");
+                        setIsChangingClassTeacher(false);
                     }
                 }}
             >
@@ -1080,18 +1227,18 @@ export default function AdminClassesPage() {
                 <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
                         <Label className="flex items-center gap-1 text-muted-foreground">
-                            <School className="w-3.5 h-3.5" /> Nama Kelas
-                        </Label>
-                        <div className="h-11 px-3 flex items-center rounded-md border border-border bg-muted/30 font-medium">
-                            {assigning?.name}
-                        </div>
-                    </div>
-                    <div className="space-y-2">
-                        <Label className="flex items-center gap-1 text-muted-foreground">
                             <Filter  className="w-3.5 h-3.5" /> Tingkatan
                         </Label>
                         <div className="h-11 px-3 flex items-center rounded-md border border-border bg-muted/30 font-medium">
                             Tingkatan {assigning?.grade}
+                        </div>
+                    </div>
+                    <div className="space-y-2">
+                        <Label className="flex items-center gap-1 text-muted-foreground">
+                            <School className="w-3.5 h-3.5" /> Nama Kelas
+                        </Label>
+                        <div className="h-11 px-3 flex items-center rounded-md border border-border bg-muted/30 font-medium">
+                            {assigning?.name}
                         </div>
                     </div>
                 </div>
@@ -1104,6 +1251,7 @@ export default function AdminClassesPage() {
                     <Select
                         value={selectedTeacherId}
                         onValueChange={setSelectedTeacherId}
+                        disabled={isClassTeacherSelectLocked}
                     >
                         <SelectTrigger className="h-11 border-border">
                             <SelectValue placeholder="Pilih guru kelas" />
@@ -1130,26 +1278,30 @@ export default function AdminClassesPage() {
                            {/* Note Box - Selaras dengan nota di Edit Student */}
                 <div className="p-3 bg-amber-50 border border-amber-100 rounded-lg mt-2">
                     <p className="text-[11px] text-amber-700 leading-relaxed italic">
-                        <strong>Nota:</strong> Seorang guru hanya boleh memegang tanggungjawab untuk <strong>satu (1) kelas</strong> sahaja pada satu masa.
+                        <strong>Nota:</strong> Seorang guru boleh memegang tanggungjawab untuk <strong>satu (1) kelas</strong> sahaja pada satu masa.
                     </p>
                 </div>
             </div>
 
         </div>
-        <DialogFooter>
-            <div className="flex w-full flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                    {assigning?.id && classTeacherByClassId[assigning.id] && (
-                        <Button
-                            type="button"
-                            variant="destructive"
-                            onClick={handleRemoveClassTeacher}
-                        >
-                            <UserMinus className="w-4 h-4 mr-2" />
-                            Buang Lantikan
-                        </Button>
-                    )}
-                </div>
+                <DialogFooter>
+                    <div className="flex w-full flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-between">
+                        <div>
+                            {assigning?.id && classTeacherByClassId[assigning.id] && (
+                                <Button
+                                    type="button"
+                                    variant="destructive"
+                                    onClick={() => {
+                                        setIsChangingClassTeacher(true);
+                                        setSelectedTeacherId("");
+                                    }}
+                                    disabled={isChangingClassTeacher}
+                                >
+                                    <UserPlus className="w-4 h-4 mr-2" />
+                                    Tukar Guru Kelas
+                                </Button>
+                            )}
+                        </div>
 
                 <div className="flex gap-2">
                     <Button
@@ -1161,7 +1313,7 @@ export default function AdminClassesPage() {
                     </Button>
                     <Button
                         onClick={handleAssignClassTeacher}
-                        disabled={!selectedTeacherId}
+                        disabled={isAssignSaveDisabled}
                         className="bg-primary px-8"
                     >
                         Simpan

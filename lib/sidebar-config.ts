@@ -77,7 +77,7 @@ export const teacherRoleConfig = {
         documents: [],
     },
 
-    /* ================= PENYELARAS SUBJEK ================= */
+    /* ================= PANITIA SUBJEK ================= */
     "subject coordinator": {
         navMain: [
             {

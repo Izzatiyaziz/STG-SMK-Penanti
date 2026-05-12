@@ -97,17 +97,8 @@ export function LoginForm({
 
                 const finalRole = selectedTeacherRole || roles[0] || "subject teacher";
 
-                if (data.must_change_password) {
-                    setTempData({
-                        user_id: data.user_id,
-                        role: finalRole,
-                        roles,
-                        session_id: data.session_id ?? null,
-                    });
-                    setShowPasswordDialog(true);
-                    toast.dismiss(toastId);
-                    return;
-                }
+                // First-login password change is disabled:
+                // teachers can login and enter the system without changing password first.
 
                 await proceedToDashboard(
                     data.user_id,

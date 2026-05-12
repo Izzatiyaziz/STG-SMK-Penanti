@@ -522,7 +522,7 @@ export default function SubjectTeacherPage() {
 						</h1>
 					</div>
 					<p className="text-muted-foreground">
-						Hantar markah untuk semakan Penyelaras Subjek.
+						Hantar markah untuk semakan Panitia Subjek.
 					</p>
 				</div>
 
@@ -552,54 +552,6 @@ export default function SubjectTeacherPage() {
 							</div>
 						</CardContent>
 					</Card>
-				)}
-
-				{classSummary && (
-					<div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 lg:gap-6">
-						<Card className="shadow-lg border border-border/50">
-							<CardContent className="p-6">
-								<div className="text-sm text-muted-foreground">
-									Purata Markah (Kelas)
-								</div>
-								<div className="text-2xl font-bold mt-2">
-									{Math.round(classSummary.totals.average_total || 0)}%
-								</div>
-								<div className="text-xs text-muted-foreground mt-2">
-									{classSummary.totals.results}/{classSummary.totals.students} ada
-									keputusan
-								</div>
-							</CardContent>
-						</Card>
-						<Card className="shadow-lg border border-border/50">
-							<CardContent className="p-6">
-								<div className="text-sm text-muted-foreground">Imbasan OMR</div>
-								<div className="text-2xl font-bold mt-2">
-									{classSummary.totals.omr_scanned}/{classSummary.totals.students}
-								</div>
-								<div className="text-xs text-muted-foreground mt-2">
-									Bilangan pelajar ada markah objektif (scan)
-								</div>
-							</CardContent>
-						</Card>
-						<Card className="shadow-lg border border-border/50">
-							<CardContent className="p-6">
-								<div className="text-sm text-muted-foreground">
-									Kelulusan (Penyelaras)
-								</div>
-								<div className="flex flex-wrap gap-2 mt-3">
-									<Badge variant="outline">
-										Diluluskan: {classSummary.totals.approved}
-									</Badge>
-									<Badge variant="outline">
-										Menunggu: {classSummary.totals.pending}
-									</Badge>
-									<Badge variant="outline">
-										Ditolak: {classSummary.totals.rejected}
-									</Badge>
-								</div>
-							</CardContent>
-						</Card>
-					</div>
 				)}
 
 				{selectedExam && selectedAssignment && isLate && !submission.isComplete && (
@@ -690,24 +642,72 @@ export default function SubjectTeacherPage() {
 									</Badge>
 								)}
 							</div>
-							<div className="text-xs text-muted-foreground">
-								Had: Objektif {limits.objectiveMax} • Subjektif {limits.subjectiveMax}
-							</div>
 						</div>
 					</CardContent>
 				</Card>
 
 				<Card className="border-border bg-card shadow-md rounded-xl overflow-hidden">
 					<CardHeader className="border-b border-border bg-gradient-to-r from-card to-card/80 px-6 py-5">
-						<div>
-							<CardTitle className="text-xl font-bold text-foreground flex items-center gap-2">
-								<ClipboardList className="w-5 h-5 text-primary" />
-								Senarai Pelajar - {selectedAssignment?.grade ?? "-"}{" "}
-								{selectedAssignment?.class_name ?? "-"}
-							</CardTitle>
-							<p className="text-sm text-muted-foreground mt-1">
-								Masukkan markah subjektif dan imbas OMR untuk markah objektif
-							</p>
+						<div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+							<div>
+								<CardTitle className="text-xl font-bold text-foreground flex items-center gap-2">
+									<ClipboardList className="w-5 h-5 text-primary" />
+									Senarai Pelajar - {selectedAssignment?.grade ?? "-"}{" "}
+									{selectedAssignment?.class_name ?? "-"}
+								</CardTitle>
+								<p className="text-sm text-muted-foreground mt-1">
+									Masukkan markah subjektif dan imbas OMR untuk markah objektif
+								</p>
+							</div>
+
+							<div className="flex flex-wrap items-center gap-2 sm:justify-end">
+								<Badge variant="outline">
+									{submission.submittedCount}/{submission.totalStudents} ditanda
+								</Badge>
+								{(() => {
+									const isDraft = submission.submittedCount === 0 || !submission.isComplete;
+									if (isDraft) {
+										return (
+											<Badge className="border-yellow-200 bg-yellow-100 text-yellow-700">
+												Draf
+											</Badge>
+										);
+									}
+
+									if (submission.approval.status === "approved") {
+										return (
+											<Badge className="border-emerald-200 bg-emerald-100 text-emerald-700">
+												Selesai
+											</Badge>
+										);
+									}
+
+									if (submission.approval.status === "rejected") {
+										return (
+											<Badge className="border-rose-200 bg-rose-100 text-rose-700">
+												Ditolak
+											</Badge>
+										);
+									}
+
+									if (
+										submission.approval.status === "pending" ||
+										submission.approval.status === "mixed"
+									) {
+										return (
+											<Badge className="border-blue-200 bg-blue-100 text-blue-700">
+												Dalam Semakan
+											</Badge>
+										);
+									}
+
+									return (
+										<Badge className="border-sky-200 bg-sky-100 text-sky-700">
+											Dihantar
+										</Badge>
+									);
+								})()}
+							</div>
 						</div>
 					</CardHeader>
 					<CardContent className="p-6">

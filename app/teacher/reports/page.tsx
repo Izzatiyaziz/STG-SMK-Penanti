@@ -280,7 +280,7 @@ export default function ClassTeacherReportPage() {
 						</div>
 						<div className="md:col-span-2 text-sm text-muted-foreground flex items-center">
 							Jana report card hanya selepas semua markah untuk peperiksaan ini sudah{" "}
-							<b>approved</b> oleh Penyelaras Subjek.
+							<b>approved</b> oleh Panitia Subjek.
 						</div>
 					</CardContent>
 				</Card>

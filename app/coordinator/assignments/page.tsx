@@ -99,7 +99,7 @@ const LastUpdatedTime = () => {
 };
 
 export default function SubjectCoordinatorAssignmentsPage() {
-	const PAGE_SIZE = 8;
+	const PAGE_SIZE = 10;
 	const router = useRouter();
 	const [session, setSession] = useState<Session | null>(null);
 	const [sessionReady, setSessionReady] = useState(false);

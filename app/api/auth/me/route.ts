@@ -115,7 +115,8 @@ export async function POST() {
                 email: teacher.email,
                 roles: roleNames,
                 avatar: "/img/teacher-avatar.png",
-                must_change_password: Boolean(teacher.is_first_login),
+                // First-login password change is disabled (teachers can proceed directly).
+                must_change_password: false,
             });
         }
 

@@ -14,7 +14,7 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { UserPlus, Loader2, User, Mail, Phone } from "lucide-react";
+import { AlertCircle, Loader2, Mail, User, UserPlus } from "lucide-react";
 
 interface AddTeacherDialogProps {
   onSuccess: () => void;
@@ -30,29 +30,18 @@ type TeacherRoleName =
 const ROLE_OPTIONS: { value: TeacherRoleName; label: string }[] = [
   { value: "principal", label: "Pengetua" },
   { value: "class teacher", label: "Guru Kelas" },
-  { value: "subject coordinator", label: "Penyelaras Subjek" },
+  { value: "subject coordinator", label: "Panitia Subjek" },
   { value: "subject teacher", label: "Guru Subjek" },
 ];
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const PHONE_REGEX = /^(\+?6?01)[0-9]-?\d{7,8}$/;
-const PHONE_MAX_DIGITS = 12;
-const PHONE_MAX_LENGTH = 14;
-
-function formatPhoneInput(value: string) {
-  let digitCount = 0;
-  let result = "";
-
-  for (const char of value.replace(/[^\d+-]/g, "")) {
-    if (/\d/.test(char)) {
-      if (digitCount >= PHONE_MAX_DIGITS) continue;
-      digitCount += 1;
-    }
-    result += char;
-  }
-
-  return result.slice(0, PHONE_MAX_LENGTH);
-}
+const normalizeSpaces = (value: string) => value.replace(/\s+/g, " ").trim();
+const isWordsOnlyName = (value: string) => {
+  const normalized = normalizeSpaces(value);
+  if (!normalized) return false;
+  // Only letters and spaces (Unicode letters supported).
+  return /^[\p{L}]+(?: [\p{L}]+)*$/u.test(normalized);
+};
 
 function generateTeacherUsername() {
   const code = Math.random().toString(16).slice(2, 8).toUpperCase();
@@ -64,21 +53,25 @@ export function AddTeacherDialog({ onSuccess, children }: AddTeacherDialogProps)
   const [loading, setLoading] = useState(false);
   const [generatedId, setGeneratedId] = useState("");
   const [roles, setRoles] = useState<TeacherRoleName[]>([]);
+  const [fullname, setFullname] = useState("");
+  const [fullnameTouched, setFullnameTouched] = useState(false);
   const [email, setEmail] = useState("");
-  const [phone, setPhone] = useState("");
   const [emailTouched, setEmailTouched] = useState(false);
-  const [phoneTouched, setPhoneTouched] = useState(false);
   const [emailFocused, setEmailFocused] = useState(false);
-  const [phoneFocused, setPhoneFocused] = useState(false);
 
   const emailError =
-    emailTouched && !emailFocused && email.trim() && !EMAIL_REGEX.test(email.trim())
-      ? "Format email tidak sah. Contoh: guru@penanti.edu.my"
-      : "";
-  const phoneError =
-    phoneTouched && !phoneFocused && phone.trim() && !PHONE_REGEX.test(phone.trim())
-      ? "Format tidak sah. Contoh: 0123456789, 012-3456789 atau +60123456789"
-      : "";
+    emailTouched && !emailFocused && !email.trim()
+      ? "Email wajib diisi."
+      : emailTouched && !emailFocused && email.trim() && !EMAIL_REGEX.test(email.trim())
+        ? "Format email tidak sah. Contoh: guru@penanti.edu.my"
+        : "";
+
+  const fullnameError =
+    fullnameTouched && !fullname.trim()
+      ? "Nama penuh wajib diisi."
+      : fullnameTouched && fullname.trim() && !isWordsOnlyName(fullname)
+        ? "Nama penuh hanya boleh mengandungi huruf sahaja"
+        : "";
 
   const toggleRole = (value: TeacherRoleName, checked: boolean) => {
     setRoles((current) =>
@@ -88,6 +81,8 @@ export function AddTeacherDialog({ onSuccess, children }: AddTeacherDialogProps)
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    setFullnameTouched(true);
+    setEmailTouched(true);
 
     if (roles.length === 0) {
       toast.error("Sila pilih sekurang-kurangnya satu jawatan guru");
@@ -102,26 +97,25 @@ export function AddTeacherDialog({ onSuccess, children }: AddTeacherDialogProps)
     setLoading(true);
 
     const formData = new FormData(e.currentTarget);
-    const fullname = String(formData.get("fullname") || "").trim();
+    const fullname = String(formData.get("fullname") || "").trim().toUpperCase();
     const email = String(formData.get("email") || "").trim();
-    const phone = String(formData.get("phone") || "").trim();
 
     if (!fullname) {
-      toast.error("Nama penuh wajib diisi");
       setLoading(false);
       return;
     }
 
-    if (email && !EMAIL_REGEX.test(email)) {
-      setEmailTouched(true);
-      toast.error("Format email tidak sah");
+    if (!isWordsOnlyName(fullname)) {
       setLoading(false);
       return;
     }
 
-    if (phone && !PHONE_REGEX.test(phone)) {
-      setPhoneTouched(true);
-      toast.error("Format no. telefon tidak sah");
+    if (!email) {
+      setLoading(false);
+      return;
+    }
+
+    if (!EMAIL_REGEX.test(email)) {
       setLoading(false);
       return;
     }
@@ -133,8 +127,7 @@ export function AddTeacherDialog({ onSuccess, children }: AddTeacherDialogProps)
         body: JSON.stringify({
           username: generatedId,
           fullname,
-          email: email || null,
-          phone_number: phone || null,
+          email,
           role_names: roles,
           is_first_login: true,
         }),
@@ -166,12 +159,11 @@ export function AddTeacherDialog({ onSuccess, children }: AddTeacherDialogProps)
         if (val) {
           setGeneratedId(generateTeacherUsername());
           setRoles([]);
+          setFullname("");
+          setFullnameTouched(false);
           setEmail("");
-          setPhone("");
           setEmailTouched(false);
-          setPhoneTouched(false);
           setEmailFocused(false);
-          setPhoneFocused(false);
         }
       }}
     >
@@ -211,34 +203,49 @@ export function AddTeacherDialog({ onSuccess, children }: AddTeacherDialogProps)
           <div className="space-y-4">
             <div className="flex items-center gap-2 mb-2">
               <User className="w-4 h-4 text-primary" />
-              <h3 className="font-semibold text-foreground">Maklumat Peribadi</h3>
+              <h3 className="font-semibold text-foreground">Maklumat Guru</h3>
             </div>
 
             <div className="grid gap-4">
               <div className="space-y-2">
-                <Label htmlFor="fullname" className="text-sm font-medium">
-                  Nama Penuh
-                </Label>
+                 <Label htmlFor="fullname" className="text-sm font-medium flex items-center gap-1">
+                   Nama Penuh <span className="text-red-500">*</span>
+                 </Label>
                 <Input
                   id="fullname"
                   name="fullname"
-                  placeholder="Contoh: Ahmad bin Abu"
+                  placeholder="Contoh: AHMAD BIN ABU"
                   required
-                  className="rounded-xl border-2 border-border/30 focus:border-primary/50 h-11"
+                  value={fullname}
+                  onChange={(e) => {
+                    setFullnameTouched(true);
+                    setFullname(e.target.value.toUpperCase());
+                  }}
+                  onBlur={() => setFullnameTouched(true)}
+                  aria-invalid={Boolean(fullnameError)}
+                  className={`rounded-xl border-2 focus:border-primary/50 h-11 ${
+                    fullnameError ? "border-red-400" : "border-border/30"
+                  }`}
                 />
+                {fullnameError && (
+                  <div className="flex items-start gap-2 text-xs bg-red-50 text-red-700 border border-red-200 px-2 py-1.5 rounded-md">
+                    <AlertCircle className="w-3.5 h-3.5 text-red-600 mt-0.5 flex-shrink-0" />
+                    <span className="leading-4">{fullnameError}</span>
+                  </div>
+                )}
               </div>
 
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="grid grid-cols-1 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="email" className="text-sm font-medium">
-                    <Mail className="w-3 h-3 inline mr-1" />
-                    Email
+                                   <Label htmlFor="fullname" className="text-sm font-medium flex items-center gap-1">
+                    Email <span className="text-red-500">*</span>
                   </Label>
                   <Input
                     id="email"
                     name="email"
                     type="text"
                     inputMode="email"
+                    required
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     onFocus={() => setEmailFocused(true)}
@@ -254,36 +261,10 @@ export function AddTeacherDialog({ onSuccess, children }: AddTeacherDialogProps)
                     }`}
                   />
                   {emailError && (
-                    <p className="text-xs font-medium text-red-600">{emailError}</p>
-                  )}
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="phone" className="text-sm font-medium">
-                    <Phone className="w-3 h-3 inline mr-1" />
-                    Telefon
-                  </Label>
-                  <Input
-                    id="phone"
-                    name="phone"
-                    value={phone}
-                    onChange={(e) => setPhone(formatPhoneInput(e.target.value))}
-                    onFocus={() => setPhoneFocused(true)}
-                    onBlur={() => {
-                      setPhoneFocused(false);
-                      setPhoneTouched(true);
-                    }}
-                    placeholder="0123456789"
-                    inputMode="tel"
-                    maxLength={PHONE_MAX_LENGTH}
-                    title="Masukkan nombor telefon Malaysia yang sah, contoh 0123456789"
-                    aria-invalid={Boolean(phoneError)}
-                    className={`rounded-xl border-2 focus:border-primary/50 h-11 ${
-                      phoneError ? "border-red-400" : "border-border/30"
-                    }`}
-                  />
-                  {phoneError && (
-                    <p className="text-xs font-medium text-red-600">{phoneError}</p>
+                    <div className="flex items-start gap-2 text-xs bg-red-50 text-red-700 border border-red-200 px-2 py-1.5 rounded-md">
+                      <AlertCircle className="w-3.5 h-3.5 text-red-600 mt-0.5 flex-shrink-0" />
+                      <span className="leading-4">{emailError}</span>
+                    </div>
                   )}
                 </div>
               </div>
@@ -292,7 +273,9 @@ export function AddTeacherDialog({ onSuccess, children }: AddTeacherDialogProps)
 
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label className="text-sm font-medium">Jawatan</Label>
+                               <Label htmlFor="fullname" className="text-sm font-medium flex items-center gap-1">
+                Jawatan <span className="text-red-500">*</span>
+              </Label>
               <div className="grid gap-3 rounded-xl border-2 border-border/30 p-3">
                 {ROLE_OPTIONS.map((r) => (
                   <label key={r.value} className="flex items-center gap-3 text-sm">
@@ -320,7 +303,7 @@ export function AddTeacherDialog({ onSuccess, children }: AddTeacherDialogProps)
 
             <Button
               type="submit"
-              disabled={loading}
+              disabled={loading || Boolean(fullnameError)}
               className="flex-1 rounded-xl h-11 bg-gradient-to-r from-primary to-primary/90 hover:from-primary/95 hover:to-primary/80 shadow-lg"
             >
               {loading ? (
@@ -339,7 +322,7 @@ export function AddTeacherDialog({ onSuccess, children }: AddTeacherDialogProps)
 
           <div className="pt-2 border-t border-border/20">
             <p className="text-xs text-muted-foreground text-center">
-              Password sementara akan dijana oleh sistem dan dihantar melalui email.
+              Password default guru buat masa ini ialah <span className="font-mono">123456</span> (tiada email dihantar).
             </p>
           </div>
         </form>

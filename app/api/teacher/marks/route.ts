@@ -81,7 +81,7 @@ export async function POST(req: Request) {
             if (today > deadline) {
                 return NextResponse.json(
                     {
-                        message: `Tarikh akhir penghantaran telah tamat (${deadline}). Sila hubungi Penyelaras Subjek.`,
+                        message: `Tarikh akhir penghantaran telah tamat (${deadline}). Sila hubungi Panitia Subjek.`,
                     },
                     { status: 403 }
                 );

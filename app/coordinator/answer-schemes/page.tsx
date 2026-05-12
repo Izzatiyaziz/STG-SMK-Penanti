@@ -70,7 +70,7 @@ export default function AnswerSchemesPage() {
 			.toLowerCase()
 			.trim();
 		if (role !== "subject coordinator") {
-			toast.error("Hanya Penyelaras Subjek boleh akses halaman ini");
+			toast.error("Hanya Panitia Subjek boleh akses halaman ini");
 			router.replace("/teacher/dashboard");
 		}
 	}, [router, session]);

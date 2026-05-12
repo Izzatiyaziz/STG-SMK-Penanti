@@ -28,18 +28,21 @@ import {
     UserPlus,
     RefreshCw,
     Shield,
+    Pencil,
+    Bus,
     Clock,
     Download,
     Edit,
     Trash2,
     SortAsc,
     SortDesc,
-    Building2,
+    Backpack,
     GraduationCap,
     School,
     Calendar,
     X,
     AlertCircle,
+    BookOpen,
 } from "lucide-react";
 import {
     Select,
@@ -74,10 +77,20 @@ type StudentRow = {
     level: string | null;
 };
 
+const normalizeIcDigits = (value: string) => value.replace(/\D/g, "");
+
+const formatIcNumber = (value: string) => {
+    const digits = normalizeIcDigits(value);
+    if (digits.length <= 6) return digits;
+    if (digits.length <= 8) return `${digits.slice(0, 6)}-${digits.slice(6)}`;
+    return `${digits.slice(0, 6)}-${digits.slice(6, 8)}-${digits.slice(8, 12)}`;
+};
+
 // Helper: Detect Tingkatan from IC (based on age)
 const detectLevelFromIC = (ic: string): string | null => {
-    if (ic.length < 12) return null;
-    const yearPart = parseInt(ic.substring(0, 2));
+    const digits = normalizeIcDigits(ic);
+    if (digits.length < 12) return null;
+    const yearPart = parseInt(digits.substring(0, 2));
     const currentYear = new Date().getFullYear();
     const fullYear = yearPart > (currentYear % 100) ? 1900 + yearPart : 2000 + yearPart;
     const age = currentYear - fullYear;
@@ -92,8 +105,9 @@ const detectLevelFromIC = (ic: string): string | null => {
 
 // Helper: Get age from IC for display
 const getAgeFromIC = (ic: string): number | null => {
-    if (ic.length < 12) return null;
-    const yearPart = parseInt(ic.substring(0, 2));
+    const digits = normalizeIcDigits(ic);
+    if (digits.length < 12) return null;
+    const yearPart = parseInt(digits.substring(0, 2));
     const currentYear = new Date().getFullYear();
     const fullYear = yearPart > (currentYear % 100) ? 1900 + yearPart : 2000 + yearPart;
     return currentYear - fullYear;
@@ -129,12 +143,13 @@ const LastUpdatedTime = () => {
 };
 
 export default function AdminStudentsPage() {
-    const PAGE_SIZE = 8;
+    const PAGE_SIZE = 10;
     const [classes, setClasses] = useState<ClassRow[]>([]);
     const [rows, setRows] = useState<StudentRow[]>([]);
     const [loading, setLoading] = useState(false);
     const [searchQuery, setSearchQuery] = useState("");
     const [filterLevel, setFilterLevel] = useState<string>("all");
+    const [filterClassName, setFilterClassName] = useState<string>("all");
     const [sortBy, setSortBy] = useState<"name" | "level" | "date">("name");
     const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
     const [currentPage, setCurrentPage] = useState(1);
@@ -173,13 +188,27 @@ export default function AdminStudentsPage() {
         fetchStudents();
     }, []);
 
+    const classNameOptions = useMemo(() => {
+        const uniqueNames = new Set<string>();
+        for (const cls of classes) uniqueNames.add(cls.name);
+        for (const student of rows) {
+            if (student.className) uniqueNames.add(student.className);
+        }
+        return Array.from(uniqueNames).sort((a, b) => a.localeCompare(b));
+    }, [classes, rows]);
+
     // ================= FILTER AND SORT =================
     const filteredStudents = rows
         .filter((s) => {
             const matchesSearch = s.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
                                  s.identifier.includes(searchQuery);
             const matchesLevel = filterLevel === "all" || s.level?.toString() === filterLevel;
-            return matchesSearch && matchesLevel;
+            const matchesClass =
+                filterClassName === "all" ||
+                (filterClassName === "__unassigned__"
+                    ? !s.className
+                    : s.className === filterClassName);
+            return matchesSearch && matchesLevel && matchesClass;
         })
         .sort((a, b) => {
             let compareA, compareB;
@@ -211,7 +240,7 @@ export default function AdminStudentsPage() {
 
     useEffect(() => {
         setCurrentPage(1);
-    }, [searchQuery, filterLevel, sortBy, sortOrder]);
+    }, [searchQuery, filterLevel, filterClassName, sortBy, sortOrder]);
 
     useEffect(() => {
         const totalPages = Math.max(1, Math.ceil(filteredStudents.length / PAGE_SIZE));
@@ -250,6 +279,10 @@ export default function AdminStudentsPage() {
         form3: rows.filter((s) => s.level === "3").length,
         form4: rows.filter((s) => s.level === "4").length,
         form5: rows.filter((s) => s.level === "5").length,
+    };
+
+    const handleLevelCardClick = (level: "1" | "2" | "3" | "4" | "5") => {
+        setFilterLevel((prev) => (prev === level ? "all" : level));
     };
 
     // ================= LEVEL COLORS =================
@@ -301,10 +334,11 @@ export default function AdminStudentsPage() {
         });
     };
 
+
     function openEdit(s: StudentRow) {
         setEditing(s);
         setEditName(s.name);
-        setEditIc(s.identifier);
+        setEditIc(formatIcNumber(s.identifier));
         setEditLevel(s.level || "");
         setEditOriginalLevel(s.level || "");
         setEditEnrollmentDate(s.enrollment_date ? s.enrollment_date.split('T')[0] : "");
@@ -370,9 +404,15 @@ export default function AdminStudentsPage() {
         setEditEnrollmentDate("");
     };
 
+    const cancelDeleteDialog = () => {
+        setConfirmDelete(false);
+        closeEditDialog();
+    };
+
     const handleEditICChange = (ic: string) => {
-        setEditIc(ic);
-        const detected = detectLevelFromIC(ic);
+        const formatted = formatIcNumber(ic);
+        setEditIc(formatted);
+        const detected = detectLevelFromIC(formatted);
         setEditDetectedLevel(detected);
         
         // Only auto-set level if:
@@ -411,7 +451,7 @@ export default function AdminStudentsPage() {
                                     Pengurusan Pelajar
                                 </h1>
                                 <p className="text-muted-foreground font-medium mt-1">
-                                    Urus pendaftaran dan data pelajar dengan cekap
+                                    Mengurus pendaftaran pelajar dan maklumat berkaitan
                                 </p>
                             </div>
                         </div>
@@ -462,50 +502,127 @@ export default function AdminStudentsPage() {
                 </div>
 
                 {/* STATS CARDS */}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-                    <Card className="border-border bg-card shadow-sm hover:shadow-md transition-all duration-300 hover:border-primary/30">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-5">
+                    <Card
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => handleLevelCardClick("1")}
+                        onKeyDown={(e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                                e.preventDefault();
+                                handleLevelCardClick("1");
+                            }
+                        }}
+                        className={`border-border bg-card shadow-sm hover:shadow-md transition-all duration-300 hover:border-emerald-300 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${filterLevel === "1" ? "ring-2 ring-emerald-300 border-emerald-300" : ""}`}
+                    >
                         <CardContent className="p-5">
                             <div className="flex items-start justify-between">
                                 <div>
-                                    <p className="text-sm font-medium text-muted-foreground mb-2">Jumlah Pelajar</p>
-                                    <h3 className="text-3xl font-bold text-foreground">
-                                        {stats.total}
-                                    </h3>
-                                </div>
-                                <div className="p-3 rounded-xl bg-primary/10 border border-primary/20">
-                                    <Users className="w-5 h-5 text-primary" />
-                                </div>
-                            </div>
-                        </CardContent>
-                    </Card>
-
-                    <Card className="border-border bg-card shadow-sm hover:shadow-md transition-all duration-300 hover:border-emerald-300">
-                        <CardContent className="p-5">
-                            <div className="flex items-start justify-between">
-                                <div>
-                                    <p className="text-sm font-medium text-muted-foreground mb-2">Tingkatan 1-3</p>
-                                    <h3 className="text-3xl font-bold text-emerald-600">
-                                        {stats.form1 + stats.form2 + stats.form3}
-                                    </h3>
+                                    <p className="text-sm font-medium text-muted-foreground mb-2">Tingkatan 1</p>
+                                    <h3 className="text-3xl font-bold text-emerald-600">{stats.form1}</h3>
                                 </div>
                                 <div className="p-3 rounded-xl bg-emerald-100 border border-emerald-200">
-                                    <School className="w-5 h-5 text-emerald-600" />
+                                    <Bus className="w-5 h-5 text-emerald-600" />
                                 </div>
                             </div>
                         </CardContent>
                     </Card>
 
-                    <Card className="border-border bg-card shadow-sm hover:shadow-md transition-all duration-300 hover:border-blue-300">
+                    <Card
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => handleLevelCardClick("2")}
+                        onKeyDown={(e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                                e.preventDefault();
+                                handleLevelCardClick("2");
+                            }
+                        }}
+                        className={`border-border bg-card shadow-sm hover:shadow-md transition-all duration-300 hover:border-blue-300 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${filterLevel === "2" ? "ring-2 ring-blue-300 border-blue-300" : ""}`}
+                    >
                         <CardContent className="p-5">
                             <div className="flex items-start justify-between">
                                 <div>
-                                    <p className="text-sm font-medium text-muted-foreground mb-2">Tingkatan 4-5</p>
-                                    <h3 className="text-3xl font-bold text-blue-600">
-                                        {stats.form4 + stats.form5}
-                                    </h3>
+                                    <p className="text-sm font-medium text-muted-foreground mb-2">Tingkatan 2</p>
+                                    <h3 className="text-3xl font-bold text-blue-600">{stats.form2}</h3>
                                 </div>
                                 <div className="p-3 rounded-xl bg-blue-100 border border-blue-200">
-                                    <GraduationCap className="w-5 h-5 text-blue-600" />
+                                    <Backpack className="w-5 h-5 text-blue-600" />
+                                </div>
+                            </div>
+                        </CardContent>
+                    </Card>
+
+                    <Card
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => handleLevelCardClick("3")}
+                        onKeyDown={(e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                                e.preventDefault();
+                                handleLevelCardClick("3");
+                            }
+                        }}
+                        className={`border-border bg-card shadow-sm hover:shadow-md transition-all duration-300 hover:border-amber-300 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${filterLevel === "3" ? "ring-2 ring-amber-300 border-amber-300" : ""}`}
+                    >
+                        <CardContent className="p-5">
+                            <div className="flex items-start justify-between">
+                                <div>
+                                    <p className="text-sm font-medium text-muted-foreground mb-2">Tingkatan 3</p>
+                                    <h3 className="text-3xl font-bold text-amber-600">{stats.form3}</h3>
+                                </div>
+                                <div className="p-3 rounded-xl bg-amber-100 border border-amber-200">
+                                    <GraduationCap className="w-5 h-5 text-amber-600" />
+                                </div>
+                            </div>
+                        </CardContent>
+                    </Card>
+
+                    <Card
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => handleLevelCardClick("4")}
+                        onKeyDown={(e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                                e.preventDefault();
+                                handleLevelCardClick("4");
+                            }
+                        }}
+                        className={`border-border bg-card shadow-sm hover:shadow-md transition-all duration-300 hover:border-purple-300 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${filterLevel === "4" ? "ring-2 ring-purple-300 border-purple-300" : ""}`}
+                    >
+                        <CardContent className="p-5">
+                            <div className="flex items-start justify-between">
+                                <div>
+                                    <p className="text-sm font-medium text-muted-foreground mb-2">Tingkatan 4</p>
+                                    <h3 className="text-3xl font-bold text-purple-600">{stats.form4}</h3>
+                                </div>
+                                <div className="p-3 rounded-xl bg-purple-100 border border-purple-200">
+                                    <BookOpen className="w-5 h-5 text-purple-600" />
+                                </div>
+                            </div>
+                        </CardContent>
+                    </Card>
+
+                    <Card
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => handleLevelCardClick("5")}
+                        onKeyDown={(e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                                e.preventDefault();
+                                handleLevelCardClick("5");
+                            }
+                        }}
+                        className={`border-border bg-card shadow-sm hover:shadow-md transition-all duration-300 hover:border-rose-300 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${filterLevel === "5" ? "ring-2 ring-rose-300 border-rose-300" : ""}`}
+                    >
+                        <CardContent className="p-5">
+                            <div className="flex items-start justify-between">
+                                <div>
+                                    <p className="text-sm font-medium text-muted-foreground mb-2">Tingkatan 5</p>
+                                    <h3 className="text-3xl font-bold text-rose-600">{stats.form5}</h3>
+                                </div>
+                                <div className="p-3 rounded-xl bg-rose-100 border border-rose-200">
+                                    <Pencil className="w-5 h-5 text-rose-600" />
                                 </div>
                             </div>
                         </CardContent>
@@ -528,7 +645,7 @@ export default function AdminStudentsPage() {
                             <div className="flex items-center gap-3">
                                 <Badge variant="outline" className="border-primary/30 bg-primary/5 text-primary font-medium">
                                     <Filter className="w-3 h-3 mr-1" />
-                                    {filteredStudents.length} pelajar ditemui
+                                    {filteredStudents.length} pelajar
                                 </Badge>
                             </div>
                         </div>
@@ -594,11 +711,36 @@ export default function AdminStudentsPage() {
                                     </Select>
                                 </div>
 
+                                <div className="w-full sm:w-[180px]">
+                                    <Select value={filterClassName} onValueChange={setFilterClassName}>
+                                        <SelectTrigger className="h-11 rounded-lg border-border bg-background">
+                                            <SelectValue placeholder="Pilih Kelas" />
+                                        </SelectTrigger>
+                                        <SelectContent className="rounded-lg border-border max-h-72 overflow-y-auto">
+                                            <SelectItem value="all">
+                                                <div className="flex items-center gap-2">
+                                                    <School className="w-4 h-4" />
+                                                    Semua Kelas
+                                                </div>
+                                            </SelectItem>
+                                            {rows.some((s) => !s.className) && (
+                                                <SelectItem value="__unassigned__">Tiada Kelas</SelectItem>
+                                            )}
+                                            {classNameOptions.map((name) => (
+                                                <SelectItem key={name} value={name}>
+                                                    {name}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+
                                 <Button
                                     variant="outline"
                                     onClick={() => {
                                         setSearchQuery("");
                                         setFilterLevel("all");
+                                        setFilterClassName("all");
                                         setSortBy("name");
                                         setSortOrder("asc");
                                     }}
@@ -653,7 +795,7 @@ export default function AdminStudentsPage() {
                                                             <Users className="w-12 h-12 text-muted-foreground/50" />
                                                         </div>
                                                         <p className="font-semibold text-foreground">Tiada pelajar dijumpai</p>
-                                                        {!searchQuery && filterLevel === "all" && (
+                                                        {!searchQuery && filterLevel === "all" && filterClassName === "all" && (
                                                             <AddStudentDialog onSuccess={fetchStudents} classes={classes}>
                                                                 <Button className="bg-primary">Tambah Pelajar Pertama</Button>
                                                             </AddStudentDialog>
@@ -701,7 +843,7 @@ export default function AdminStudentsPage() {
                                                         </TableCell>
                                                         <TableCell className="py-4">
                                                             <div className="flex items-center gap-2">
-                                                                <Building2 className="w-4 h-4 text-muted-foreground" />
+                                                                <School className="w-4 h-4 text-muted-foreground" />
                                                                 <span>{student.className || "Belum Tetap"}</span>
                                                             </div>
                                                         </TableCell>
@@ -735,20 +877,32 @@ export default function AdminStudentsPage() {
                     <div className="border-t border-border bg-muted/20 px-6 py-4">
                         <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
                             <div className="text-sm text-muted-foreground">
-                                {filteredStudents.length} daripada {rows.length} pelajar
+                                Menunjukkan{" "}
+                                <span className="font-semibold text-foreground">
+                                    {filteredStudents.length === 0 ? 0 : (currentPage - 1) * PAGE_SIZE + 1} –{" "}
+                                    {filteredStudents.length === 0 ? 0 : Math.min(currentPage * PAGE_SIZE, filteredStudents.length)}
+                                </span>{" "}
+                                daripada{" "}
+                                <span className="font-semibold text-foreground">{filteredStudents.length}</span>{" "}
+                                pelajar
                                 {filterLevel !== "all" && <Badge variant="secondary" className="ml-2">Tingkatan {filterLevel}</Badge>}
+                                {filterClassName !== "all" && (
+                                    <Badge variant="secondary" className="ml-2">
+                                        {filterClassName === "__unassigned__" ? "Tiada Kelas" : filterClassName}
+                                    </Badge>
+                                )}
                             </div>
                             <div className="flex items-center gap-4">
                                 <Clock className="w-4 h-4" />
                                 <span className="text-sm">Kemas kini: <LastUpdatedTime /></span>
-                                <Button variant="ghost" size="sm" onClick={fetchStudents} disabled={loading}>
+                                <Button variant="ghost" size="sm" onClick={fetchStudents} disabled={loading} className="font-semibold">
                                     {loading && <Loader2 className="w-3 h-3 mr-2 animate-spin" />}
-                                    Muat Semula
+                                    Muat Semula Data
                                 </Button>
                             </div>
                         </div>
                         {!loading && totalPages > 1 && (
-                            <div className="flex justify-center mt-4">
+                            <div className="mt-4 border-t border-border/60 pt-4 flex justify-center">
                                 <Pagination>
                                     <PaginationContent>
                                         <PaginationItem>
@@ -805,7 +959,7 @@ export default function AdminStudentsPage() {
                             <Label>No. Kad Pengenalan</Label>
                             <Input 
                                 value={editIc} 
-                                maxLength={12} 
+                                maxLength={14} 
                                 onChange={(e) => handleEditICChange(e.target.value)} 
                                 className="h-11 font-mono" 
                             />
@@ -860,14 +1014,20 @@ export default function AdminStudentsPage() {
             </Dialog>
 
             {/* DELETE CONFIRMATION */}
-            <Dialog open={confirmDelete} onOpenChange={setConfirmDelete}>
+            <Dialog
+                open={confirmDelete}
+                onOpenChange={(open) => {
+                    if (!open) cancelDeleteDialog();
+                    else setConfirmDelete(true);
+                }}
+            >
                 <DialogContent>
                     <DialogHeader>
                         <DialogTitle className="text-destructive font-bold">Padam Pelajar?</DialogTitle>
                     </DialogHeader>
                     <p>Padam rekod <strong>{editing?.name}</strong>? Tindakan ini kekal.</p>
                     <DialogFooter>
-                        <Button variant="outline" onClick={() => setConfirmDelete(false)}>Batal</Button>
+                        <Button variant="outline" onClick={cancelDeleteDialog}>Batal</Button>
                         <Button variant="destructive" onClick={handleDelete}>Ya, Padam</Button>
                     </DialogFooter>
                 </DialogContent>

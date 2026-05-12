@@ -136,7 +136,7 @@ function getStatusBadge(status: SubmissionStatus) {
 }
 
 export default function SubjectCoordinatorApprovalPage() {
-	const PAGE_SIZE = 8;
+	const PAGE_SIZE = 10;
 	const router = useRouter();
 	const [data, setData] = useState<Submission[]>([]);
 	const [selected, setSelected] = useState<Submission | null>(null);

@@ -183,7 +183,7 @@ export default function SubjectCoordinatorReportsPage() {
 						<div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
 							<div className="flex items-center gap-1">
 								<Shield className="w-3.5 h-3.5" />
-								<span>Hanya markah yang telah diluluskan oleh penyelaras subjek dipaparkan</span>
+								<span>Hanya markah yang telah diluluskan oleh panitia subjek dipaparkan</span>
 							</div>
 						</div>
 					</div>

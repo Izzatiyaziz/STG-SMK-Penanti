@@ -53,29 +53,11 @@ type TeacherRoleName =
 const ROLE_OPTIONS: { value: TeacherRoleName; label: string }[] = [
   { value: "principal", label: "Pengetua" },
   { value: "class teacher", label: "Guru Kelas" },
-  { value: "subject coordinator", label: "Penyelaras Subjek" },
+  { value: "subject coordinator", label: "Panitia Subjek" },
   { value: "subject teacher", label: "Guru Subjek" },
 ];
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const PHONE_REGEX = /^(\+?6?01)[0-9]-?\d{7,8}$/;
-const PHONE_MAX_DIGITS = 12;
-const PHONE_MAX_LENGTH = 14;
-
-function formatPhoneInput(value: string) {
-  let digitCount = 0;
-  let result = "";
-
-  for (const char of value.replace(/[^\d+-]/g, "")) {
-    if (/\d/.test(char)) {
-      if (digitCount >= PHONE_MAX_DIGITS) continue;
-      digitCount += 1;
-    }
-    result += char;
-  }
-
-  return result.slice(0, PHONE_MAX_LENGTH);
-}
 
 export function EditTeacherDialog({
   open,
@@ -95,33 +77,23 @@ export function EditTeacherDialog({
   const [name, setName] = useState("");
   const [identifier, setIdentifier] = useState("");
   const [email, setEmail] = useState("");
-  const [phone, setPhone] = useState("");
   const [roles, setRoles] = useState<TeacherRoleName[]>([]);
   const [emailTouched, setEmailTouched] = useState(false);
-  const [phoneTouched, setPhoneTouched] = useState(false);
   const [emailFocused, setEmailFocused] = useState(false);
-  const [phoneFocused, setPhoneFocused] = useState(false);
 
   const emailError =
     emailTouched && !emailFocused && email.trim() && !EMAIL_REGEX.test(email.trim())
       ? "Format email tidak sah. Contoh: guru@penanti.edu.my"
       : "";
-  const phoneError =
-    phoneTouched && !phoneFocused && phone.trim() && !PHONE_REGEX.test(phone.trim())
-      ? "Format telefon Malaysia tidak sah. Contoh: 0123456789, 012-3456789 atau +60123456789"
-      : "";
 
   useEffect(() => {
     if (!user) return;
 
-    setName(user.name ?? "");
+    setName((user.name ?? "").toUpperCase());
     setIdentifier(user.identifier ?? "");
     setEmail(user.email ?? "");
-    setPhone(user.phone_number ?? "");
     setEmailTouched(false);
-    setPhoneTouched(false);
     setEmailFocused(false);
-    setPhoneFocused(false);
     setRoles(
       (user.roles ?? []).filter((role): role is TeacherRoleName =>
         ROLE_OPTIONS.some((option) => option.value === role)
@@ -159,12 +131,6 @@ export function EditTeacherDialog({
       return;
     }
 
-    if (phone.trim() && !PHONE_REGEX.test(phone.trim())) {
-      setPhoneTouched(true);
-      toast.error("Format no. telefon tidak sah");
-      return;
-    }
-
     setSaving(true);
 
     try {
@@ -173,9 +139,8 @@ export function EditTeacherDialog({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           teacher_id: user.id,
-          fullname: name.trim(),
+          fullname: name.trim().toUpperCase(),
           email: email.trim() ? email.trim() : null,
-          phone_number: phone.trim() ? phone.trim() : null,
           role_names: roles,
         }),
       });
@@ -253,7 +218,7 @@ export function EditTeacherDialog({
                 <label className="text-sm font-medium">Nama Guru</label>
                 <Input
                   value={name}
-                  onChange={(e) => setName(e.target.value)}
+                  onChange={(e) => setName(e.target.value.toUpperCase())}
                   placeholder="Contoh: Cikgu Aisyah"
                   className="h-11"
                 />
@@ -289,28 +254,6 @@ export function EditTeacherDialog({
                 />
                 {emailError && (
                   <p className="text-xs font-medium text-red-600">{emailError}</p>
-                )}
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-sm font-medium">No. Telefon</label>
-                <Input
-                  value={phone}
-                  onChange={(e) => setPhone(formatPhoneInput(e.target.value))}
-                  onFocus={() => setPhoneFocused(true)}
-                  onBlur={() => {
-                    setPhoneFocused(false);
-                    setPhoneTouched(true);
-                  }}
-                  placeholder="Contoh: 0123456789"
-                  inputMode="tel"
-                  maxLength={PHONE_MAX_LENGTH}
-                  title="Masukkan nombor telefon Malaysia yang sah"
-                  aria-invalid={Boolean(phoneError)}
-                  className={phoneError ? "h-11 border-red-400" : "h-11"}
-                />
-                {phoneError && (
-                  <p className="text-xs font-medium text-red-600">{phoneError}</p>
                 )}
               </div>
 

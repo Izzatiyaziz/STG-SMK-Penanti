@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
-import nodemailer from "nodemailer";
 import supabase from "@/lib/supabase";
 import { requireApiRole } from "@/lib/auth";
 
@@ -54,8 +53,10 @@ export async function POST(req: Request) {
       );
     }
 
-    const tempPassword = Math.random().toString(36).slice(-8);
-    const hashedPassword = await bcrypt.hash(tempPassword, 10);
+    // NOTE: Untuk fasa semasa, semua akaun guru akan guna password default yang sama.
+    // (Email password sementara dimatikan sementara seperti diminta.)
+    const defaultPassword = "123456";
+    const hashedPassword = await bcrypt.hash(defaultPassword, 10);
 
     const { data: teacher, error: teacherError } = await supabase
       .from("stg_teachers")
@@ -92,28 +93,7 @@ export async function POST(req: Request) {
       );
     }
 
-    if (email) {
-      const transporter = nodemailer.createTransport({
-        service: "gmail",
-        auth: {
-          user: process.env.EMAIL_USER,
-          pass: process.env.EMAIL_PASS,
-        },
-      });
-
-      await transporter.sendMail({
-        from: `"STG System" <${process.env.EMAIL_USER}>`,
-        to: email,
-        subject: "Akaun Sistem STG",
-        html: `
-          <h3>Maklumat Akaun Anda</h3>
-          <p><b>Username:</b> ${username}</p>
-          <p><b>Password sementara:</b> ${tempPassword}</p>
-          <br/>
-          <p>Sila login dan tukar password anda selepas login pertama.</p>
-        `,
-      });
-    }
+    // Penghantaran email password sementara dimatikan sementara.
 
     return NextResponse.json({
       message: "Guru berjaya ditambah",

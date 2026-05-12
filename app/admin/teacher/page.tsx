@@ -81,7 +81,7 @@ const LastUpdatedTime = () => {
 };
 
 export default function UsersPage() {
-    const PAGE_SIZE = 8;
+    const PAGE_SIZE = 10;
     const [users, setUsers] = useState<User[]>([]);
     const [loading, setLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState("");
@@ -298,7 +298,7 @@ export default function UsersPage() {
                                     Pengurusan Guru
                                 </h1>
                                 <p className="text-muted-foreground font-medium mt-1">
-                                    Urus senarai guru dan kebenaran akses sistem dengan cekap
+                                    Mengurus maklumat guru dan kebenaran akses sistem dengan cekap
                                 </p>
                             </div>
                         </div>
@@ -350,49 +350,88 @@ export default function UsersPage() {
 
                 {/* STATS CARDS */}
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-                    <Card className="border-border bg-card shadow-sm hover:shadow-md transition-all duration-300 hover:border-primary/30">
+                    <Card
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => setFilterRole("all")}
+                        onKeyDown={(e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                                e.preventDefault();
+                                setFilterRole("all");
+                            }
+                        }}
+                        className={`border-border bg-card shadow-sm hover:shadow-md transition-all duration-300 hover:border-emerald-300 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${
+                            filterRole === "all" ? "ring-2 ring-emerald-300 border-emerald-300" : ""
+                        }`}
+                    >
                         <CardContent className="p-5">
                             <div className="flex items-start justify-between">
                                 <div>
                                     <p className="text-sm font-medium text-muted-foreground mb-2">Jumlah Guru</p>
-                                    <h3 className="text-3xl font-bold text-foreground">
+                                    <h3 className="text-3xl font-bold text-emerald-600">
                                         {stats.total}
                                     </h3>
                                 </div>
-                                <div className="p-3 rounded-xl bg-primary/10 border border-primary/20">
-                                    <Users className="w-5 h-5 text-primary" />
+                                <div className="p-3 rounded-xl bg-emerald-100 border border-emerald-200">
+                                    <Users className="w-5 h-5 text-emerald-600" />
                                 </div>
                             </div>
                         </CardContent>
                     </Card>
 
-                    <Card className="border-border bg-card shadow-sm hover:shadow-md transition-all duration-300 hover:border-primary/30">
+                    <Card
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => setFilterRole("class teacher")}
+                        onKeyDown={(e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                                e.preventDefault();
+                                setFilterRole("class teacher");
+                            }
+                        }}
+                        className={`border-border bg-card shadow-sm hover:shadow-md transition-all duration-300 hover:border-blue-300 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${
+                            filterRole === "class teacher" ? "ring-2 ring-blue-300 border-blue-300" : ""
+                        }`}
+                    >
                         <CardContent className="p-5">
                             <div className="flex items-start justify-between">
                                 <div>
                                     <p className="text-sm font-medium text-muted-foreground mb-2">Guru Kelas</p>
-                                    <h3 className="text-3xl font-bold text-chart-2">
+                                    <h3 className="text-3xl font-bold text-blue-600">
                                         {stats.classTeachers}
                                     </h3>
                                 </div>
-                                <div className="p-3 rounded-xl bg-chart-2/10 border border-chart-2/20">
-                                    <Building2 className="w-5 h-5 text-chart-2" />
+                                <div className="p-3 rounded-xl bg-blue-100 border border-blue-200">
+                                    <Building2 className="w-5 h-5 text-blue-600" />
                                 </div>
                             </div>
                         </CardContent>
                     </Card>
 
-                    <Card className="border-border bg-card shadow-sm hover:shadow-md transition-all duration-300 hover:border-chart-3/30">
+                    <Card
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => setFilterRole("subject coordinator")}
+                        onKeyDown={(e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                                e.preventDefault();
+                                setFilterRole("subject coordinator");
+                            }
+                        }}
+                        className={`border-border bg-card shadow-sm hover:shadow-md transition-all duration-300 hover:border-violet-300 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${
+                            filterRole === "subject coordinator" ? "ring-2 ring-violet-300 border-violet-300" : ""
+                        }`}
+                    >
                         <CardContent className="p-5">
                             <div className="flex items-start justify-between">
                                 <div>
-                                    <p className="text-sm font-medium text-muted-foreground mb-2">Penyelaras Subjek</p>
-                                    <h3 className="text-3xl font-bold text-chart-3">
+                                    <p className="text-sm font-medium text-muted-foreground mb-2">Panitia Subjek</p>
+                                    <h3 className="text-3xl font-bold text-violet-600">
                                         {stats.coordinators}
                                     </h3>
                                 </div>
-                                <div className="p-3 rounded-xl bg-chart-3/10 border border-chart-3/20">
-                                    <BookOpen className="w-5 h-5 text-chart-3" />
+                                <div className="p-3 rounded-xl bg-violet-100 border border-violet-200">
+                                    <Award className="w-5 h-5 text-violet-600" />
                                 </div>
                             </div>
                         </CardContent>
@@ -415,7 +454,7 @@ export default function UsersPage() {
                             <div className="flex items-center gap-3">
                                 <Badge variant="outline" className="border-primary/30 bg-primary/5 text-primary font-medium">
                                     <Filter className="w-3 h-3 mr-1" />
-                                    {filteredUsers.length} guru ditemui
+                                    {filteredUsers.length} guru
                                 </Badge>
                             </div>
                         </div>
@@ -475,7 +514,7 @@ export default function UsersPage() {
                                 <SelectItem value="subject coordinator">
                                     <div className="flex items-center gap-2">
                                     <Award className="w-4 h-4 text-orange-600" />
-                                    Penyelaras Subjek
+                                    Panitia Subjek
                                     </div>
                                 </SelectItem>
                                 </SelectContent>
@@ -612,22 +651,22 @@ export default function UsersPage() {
         className="py-4 cursor-pointer"
         onClick={() => handleEditUser(user)}
       >
-        <div className="flex items-center gap-3">
-          <div className="relative">
-            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary/20 to-primary/10 border border-primary/20 flex items-center justify-center shadow-xs">
-              <span className="font-semibold text-primary text-sm">
-                {user.name.charAt(0)}
-              </span>
-            </div>
-          </div>
-          <div>
-            <div className="font-semibold text-foreground hover:text-primary transition-colors">
-              {user.name}
-            </div>
-            {user.subjects && user.subjects.length > 0 && (
-              <div className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
-                <BookOpen className="w-3 h-3" />
-                {user.subjects.slice(0, 2).join(", ")}
+                <div className="flex items-center gap-3">
+                  <div className="relative">
+                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary/20 to-primary/10 border border-primary/20 flex items-center justify-center shadow-xs">
+                      <span className="font-semibold text-primary text-sm">
+                {user.name.toUpperCase().charAt(0)}
+                      </span>
+                    </div>
+                  </div>
+                  <div>
+                    <div className="font-semibold text-foreground hover:text-primary transition-colors">
+              {user.name.toUpperCase()}
+                    </div>
+                    {user.subjects && user.subjects.length > 0 && (
+                      <div className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
+                        <BookOpen className="w-3 h-3" />
+                        {user.subjects.slice(0, 2).join(", ")}
                 {user.subjects.length > 2 && "..."}
               </div>
             )}
@@ -676,7 +715,7 @@ export default function UsersPage() {
                   : roles === "class teacher"
                   ? "Guru Kelas"
                   : roles === "subject coordinator"
-                  ? "Penyelaras Subjek"
+                  ? "Panitia Subjek"
                   : roles === "principal"
                   ? "Pengetua"
                   : roles}
@@ -725,10 +764,13 @@ export default function UsersPage() {
                             <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
                                 <div className="flex items-center gap-2 text-muted-foreground">
                                     <div className="flex items-center gap-1">
-                                        <span className="font-semibold text-foreground">{filteredUsers.length}</span>
+                                        <span>Menunjukkan</span>
+                                        <span className="font-semibold text-foreground">{(currentPage - 1) * PAGE_SIZE + 1}
+                                        {" - "}
+                                        {Math.min(currentPage * PAGE_SIZE, filteredUsers.length)} </span>
                                         <span>daripada</span>
                                         <span className="font-semibold text-foreground">{users.length}</span>
-                                        <span>guru dipaparkan</span>
+                                        <span>guru</span>
                                     </div>
                                     {filterRole !== "all" && (
                                         <Badge variant="secondary" className="ml-2">
@@ -758,11 +800,6 @@ export default function UsersPage() {
 
                             {!loading && totalPages > 1 && (
                                 <div className="flex flex-col gap-3 border-t border-border/60 pt-4">
-                                    <div className="text-sm text-muted-foreground">
-                                        Showing {(currentPage - 1) * PAGE_SIZE + 1}
-                                        {" - "}
-                                        {Math.min(currentPage * PAGE_SIZE, filteredUsers.length)} daripada {filteredUsers.length} guru
-                                    </div>
                                     <Pagination>
                                         <PaginationContent>
                                             <PaginationItem>

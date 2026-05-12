@@ -636,7 +636,7 @@ export default function OMRScanPage() {
                     <SelectContent>
                       {assignments.map((a) => (
                         <SelectItem key={a.id} value={a.id}>
-                          {a.class_name} • {a.subject_name}
+                         {a.grade ?? "-"} {a.class_name} • {a.subject_name}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -835,7 +835,7 @@ export default function OMRScanPage() {
                   • Hasil dipaparkan dalam 2–3 saat
                 </p>
                 <p className="text-muted-foreground">
-                  Akses khas untuk Guru Subjek dan Penyelaras Subjek.
+                  Akses khas untuk Guru Subjek dan Panitia Subjek.
                 </p>
               </CardContent>
             </Card>

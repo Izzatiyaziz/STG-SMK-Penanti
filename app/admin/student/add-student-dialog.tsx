@@ -1,6 +1,6 @@
 "use client";
 
-import { ReactNode, useEffect, useState } from "react";
+import { ReactNode, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -37,10 +37,29 @@ interface AddStudentDialogProps {
     children?: ReactNode;
 }
 
+const normalizeIcDigits = (value: string) => value.replace(/\D/g, "");
+
+const normalizeSpaces = (value: string) => value.replace(/\s+/g, " ").trim();
+
+const isWordsOnlyName = (value: string) => {
+    const normalized = normalizeSpaces(value);
+    if (!normalized) return false;
+    // Only letters and spaces (Unicode letters supported).
+    return /^[\p{L}]+(?: [\p{L}]+)*$/u.test(normalized);
+};
+
+const formatIcNumber = (value: string) => {
+    const digits = normalizeIcDigits(value);
+    if (digits.length <= 6) return digits;
+    if (digits.length <= 8) return `${digits.slice(0, 6)}-${digits.slice(6)}`;
+    return `${digits.slice(0, 6)}-${digits.slice(6, 8)}-${digits.slice(8, 12)}`;
+};
+
 // Helper untuk detect tingkatan dari IC
 const detectLevelFromIC = (ic: string): string | null => {
-    if (ic.length < 12) return null;
-    const yearPart = parseInt(ic.substring(0, 2));
+    const digits = normalizeIcDigits(ic);
+    if (digits.length < 12) return null;
+    const yearPart = parseInt(digits.substring(0, 2));
     const currentYear = new Date().getFullYear();
     const fullYear = yearPart > (currentYear % 100) ? 1900 + yearPart : 2000 + yearPart;
     const age = currentYear - fullYear;
@@ -55,8 +74,9 @@ const detectLevelFromIC = (ic: string): string | null => {
 
 // Helper untuk dapatkan umur dari IC
 const getAgeFromIC = (ic: string): number | null => {
-    if (ic.length < 12) return null;
-    const yearPart = parseInt(ic.substring(0, 2));
+    const digits = normalizeIcDigits(ic);
+    if (digits.length < 12) return null;
+    const yearPart = parseInt(digits.substring(0, 2));
     const currentYear = new Date().getFullYear();
     const fullYear = yearPart > (currentYear % 100) ? 1900 + yearPart : 2000 + yearPart;
     return currentYear - fullYear;
@@ -68,6 +88,11 @@ export function AddStudentDialog({
 }: AddStudentDialogProps) {
     const [open, setOpen] = useState(false);
     const [loading, setLoading] = useState(false);
+    const fullnameRef = useRef<HTMLInputElement>(null);
+    const [fullnameTouched, setFullnameTouched] = useState(false);
+    const [icTouched, setIcTouched] = useState(false);
+    const [enrollmentDateTouched, setEnrollmentDateTouched] = useState(false);
+    const [levelTouched, setLevelTouched] = useState(false);
     
     const [selectedLevel, setSelectedLevel] = useState<string>("");
     const [detectedLevel, setDetectedLevel] = useState<string | null>(null);
@@ -82,9 +107,10 @@ export function AddStudentDialog({
 
     const handleICChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const { value } = e.target;
-        setFormData((prev) => ({ ...prev, ic_number: value }));
+        const formatted = formatIcNumber(value);
+        setFormData((prev) => ({ ...prev, ic_number: formatted }));
         
-        const detected = detectLevelFromIC(value);
+        const detected = detectLevelFromIC(formatted);
         setDetectedLevel(detected);
         
         // Only auto-set if user hasn't manually overridden
@@ -107,7 +133,9 @@ export function AddStudentDialog({
 
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const { name, value } = e.target;
-        setFormData((prev) => ({ ...prev, [name]: value }));
+        const nextValue = name === "fullname" ? value.toUpperCase() : value;
+        if (name === "fullname") setFullnameTouched(true);
+        setFormData((prev) => ({ ...prev, [name]: nextValue }));
     };
 
     const resetForm = () => {
@@ -115,31 +143,43 @@ export function AddStudentDialog({
         setSelectedLevel("");
         setDetectedLevel(null);
         setUserOverridden(false);
+        setFullnameTouched(false);
+        setIcTouched(false);
+        setEnrollmentDateTouched(false);
+        setLevelTouched(false);
     };
+
+    useEffect(() => {
+        if (!open) return;
+        const id = setTimeout(() => fullnameRef.current?.focus(), 0);
+        return () => clearTimeout(id);
+    }, [open]);
 
     async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
         e.preventDefault();
-        
-        if (!formData.fullname.trim()) {
-            toast.error("Sila masukkan nama pelajar");
-            return;
-        }
-        if (!formData.ic_number.trim() || formData.ic_number.length < 12) {
-            toast.error("Sila masukkan No. Kad Pengenalan yang sah (12 digit)");
-            return;
-        }
-        if (!selectedLevel) {
-            toast.error("Sila pilih tingkatan pelajar");
-            return;
-        }
+
+        setFullnameTouched(true);
+        setIcTouched(true);
+        setEnrollmentDateTouched(true);
+        setLevelTouched(true);
+         
+        const fullnameTrimmed = formData.fullname.trim();
+        const icDigits = normalizeIcDigits(formData.ic_number);
+        const enrollmentDate = formData.enrollment_date;
+
+        if (!fullnameTrimmed) return;
+        if (!isWordsOnlyName(fullnameTrimmed)) return;
+        if (icDigits.length !== 12) return;
+        if (!selectedLevel) return;
+        if (!enrollmentDate) return;
 
         setLoading(true);
         const toastId = toast.loading("Mendaftar pelajar...");
 
         const payload = {
-            fullname: formData.fullname.trim(),
-            ic_number: formData.ic_number.trim(),
-            enrollment_date: formData.enrollment_date,
+            fullname: fullnameTrimmed.toUpperCase(),
+            ic_number: formatIcNumber(formData.ic_number.trim()),
+            enrollment_date: enrollmentDate,
             level: selectedLevel,
             class_id: null,
         };
@@ -159,9 +199,10 @@ export function AddStudentDialog({
             }
 
             toast.success("🎉 Pelajar berjaya ditambah!", { id: toastId });
-            setOpen(false);
             resetForm();
             onSuccess();
+            // Kekalkan dialog terbuka untuk tambah pelajar seterusnya
+            setTimeout(() => fullnameRef.current?.focus(), 0);
         } catch {
             toast.error("⚠️ Ralat rangkaian. Sila cuba lagi.", { id: toastId });
         } finally {
@@ -169,8 +210,32 @@ export function AddStudentDialog({
         }
     }
 
-    const age = formData.ic_number.length === 12 ? getAgeFromIC(formData.ic_number) : null;
+    const age = normalizeIcDigits(formData.ic_number).length === 12 ? getAgeFromIC(formData.ic_number) : null;
     const isPeralihan = detectedLevel && selectedLevel && detectedLevel !== selectedLevel;
+    const fullnameError =
+        fullnameTouched && !formData.fullname.trim()
+            ? "Nama penuh wajib diisi."
+            : fullnameTouched && formData.fullname.trim() && !isWordsOnlyName(formData.fullname)
+                ? "Nama penuh hanya boleh mengandungi huruf sahaja"
+            : "";
+
+    const icDigits = normalizeIcDigits(formData.ic_number);
+    const icError =
+        icTouched && icDigits.length === 0
+            ? "No. Kad Pengenalan wajib diisi."
+            : icTouched && icDigits.length > 0 && icDigits.length !== 12
+                ? "No. Kad Pengenalan mesti 12 digit."
+                : "";
+
+    const enrollmentDateError =
+        enrollmentDateTouched && !formData.enrollment_date
+            ? "Tarikh daftar wajib diisi."
+            : "";
+
+    const levelError =
+        levelTouched && !selectedLevel
+            ? "Tingkatan wajib dipilih."
+            : "";
 
     return (
         <Dialog open={open} onOpenChange={(newOpen) => {
@@ -199,7 +264,7 @@ export function AddStudentDialog({
                         </DialogTitle>
                     </div>
                     <p className="text-sm text-muted-foreground">
-                        Isi maklumat asas. Penempatan kelas akan dilakukan oleh Guru Kelas.
+                        Isi maklumat pelajar. Penempatan kelas akan dilakukan oleh Guru Kelas.
                     </p>
                 </DialogHeader>
 
@@ -209,57 +274,76 @@ export function AddStudentDialog({
                         <div className="flex items-center gap-2 mb-2">
                             <User className="w-4 h-4 text-primary" />
                             <h3 className="font-semibold text-foreground">
-                                Maklumat Peribadi
+                                Maklumat Pelajar
                             </h3>
                         </div>
 
                         <div className="grid gap-4">
                             <div className="space-y-2">
                                 <Label htmlFor="fullname" className="text-sm font-medium flex items-center gap-1">
-                                    <User className="w-3 h-3" />
-                                    Nama Penuh *
+                                    Nama Penuh <span className="text-red-500">*</span>
                                 </Label>
                                 <Input
+                                    ref={fullnameRef}
                                     id="fullname"
                                     name="fullname"
                                     value={formData.fullname}
                                     onChange={handleInputChange}
-                                    placeholder="Contoh: Ali bin Ahmad"
+                                    onBlur={() => setFullnameTouched(true)}
+                                    placeholder="Contoh: ALI BIN AHMAD"
                                     required
-                                    className="rounded-xl border-2 border-border/30 focus:border-primary/50 h-11"
+                                    aria-invalid={Boolean(fullnameError)}
+                                    className={`rounded-xl border-2 focus:border-primary/50 h-11 ${
+                                        fullnameError ? "border-red-400" : "border-border/30"
+                                    }`}
                                     disabled={loading}
                                 />
+                                {fullnameError && (
+                                    <div className="flex items-start gap-2 text-xs bg-red-50 text-red-700 border border-red-200 px-2 py-1.5 rounded-md">
+                                        <AlertCircle className="w-3.5 h-3.5 text-red-600 mt-0.5 flex-shrink-0" />
+                                        <span className="leading-4">{fullnameError}</span>
+                                    </div>
+                                )}
                             </div>
 
                             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                                 <div className="space-y-2">
                                     <Label htmlFor="ic_number" className="text-sm font-medium flex items-center gap-1">
-                                        <IdCard className="w-3 h-3" />
-                                        No. Kad Pengenalan *
+                                        No. Kad Pengenalan <span className="text-red-500">*</span>
                                     </Label>
                                     <Input
                                         id="ic_number"
                                         name="ic_number"
                                         value={formData.ic_number}
                                         onChange={handleICChange}
+                                        onBlur={() => setIcTouched(true)}
                                         placeholder="010101-01-0101"
                                         required
-                                        className="rounded-xl border-2 border-border/30 focus:border-primary/50 h-11 font-mono"
-                                        maxLength={12}
+                                        aria-invalid={Boolean(icError)}
+                                        className={`rounded-xl border-2 focus:border-primary/50 h-11 font-mono ${
+                                            icError ? "border-red-400" : "border-border/30"
+                                        }`}
+                                        maxLength={14}
                                         disabled={loading}
                                     />
-                              
-                                    {formData.ic_number.length === 12 && !detectedLevel && (
-                                        <div className="flex items-center gap-1.5 text-xs bg-amber-50 text-amber-700 border border-amber-200 px-2 py-1.5 rounded-md">
-                                            <AlertCircle className="w-3 h-3" />
-                                            <span>Umur tidak sesuai untuk Tingkatan 1-5 (umur {age} tahun)</span>
+                                    {icError && (
+                                        <div className="flex items-start gap-2 text-xs bg-red-50 text-red-700 border border-red-200 px-2 py-1.5 rounded-md">
+                                            <AlertCircle className="w-3.5 h-3.5 text-red-600 mt-0.5 flex-shrink-0" />
+                                            <span className="leading-4">{icError}</span>
                                         </div>
+                                    )}
+                              
+                                    {normalizeIcDigits(formData.ic_number).length === 12 && !detectedLevel && (
+                                        <div className="flex items-center gap-1.5 text-xs bg-red-50 text-red-700 border border-red-200 px-2 py-1.5 rounded-md">
+                                            <AlertCircle className="w-3.5 h-3.5 text-red-600 mt-0.5 flex-shrink-0" />
+                                            <span>Umur tidak sesuai untuk Tingkatan 1-5</span>
+                                        </div>
+                                        
                                     )}
                                 </div>
                                 <div className="space-y-2">
                                     <Label htmlFor="enrollment_date" className="text-sm font-medium flex items-center gap-1">
-                                        <Calendar className="w-3 h-3" />
-                                        Tarikh Daftar *
+                                        Tarikh Daftar <span className="text-red-500">*</span>
                                     </Label>
                                     <Input
                                         id="enrollment_date"
@@ -268,10 +352,20 @@ export function AddStudentDialog({
                                         max={today}
                                         value={formData.enrollment_date}
                                         onChange={handleInputChange}
+                                        onBlur={() => setEnrollmentDateTouched(true)}
                                         required
-                                        className="rounded-xl border-2 border-border/30 focus:border-primary/50 h-11"
+                                        aria-invalid={Boolean(enrollmentDateError)}
+                                        className={`rounded-xl border-2 focus:border-primary/50 h-11 ${
+                                            enrollmentDateError ? "border-red-400" : "border-border/30"
+                                        }`}
                                         disabled={loading}
                                     />
+                                    {enrollmentDateError && (
+                                        <div className="flex items-start gap-2 text-xs bg-red-50 text-red-700 border border-red-200 px-2 py-1.5 rounded-md">
+                                            <AlertCircle className="w-3.5 h-3.5 text-red-600 mt-0.5 flex-shrink-0" />
+                                            <span className="leading-4">{enrollmentDateError}</span>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         </div>
@@ -280,12 +374,6 @@ export function AddStudentDialog({
                     {/* ACADEMIC SECTION */}
                     <div className="space-y-4">
                         <div className="flex items-center justify-between mb-2">
-                            <div className="flex items-center gap-2">
-                                <Layers className="w-4 h-4 text-primary" />
-                                <h3 className="font-semibold text-foreground">
-                                    Maklumat Akademik
-                                </h3>
-                            </div>
                             {userOverridden && detectedLevel && (
                                 <Button
                                     type="button"
@@ -303,8 +391,7 @@ export function AddStudentDialog({
 
                         <div className="space-y-2">
                             <Label className="text-sm font-medium flex items-center gap-1">
-                                <GraduationCap className="w-3 h-3" />
-                                Tingkatan *
+                                Tingkatan <span className="text-red-500">*</span>
                             </Label>
                             <Select 
                                 value={selectedLevel} 
@@ -312,11 +399,16 @@ export function AddStudentDialog({
                                 required
                                 disabled={loading}
                             >
-                                <SelectTrigger className={`w-full rounded-xl border-2 h-11 ${
-                                    isPeralihan 
-                                        ? "border-amber-400 bg-amber-50/50" 
-                                        : "border-border/30 focus:border-primary/50"
-                                }`}>
+                                <SelectTrigger
+                                    onBlur={() => setLevelTouched(true)}
+                                    className={`w-full rounded-xl border-2 h-11 ${
+                                        levelError
+                                            ? "border-red-400"
+                                            : isPeralihan 
+                                                ? "border-amber-400 bg-amber-50/50" 
+                                                : "border-border/30 focus:border-primary/50"
+                                    }`}
+                                >
                                     <SelectValue placeholder="Pilih tingkatan..." />
                                 </SelectTrigger>
                                 <SelectContent className="rounded-xl border-2 border-border">
@@ -332,6 +424,12 @@ export function AddStudentDialog({
                                     ))}
                                 </SelectContent>
                             </Select>
+                            {levelError && (
+                                <div className="flex items-start gap-2 text-xs bg-red-50 text-red-700 border border-red-200 px-2 py-1.5 rounded-md">
+                                    <AlertCircle className="w-3.5 h-3.5 text-red-600 mt-0.5 flex-shrink-0" />
+                                    <span className="leading-4">{levelError}</span>
+                                </div>
+                            )}
                             
                             {/* Warning for peralihan/ulang tahun */}
                             {isPeralihan && (
@@ -344,13 +442,13 @@ export function AddStudentDialog({
                             )}
 
                             {/* Info when IC not detected */}
-                            {formData.ic_number.length === 12 && !detectedLevel && (
-                                <div className="flex items-start gap-2 text-xs bg-blue-50 border border-blue-200 p-2.5 rounded-md mt-2">
-                                    <AlertCircle className="w-3.5 h-3.5 text-blue-600 mt-0.5 flex-shrink-0" />
-                                    <div className="text-blue-800">
-                                        <span className="font-medium">ℹ️ Makluman</span>
-                                        <p className="text-blue-700 mt-0.5">
-                                            Umur pelajar ({age} tahun) tidak dalam julat Tingkatan 1-5 (13-17 tahun).
+                            {normalizeIcDigits(formData.ic_number).length === 12 && !detectedLevel && (
+                                <div className="flex items-start gap-2 text-xs bg-red-50 border border-red-200 p-2.5 rounded-md mt-2">
+                                    <AlertCircle className="w-3.5 h-3.5 text-red-600 mt-0.5 flex-shrink-0" />
+                                    <div className="text-red-800">
+                                        <span className="font-bold">ℹ️ Makluman</span>
+                                        <p className="text-red-700 mt-0.5">
+                                            Umur pelajar ({age} tahun) bukan dalam julat Tingkatan 1-5 (13-17 tahun).
                                             Sila pastikan tingkatan yang dipilih adalah tepat.
                                         </p>
                                     </div>

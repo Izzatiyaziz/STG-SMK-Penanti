@@ -4,6 +4,33 @@ import { requireApiRole } from "@/lib/auth";
 
 export const runtime = "nodejs";
 
+function normalizeIcDigits(value: unknown) {
+    return String(value ?? "").replace(/\D/g, "");
+}
+
+function toFriendlyStudentError(error: any): string {
+    const message = String(error?.message ?? "");
+    const details = String(error?.details ?? "");
+    const code = String(error?.code ?? "");
+
+    // Postgres unique constraint on IC number (23505)
+    if (
+        message.includes("stg_students_ic_number_unique") ||
+        details.includes("stg_students_ic_number_unique") ||
+        (code === "23505" && (message.toLowerCase().includes("duplicate") || details.toLowerCase().includes("duplicate")))
+    ) {
+        return "No. Kad Pengenalan ini telah didaftarkan. Sila semak semula atau gunakan rekod pelajar sedia ada.";
+    }
+
+    return message || "Ralat tidak dijangka";
+}
+
+function formatIcNumber(value: unknown) {
+    const digits = normalizeIcDigits(value);
+    if (digits.length !== 12) return String(value ?? "").trim();
+    return `${digits.slice(0, 6)}-${digits.slice(6, 8)}-${digits.slice(8, 12)}`;
+}
+
 function deriveLevelFromEnrollment(enrollmentDate: string | null | undefined) {
     if (!enrollmentDate) return null;
     const d = new Date(enrollmentDate);
@@ -51,8 +78,8 @@ export async function GET(req: Request) {
                 success: true,
                 data: {
                     id: student.student_id,
-                    name: student.fullname,
-                    identifier: student.ic_number,
+                    name: String(student.fullname ?? "").toUpperCase(),
+                    identifier: formatIcNumber(student.ic_number),
                     class_id: student.class_id,
                     className,
                     status: student.status ?? "active",
@@ -92,8 +119,8 @@ export async function GET(req: Request) {
 
         const formatted = (students ?? []).map((s) => ({
             id: s.student_id,
-            name: s.fullname,
-            identifier: s.ic_number,
+            name: String(s.fullname ?? "").toUpperCase(),
+            identifier: formatIcNumber(s.ic_number),
             class_id: s.class_id,
             className: s.class_id ? classById.get(s.class_id) ?? "" : "",
             status: s.status ?? "active",
@@ -123,8 +150,8 @@ export async function POST(req: Request) {
 
         const body = await req.json();
 
-        const fullname = String(body?.fullname ?? "").trim();
-        const ic_number = String(body?.ic_number ?? "").trim();
+        const fullname = String(body?.fullname ?? "").trim().toUpperCase();
+        const ic_number = formatIcNumber(body?.ic_number);
         const class_id =
             body?.class_id === null || body?.class_id === undefined
                 ? null
@@ -139,6 +166,13 @@ export async function POST(req: Request) {
         if (!fullname || !ic_number) {
             return NextResponse.json(
                 { message: "Nama penuh dan IC diperlukan" },
+                { status: 400 }
+            );
+        }
+
+        if (normalizeIcDigits(ic_number).length !== 12) {
+            return NextResponse.json(
+                { message: "Sila masukkan No. Kad Pengenalan yang sah (12 digit)" },
                 { status: 400 }
             );
         }
@@ -158,7 +192,7 @@ export async function POST(req: Request) {
 
         if (error) {
             return NextResponse.json(
-                { message: error.message },
+                { message: toFriendlyStudentError(error) },
                 { status: 400 }
             );
         }
@@ -192,20 +226,30 @@ export async function PUT(req: Request) {
         }
 
         const body = await req.json();
-        const fullname = String(body?.fullname ?? body?.name ?? "").trim();
-        const ic_number = String(body?.ic_number ?? body?.identifier ?? "").trim();
+        const fullname = String(body?.fullname ?? body?.name ?? "").trim().toUpperCase();
+        const ic_number = formatIcNumber(body?.ic_number ?? body?.identifier);
         const status = body?.status ? String(body.status).trim() : undefined;
         const class_id =
-            body?.class_id === null || body?.class_id === undefined
-                ? null
-                : String(body.class_id).trim();
+            body && typeof body === "object" && "class_id" in body
+                ? body.class_id === null || body.class_id === undefined
+                    ? null
+                    : String(body.class_id).trim()
+                : undefined;
         const enrollment_date = body?.enrollment_date
             ? String(body.enrollment_date).trim()
             : undefined;
 
         const update: any = {};
         if (fullname) update.fullname = fullname;
-        if (ic_number) update.ic_number = ic_number;
+        if (ic_number) {
+            if (normalizeIcDigits(ic_number).length !== 12) {
+                return NextResponse.json(
+                    { message: "Sila masukkan No. Kad Pengenalan yang sah (12 digit)" },
+                    { status: 400 }
+                );
+            }
+            update.ic_number = ic_number;
+        }
         if (status) update.status = status;
         if (class_id !== undefined) update.class_id = class_id;
         if (enrollment_date !== undefined) {
@@ -221,7 +265,7 @@ export async function PUT(req: Request) {
 
         if (error) {
             return NextResponse.json(
-                { message: error.message },
+                { message: toFriendlyStudentError(error) },
                 { status: 400 }
             );
         }

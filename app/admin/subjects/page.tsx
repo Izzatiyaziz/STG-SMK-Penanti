@@ -41,7 +41,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { 
     Plus, Trash2, Edit, UserPlus, UserMinus, Search, RefreshCw, 
-    BookOpen, Users, Clock, Shield, Filter, X, Loader2, SortAsc, SortDesc
+    BookOpen, Users, Clock, Shield, Filter, X, Loader2, SortAsc, SortDesc, AlertCircle
 } from "lucide-react";
 
 type SubjectRow = {
@@ -55,6 +55,13 @@ type TeacherRow = {
     name: string;
     identifier?: string;
     roles?: string[];
+};
+
+const normalizeSpaces = (value: string) => value.replace(/\s+/g, " ").trim();
+const isWordsOnlyName = (value: string) => {
+    const normalized = normalizeSpaces(value);
+    if (!normalized) return false;
+    return /^[\p{L}]+(?: [\p{L}]+)*$/u.test(normalized);
 };
 
 // Client-side only time component
@@ -80,15 +87,37 @@ export default function AdminSubjectsPage() {
     const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
     const [currentPage, setCurrentPage] = useState(1);
     const [addOpen, setAddOpen] = useState(false);
+    const [addName, setAddName] = useState("");
+    const [addNameTouched, setAddNameTouched] = useState(false);
 
     const [editing, setEditing] = useState<SubjectRow | null>(null);
     const [editName, setEditName] = useState("");
+    const [editNameTouched, setEditNameTouched] = useState(false);
     const [deleting, setDeleting] = useState<SubjectRow | null>(null);
 
     const [teachers, setTeachers] = useState<TeacherRow[]>([]);
     const [assigning, setAssigning] = useState<SubjectRow | null>(null);
     const [selectedTeacherId, setSelectedTeacherId] = useState<string>("");
     const [assignLoading, setAssignLoading] = useState(false);
+    const [isChangingCoordinator, setIsChangingCoordinator] = useState(false);
+
+    const editNameNormalized = normalizeSpaces(editName);
+    const editNameError =
+        editNameTouched && !editNameNormalized
+            ? "Nama subjek diperlukan."
+            : editNameTouched && editNameNormalized && !isWordsOnlyName(editNameNormalized)
+                ? "Nama subjek hanya boleh mengandungi huruf sahaja"
+                : "";
+    const editNameIsValid = Boolean(editNameNormalized) && isWordsOnlyName(editNameNormalized);
+
+    const addNameNormalized = normalizeSpaces(addName);
+    const addNameError =
+        addNameTouched && !addNameNormalized
+            ? "Nama subjek diperlukan."
+            : addNameTouched && addNameNormalized && !isWordsOnlyName(addNameNormalized)
+                ? "Nama subjek hanya boleh mengandungi huruf dan ruang."
+                : "";
+    const addNameIsValid = Boolean(addNameNormalized) && isWordsOnlyName(addNameNormalized);
 
     async function fetchSubjects() {
         setLoading(true);
@@ -191,17 +220,29 @@ export default function AdminSubjectsPage() {
         withoutCoordinator: rows.filter(r => r.coordinator === null).length,
     };
 
-    const coordinatorOptions = useMemo(
-        () => teachers.filter((teacher) => teacher.roles?.includes("subject coordinator")),
-        [teachers]
-    );
+    const coordinatorOptions = useMemo(() => {
+        const base = teachers.filter((teacher) => teacher.roles?.includes("subject coordinator"));
+        const assignedCoordinatorIds = new Set(
+            rows.map((s) => s.coordinator?.id).filter(Boolean) as string[]
+        );
+        const currentCoordinatorForSubject = assigning?.coordinator?.id ?? "";
+
+        // Only show unassigned coordinators. Keep current coordinator in list so the selected
+        // value can still display even when dropdown is locked.
+        return base.filter(
+            (t) =>
+                !assignedCoordinatorIds.has(t.id) ||
+                (currentCoordinatorForSubject && t.id === currentCoordinatorForSubject)
+        );
+    }, [teachers, rows, assigning?.coordinator?.id]);
 
 async function handleAdd(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const form = e.currentTarget;
     const fd = new FormData(form);
-    const subject_name = String(fd.get("subject_name") ?? "").trim();
-    if (!subject_name) return;
+    const subject_name = normalizeSpaces(addName || String(fd.get("subject_name") ?? ""));
+    setAddNameTouched(true);
+    if (!subject_name || !isWordsOnlyName(subject_name)) return;
 
     const toastId = toast.loading("Menambah subjek...");
     try {
@@ -216,6 +257,8 @@ async function handleAdd(e: React.FormEvent<HTMLFormElement>) {
         if (res.ok) {
             toast.success("Subjek berjaya ditambah", { id: toastId });
             form.reset();
+            setAddName("");
+            setAddNameTouched(false);
             setAddOpen(false);
             // PENTING: Gunakan router.refresh() atau fetchSubjects() 
             // untuk sync semula data UI dengan DB
@@ -233,6 +276,8 @@ async function handleAdd(e: React.FormEvent<HTMLFormElement>) {
 
     async function handleSaveEdit() {
         if (!editing) return;
+        setEditNameTouched(true);
+        if (!editNameIsValid) return;
         const toastId = toast.loading("Menyimpan...");
         try {
             const res = await fetch("/api/admin/subjects", {
@@ -240,7 +285,7 @@ async function handleAdd(e: React.FormEvent<HTMLFormElement>) {
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     subject_id: editing.id,
-                    subject_name: editName,
+                    subject_name: editNameNormalized,
                 }),
             });
             const json = await res.json();
@@ -280,7 +325,7 @@ async function handleAdd(e: React.FormEvent<HTMLFormElement>) {
         if (!assigning || !selectedTeacherId) return;
         
         setAssignLoading(true);
-        const toastId = toast.loading("Menyimpan penyelaras...");
+        const toastId = toast.loading("Menyimpan panitia subjek...");
         
         try {
             const res = await fetch("/api/admin/subject-coordinator", {
@@ -298,12 +343,13 @@ async function handleAdd(e: React.FormEvent<HTMLFormElement>) {
             }
             
             const teacherName = teachers.find(t => t.id === selectedTeacherId)?.name;
-            toast.success(`${teacherName} telah dilantik sebagai penyelaras untuk subjek ${assigning.name}`, { 
+            toast.success(`${teacherName} telah dilantik sebagai panitia subjek ${assigning.name}`, { 
                 id: toastId,
             });
             
             setAssigning(null);
             setSelectedTeacherId("");
+            setIsChangingCoordinator(false);
             fetchSubjects();
         } catch {
             toast.error("Ralat sistem", { id: toastId });
@@ -314,7 +360,7 @@ async function handleAdd(e: React.FormEvent<HTMLFormElement>) {
 
     async function handleRemoveCoordinator() {
     if (!assigning) return;
-    const toastId = toast.loading("Membuang penyelaras...");
+    const toastId = toast.loading("Membuang panitia subjek...");
     try {
         const res = await fetch(
             `/api/admin/subject-coordinator?subject_id=${assigning.id}`,
@@ -325,7 +371,7 @@ async function handleAdd(e: React.FormEvent<HTMLFormElement>) {
             toast.error(json?.error ?? "Gagal", { id: toastId });
             return;
         }
-        toast.success("Lantikan penyelaras dibuang", { id: toastId });
+        toast.success("Lantikan panitia subjek dibuang", { id: toastId });
         setAssigning(null);
         setSelectedTeacherId("");
         fetchSubjects(); // Refresh senarai subjek
@@ -343,6 +389,16 @@ async function handleAdd(e: React.FormEvent<HTMLFormElement>) {
         return subject.coordinator;
     };
 
+    const currentCoordinatorForAssigningSubject = assigning?.coordinator?.id ?? "";
+    const isCoordinatorSelectLocked =
+        Boolean(currentCoordinatorForAssigningSubject) && !isChangingCoordinator;
+    const isAssignCoordinatorSaveDisabled =
+        assignLoading ||
+        isCoordinatorSelectLocked ||
+        !selectedTeacherId ||
+        (currentCoordinatorForAssigningSubject !== "" &&
+            selectedTeacherId === currentCoordinatorForAssigningSubject);
+
     return (
         <div className="min-h-screen bg-background p-4 md:p-6">
             <div className="max-w-7xl mx-auto space-y-8">
@@ -358,7 +414,7 @@ async function handleAdd(e: React.FormEvent<HTMLFormElement>) {
                                     Pengurusan Subjek
                                 </h1>
                                 <p className="text-muted-foreground font-medium mt-1">
-                                    Urus senarai subjek dan penyelaras
+                                    Mengurus senarai subjek dan tetapkan ketua panitia subjek
                                 </p>
                             </div>
                         </div>
@@ -390,7 +446,16 @@ async function handleAdd(e: React.FormEvent<HTMLFormElement>) {
                             Muat Semula
                         </Button>
 
-                        <Dialog open={addOpen} onOpenChange={setAddOpen}>
+                        <Dialog
+                            open={addOpen}
+                            onOpenChange={(open) => {
+                                setAddOpen(open);
+                                if (!open) {
+                                    setAddName("");
+                                    setAddNameTouched(false);
+                                }
+                            }}
+                        >
                             <DialogTrigger asChild>
                                 <Button className="bg-primary hover:bg-primary/90 text-primary-foreground shadow-sm">
                                     <Plus className="w-4 h-4 mr-2" />
@@ -418,7 +483,28 @@ async function handleAdd(e: React.FormEvent<HTMLFormElement>) {
                                             <Label className="flex items-center gap-1">
                                                 <p> Nama Subjek </p><span className="text-red-500">*</span>
                                             </Label>
-                                            <Input name="subject_name" placeholder="contoh: Biologi, Matematik, Sejarah" required className="rounded-xl border-2 border-border/30 focus:border-primary/50 h-11" />
+                                            <Input
+                                                name="subject_name"
+                                                value={addName}
+                                                onChange={(e) => {
+                                                    const next = e.target.value;
+                                                    setAddName(next);
+                                                    if (/\d/.test(next)) setAddNameTouched(true);
+                                                }}
+                                                onBlur={() => setAddNameTouched(true)}
+                                                placeholder="contoh: Biologi, Matematik, Sejarah"
+                                                required
+                                                aria-invalid={Boolean(addNameError)}
+                                                className={`rounded-xl border-2 focus:border-primary/50 h-11 ${
+                                                    addNameError ? "border-red-400" : "border-border/30"
+                                                }`}
+                                            />
+                                            {addNameError && (
+                                                <div className="flex items-start gap-2 text-xs bg-red-50 text-red-700 border border-red-200 px-2 py-1.5 rounded-md">
+                                                    <AlertCircle className="w-3.5 h-3.5 text-red-600 mt-0.5 flex-shrink-0" />
+                                                    <span className="leading-4">{addNameError}</span>
+                                                </div>
+                                            )}
                                         </div>
                                     </div>
                                     <div className="flex flex-col gap-3 pt-4 sm:flex-row">
@@ -430,7 +516,11 @@ async function handleAdd(e: React.FormEvent<HTMLFormElement>) {
                                         >
                                             Batal
                                         </Button>
-                                        <Button type="submit" className="flex-1 rounded-xl h-11 bg-gradient-to-r from-primary to-primary/90 hover:from-primary/95 hover:to-primary/80 shadow-lg font-medium">
+                                        <Button
+                                            type="submit"
+                                            disabled={!addNameIsValid}
+                                            className="flex-1 rounded-xl h-11 bg-gradient-to-r from-primary to-primary/90 hover:from-primary/95 hover:to-primary/80 shadow-lg font-medium"
+                                        >
                                             <Plus className="w-4 h-4 mr-2" />
                                             Simpan Subjek
                                         </Button>
@@ -457,7 +547,7 @@ async function handleAdd(e: React.FormEvent<HTMLFormElement>) {
                             <div className="flex items-center gap-3">
                                 <Badge variant="outline" className="border-primary/30 bg-primary/5 text-primary font-medium">
                                     <Filter className="w-3 h-3 mr-1" />
-                                    {filteredRows.length} subjek ditemui
+                                    {filteredRows.length} subjek
                                 </Badge>
                             </div>
                         </div>
@@ -512,7 +602,7 @@ async function handleAdd(e: React.FormEvent<HTMLFormElement>) {
                                                 </Button>
                                             </TableHead>
                                             <TableHead className="font-semibold text-foreground py-4">
-                                                Penyelaras Subjek
+                                                Panitia Subjek
                                             </TableHead>
                                             <TableHead className="font-semibold text-foreground py-4 text-right pr-6">
                                                 Tindakan
@@ -571,6 +661,7 @@ async function handleAdd(e: React.FormEvent<HTMLFormElement>) {
                                                             className="py-4 text-center cursor-pointer"
                                                             onClick={() => {
                                                                 setAssigning(subject);
+                                                                setIsChangingCoordinator(false);
                                                                 setSelectedTeacherId(subject.coordinator?.id ?? "");
                                                             }}
                                                         >
@@ -583,6 +674,7 @@ async function handleAdd(e: React.FormEvent<HTMLFormElement>) {
                                                             className="py-4 cursor-pointer"
                                                             onClick={() => {
                                                                 setAssigning(subject);
+                                                                setIsChangingCoordinator(false);
                                                                 setSelectedTeacherId(subject.coordinator?.id ?? "");
                                                             }}
                                                         >
@@ -630,10 +722,11 @@ async function handleAdd(e: React.FormEvent<HTMLFormElement>) {
                                                                     className="h-8 w-8 text-primary"
                                                                     onClick={() => {
                                                                         setAssigning(subject);
+                                                                        setIsChangingCoordinator(false);
                                                                         setSelectedTeacherId(subject.coordinator?.id ?? "");
                                                                     }}
-                                                                    title={subject.coordinator ? "Tukar penyelaras" : "Lantik penyelaras"}
-                                                                    aria-label={subject.coordinator ? "Tukar penyelaras" : "Lantik penyelaras"}
+                                                                    title={subject.coordinator ? "Tukar panitia subjek" : "Lantik panitia subjek"}
+                                                                    aria-label={subject.coordinator ? "Tukar panitia subjek" : "Lantik panitia subjek"}
                                                                 >
                                                                     <UserPlus className="w-4 h-4" />
                                                                 </Button>
@@ -644,6 +737,7 @@ async function handleAdd(e: React.FormEvent<HTMLFormElement>) {
                                                                     onClick={() => {
                                                                         setEditing(subject);
                                                                         setEditName(subject.name);
+                                                                        setEditNameTouched(false);
                                                                     }}
                                                                     title="Kemaskini subjek"
                                                                     aria-label="Kemaskini subjek"
@@ -678,10 +772,13 @@ async function handleAdd(e: React.FormEvent<HTMLFormElement>) {
                             <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
                                 <div className="flex items-center gap-2 text-muted-foreground">
                                     <div className="flex items-center gap-1">
-                                        <span className="font-semibold text-foreground">{filteredRows.length}</span>
+                                        <span>Menunjukkan</span>
+                                        <span className="font-semibold text-foreground">{(currentPage - 1) * PAGE_SIZE + 1}
+                                        {" - "}
+                                        {Math.min(currentPage * PAGE_SIZE, filteredRows.length)} </span>
                                         <span>daripada</span>
                                         <span className="font-semibold text-foreground">{rows.length}</span>
-                                        <span>subjek dipaparkan</span>
+                                        <span>subjek</span>
                                     </div>
                                 </div>
                                 <div className="flex items-center gap-4">
@@ -704,11 +801,6 @@ async function handleAdd(e: React.FormEvent<HTMLFormElement>) {
 
                             {!loading && totalPages > 1 && (
                                 <div className="flex flex-col gap-3 border-t border-border/60 pt-4">
-                                    <div className="text-sm text-muted-foreground">
-                                        Menunjukkan {(currentPage - 1) * PAGE_SIZE + 1}
-                                        {" - "}
-                                        {Math.min(currentPage * PAGE_SIZE, filteredRows.length)} daripada {filteredRows.length} subjek
-                                    </div>
                                     <Pagination>
                                         <PaginationContent>
                                             <PaginationItem>
@@ -774,7 +866,15 @@ async function handleAdd(e: React.FormEvent<HTMLFormElement>) {
             </div>
 
             {/* EDIT DIALOG */}
-            <Dialog open={Boolean(editing)} onOpenChange={() => setEditing(null)}>
+            <Dialog
+                open={Boolean(editing)}
+                onOpenChange={(open) => {
+                    if (!open) {
+                        setEditing(null);
+                        setEditNameTouched(false);
+                    }
+                }}
+            >
                 <DialogContent className="sm:max-w-[500px]">
                     <DialogHeader>
                         <DialogTitle className="flex items-center gap-2 font-bold">
@@ -790,17 +890,35 @@ async function handleAdd(e: React.FormEvent<HTMLFormElement>) {
                                 </Label>
                                 <Input
                                     value={editName}
-                                    onChange={(e) => setEditName(e.target.value)}
-                                    className="h-11"
+                                    onChange={(e) => {
+                                        const next = e.target.value;
+                                        setEditName(next);
+                                        if (/\d/.test(next)) setEditNameTouched(true);
+                                    }}
+                                    onBlur={() => setEditNameTouched(true)}
+                                    aria-invalid={Boolean(editNameError)}
+                                    className={`h-11 ${editNameError ? "border-red-400" : ""}`}
                                 />
+                                {editNameError && (
+                                    <div className="flex items-start gap-2 text-xs bg-red-50 text-red-700 border border-red-200 px-2 py-1.5 rounded-md">
+                                        <AlertCircle className="w-3.5 h-3.5 text-red-600 mt-0.5 flex-shrink-0" />
+                                        <span className="leading-4">{editNameError}</span>
+                                    </div>
+                                )}
                             </div>
                         </div>
                     </div>
                     <DialogFooter>
-                        <Button variant="outline" onClick={() => setEditing(null)}>
+                        <Button
+                            variant="outline"
+                            onClick={() => {
+                                setEditing(null);
+                                setEditNameTouched(false);
+                            }}
+                        >
                             Batal
                         </Button>
-                        <Button onClick={handleSaveEdit} disabled={!editName} className="bg-primary px-8">
+                        <Button onClick={handleSaveEdit} disabled={!editNameIsValid} className="bg-primary px-8">
                             Simpan
                         </Button>
                     </DialogFooter>
@@ -834,6 +952,7 @@ async function handleAdd(e: React.FormEvent<HTMLFormElement>) {
                     if (!open) {
                         setAssigning(null);
                         setSelectedTeacherId("");
+                        setIsChangingCoordinator(false);
                     }
                 }}
             >
@@ -841,7 +960,7 @@ async function handleAdd(e: React.FormEvent<HTMLFormElement>) {
         <DialogHeader>
             <DialogTitle className="flex items-center gap-2 font-bold">
                 <UserPlus className="w-5 h-5 text-primary" />
-                Lantik Penyelaras Subjek
+                Lantik Panitia Subjek
             </DialogTitle>
         </DialogHeader>
 
@@ -860,19 +979,19 @@ async function handleAdd(e: React.FormEvent<HTMLFormElement>) {
                 {/* Pemilihan Guru */}
                 <div className="space-y-2">
                     <Label className="flex items-center gap-1">
-                        <UserPlus className="w-3.5 h-3.5" /> Pilih Guru Penyelaras <span className="text-red-500">*</span>
+                        <UserPlus className="w-3.5 h-3.5" /> Pilih Guru Panitia Subjek <span className="text-red-500">*</span>
                     </Label>
                     <Select
                         value={selectedTeacherId}
                         onValueChange={setSelectedTeacherId}
-                        disabled={assignLoading}
+                        disabled={assignLoading || isCoordinatorSelectLocked}
                     >
                         <SelectTrigger className="h-11 border-border">
-                            <SelectValue placeholder="Pilih guru penyelaras" />
+                            <SelectValue placeholder="Pilih guru panitia subjek" />
                         </SelectTrigger>
                         <SelectContent>
                             {coordinatorOptions.length === 0 ? (
-                                <SelectItem value="none" disabled>Tiada penyelaras subjek ditemui</SelectItem>
+                                <SelectItem value="none" disabled>Tiada panitia subjek ditemui</SelectItem>
                             ) : (
                                 coordinatorOptions.map((t) => {
                                     const assignedCoordinatorIds = new Set(
@@ -899,7 +1018,7 @@ async function handleAdd(e: React.FormEvent<HTMLFormElement>) {
                 {/* Note Box - Selaras dengan nota di Edit Student */}
                 <div className="p-3 bg-amber-50 border border-amber-100 rounded-lg mt-2">
                     <p className="text-[11px] text-amber-700 leading-relaxed italic">
-                        <strong>Nota:</strong> Penyelaras subjek bertanggungjawab untuk menguruskan kurikulum dan laporan bagi subjek <strong>{assigning?.name}</strong>.
+                        <strong>Nota:</strong> Panitia subjek bertanggungjawab untuk menguruskan maklumat peperiksaan dan laporan bagi subjek <strong>{assigning?.name}</strong>.
                     </p>
                 </div>
             </div>
@@ -912,11 +1031,14 @@ async function handleAdd(e: React.FormEvent<HTMLFormElement>) {
                         <Button
                             type="button"
                             variant="destructive"
-                            onClick={handleRemoveCoordinator}
-                            disabled={assignLoading}
+                            onClick={() => {
+                                setIsChangingCoordinator(true);
+                                setSelectedTeacherId("");
+                            }}
+                            disabled={assignLoading || isChangingCoordinator}
                         >
-                            <UserMinus className="w-4 h-4 mr-2" />
-                            Buang Lantikan
+                            <UserPlus className="w-4 h-4 mr-2" />
+                            Tukar Panitia Subjek
                         </Button>
                     )}
                 </div>
@@ -932,7 +1054,7 @@ async function handleAdd(e: React.FormEvent<HTMLFormElement>) {
                     </Button>
                     <Button
                         onClick={handleAssignCoordinator}
-                        disabled={!selectedTeacherId || assignLoading}
+                        disabled={isAssignCoordinatorSaveDisabled}
                         className="bg-primary px-8"
                     >
                         {assignLoading ? "Menyimpan..." : "Simpan"}

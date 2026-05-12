@@ -8,17 +8,30 @@ import {
 	Download,
 	GraduationCap,
 	Loader2,
+	Plus,
 	RefreshCw,
 	Search,
 	Shield,
 	Trash2,
 	UserPlus,
 	Users,
+	Filter,
 } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+	AlertDialog,
+	AlertDialogAction,
+	AlertDialogCancel,
+	AlertDialogContent,
+	AlertDialogDescription,
+	AlertDialogFooter,
+	AlertDialogHeader,
+	AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
 	Dialog,
 	DialogContent,
@@ -99,6 +112,14 @@ export default function MyClassPage() {
 	const [actionLoading, setActionLoading] = useState(false);
 	const [searchQuery, setSearchQuery] = useState("");
 	const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
+	const [selectedAvailableStudentIds, setSelectedAvailableStudentIds] = useState<
+		Set<string>
+	>(new Set());
+	const [addingStudentId, setAddingStudentId] = useState<string | null>(null);
+	const [bulkAdding, setBulkAdding] = useState(false);
+	const [removeOpen, setRemoveOpen] = useState(false);
+	const [studentToRemove, setStudentToRemove] = useState<Student | null>(null);
+	const [removingStudent, setRemovingStudent] = useState(false);
 
 	useEffect(() => {
 		try {
@@ -150,6 +171,8 @@ export default function MyClassPage() {
 	async function fetchAvailableStudents() {
 		if (!classInfo) return;
 
+		setSelectedAvailableStudentIds(new Set());
+		setSearchQuery("");
 		try {
 			const res = await fetch(
 				`/api/teacher/available-students?grade=${classInfo.grade}`,
@@ -161,6 +184,18 @@ export default function MyClassPage() {
 			toast.error("Gagal memuatkan senarai pelajar tersedia");
 		}
 	}
+
+	useEffect(() => {
+		setSelectedAvailableStudentIds((previous) => {
+			if (previous.size === 0) return previous;
+			const availableIds = new Set(availableStudents.map((student) => student.id));
+			const next = new Set<string>();
+			for (const id of previous) {
+				if (availableIds.has(id)) next.add(id);
+			}
+			return next;
+		});
+	}, [availableStudents]);
 
 	async function handleRefresh() {
 		await fetchData({ silent: true });
@@ -191,18 +226,25 @@ export default function MyClassPage() {
 		toast.success("Data pelajar berjaya dieksport");
 	}
 
+	async function addStudentToClass(studentId: string) {
+		if (!classInfo) return false;
+		const res = await fetch("/api/teacher/my-class/add", {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ studentId, classId: classInfo.id }),
+		});
+		return res.ok;
+	}
+
 	async function handleAddStudent(studentId: string) {
 		if (!classInfo) return;
 
 		setActionLoading(true);
+		setAddingStudentId(studentId);
+		setBulkAdding(false);
 		try {
-			const res = await fetch("/api/teacher/my-class/add", {
-				method: "POST",
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({ studentId, classId: classInfo.id }),
-			});
-
-			if (!res.ok) throw new Error();
+			const ok = await addStudentToClass(studentId);
+			if (!ok) throw new Error();
 			toast.success("Pelajar berjaya ditambah ke kelas");
 			await fetchData({ silent: true });
 			await fetchAvailableStudents();
@@ -210,14 +252,46 @@ export default function MyClassPage() {
 			toast.error("Ralat semasa menambah pelajar");
 		} finally {
 			setActionLoading(false);
+			setAddingStudentId(null);
+		}
+	}
+
+	async function handleAddSelectedStudents() {
+		if (!classInfo) return;
+		const ids = Array.from(selectedAvailableStudentIds);
+		if (ids.length === 0) return;
+
+		setActionLoading(true);
+		setAddingStudentId(null);
+		setBulkAdding(true);
+		try {
+			let successCount = 0;
+			let failedCount = 0;
+			for (const id of ids) {
+				const ok = await addStudentToClass(id);
+				if (ok) successCount += 1;
+				else failedCount += 1;
+			}
+
+			if (successCount > 0) {
+				toast.success(`Berjaya tambah ${successCount} pelajar ke kelas`);
+			}
+			if (failedCount > 0) {
+				toast.error(`Gagal tambah ${failedCount} pelajar`);
+			}
+
+			setSelectedAvailableStudentIds(new Set());
+			await fetchData({ silent: true });
+			await fetchAvailableStudents();
+		} catch {
+			toast.error("Ralat semasa menambah pelajar");
+		} finally {
+			setActionLoading(false);
+			setBulkAdding(false);
 		}
 	}
 
 	async function handleRemoveStudent(studentId: string) {
-		if (!confirm("Adakah anda pasti mahu mengeluarkan pelajar ini dari kelas?")) {
-			return;
-		}
-
 		try {
 			const res = await fetch(
 				`/api/teacher/my-class/remove?studentId=${studentId}`,
@@ -231,6 +305,19 @@ export default function MyClassPage() {
 		}
 	}
 
+	async function confirmRemoveStudent() {
+		if (!studentToRemove) return;
+
+		setRemovingStudent(true);
+		try {
+			await handleRemoveStudent(studentToRemove.id);
+			setRemoveOpen(false);
+			setStudentToRemove(null);
+		} finally {
+			setRemovingStudent(false);
+		}
+	}
+
 	const filteredAvailableStudents = availableStudents.filter((student) => {
 		const query = searchQuery.toLowerCase();
 		return (
@@ -238,6 +325,33 @@ export default function MyClassPage() {
 			student.identifier.includes(searchQuery)
 		);
 	});
+
+	const visibleAvailableStudentIds = filteredAvailableStudents.map(
+		(student) => student.id,
+	);
+	const selectedVisibleCount = visibleAvailableStudentIds.reduce((count, id) => {
+		return selectedAvailableStudentIds.has(id) ? count + 1 : count;
+	}, 0);
+	const selectAllChecked =
+		visibleAvailableStudentIds.length > 0 &&
+		selectedVisibleCount === visibleAvailableStudentIds.length;
+	const selectAllIndeterminate =
+		selectedVisibleCount > 0 && selectedVisibleCount < visibleAvailableStudentIds.length;
+
+	function toggleSelectAllVisible() {
+		setSelectedAvailableStudentIds((previous) => {
+			if (visibleAvailableStudentIds.length === 0) return previous;
+
+			const next = new Set(previous);
+			if (selectAllChecked) {
+				for (const id of visibleAvailableStudentIds) next.delete(id);
+				return next;
+			}
+
+			for (const id of visibleAvailableStudentIds) next.add(id);
+			return next;
+		});
+	}
 
 	if (loading) {
 		return (
@@ -340,7 +454,7 @@ export default function MyClassPage() {
 									Tambah Pelajar
 								</Button>
 							</DialogTrigger>
-							<DialogContent className="sm:max-w-[520px] rounded-2xl border-2 border-border/50 bg-card shadow-2xl">
+							<DialogContent className="sm:max-w-[600px] rounded-2xl border-2 border-border/50 bg-card shadow-2xl">
 								<DialogHeader className="space-y-3">
 									<div className="flex items-center gap-3">
 										<div className="p-2 rounded-xl bg-primary/10">
@@ -366,6 +480,43 @@ export default function MyClassPage() {
 									/>
 								</div>
 
+								<div className="flex items-center justify-between gap-3">
+									<button
+										type="button"
+										className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
+										onClick={toggleSelectAllVisible}
+										disabled={actionLoading || visibleAvailableStudentIds.length === 0}
+									>
+										<Checkbox
+											checked={
+												selectAllIndeterminate ? "indeterminate" : selectAllChecked
+											}
+											aria-label="Pilih semua pelajar yang dipaparkan"
+										/>
+										<span>
+											Pilih semua{" "}
+											{visibleAvailableStudentIds.length > 0
+												? `(${selectedVisibleCount}/${visibleAvailableStudentIds.length})`
+												: ""}
+										</span>
+									</button>
+
+									<Button
+										size="sm"
+										variant="outline"
+										onClick={handleAddSelectedStudents}
+										disabled={actionLoading || selectedAvailableStudentIds.size === 0}
+										className="gap-2"
+									>
+										{actionLoading && bulkAdding ? (
+											<Loader2 className="w-4 h-4 animate-spin" />
+										) : (
+											<UserPlus className="w-4 h-4" />
+										)}
+										Tambah ({selectedAvailableStudentIds.size})
+									</Button>
+								</div>
+
 								<div className="max-h-[360px] overflow-y-auto rounded-lg border border-border">
 									<Table>
 										<TableBody>
@@ -377,39 +528,69 @@ export default function MyClassPage() {
 												</TableRow>
 											) : (
 												filteredAvailableStudents.map((student) => (
+													(() => {
+														const isSelected = selectedAvailableStudentIds.has(student.id);
+														const toggleSelected = () => {
+															if (actionLoading) return;
+															setSelectedAvailableStudentIds((previous) => {
+																const next = new Set(previous);
+																if (next.has(student.id)) next.delete(student.id);
+																else next.add(student.id);
+																return next;
+															});
+														};
+
+														return (
 													<TableRow
 														key={student.id}
-														className="hover:bg-muted/50 transition-colors"
+														className="hover:bg-muted/50 transition-colors cursor-pointer"
+														onClick={(e) => {
+															const target = e.target as HTMLElement | null;
+															if (
+																target?.closest("button") ||
+																target?.closest("a") ||
+																target?.closest("input") ||
+																target?.closest("[role='checkbox']")
+															) {
+																return;
+															}
+															toggleSelected();
+														}}
 													>
-														<TableCell className="py-4">
+														<TableCell className="py-4 whitespace-normal align-top">
 															<div className="flex items-center gap-3">
+																<Checkbox
+																	checked={isSelected}
+																	aria-label={`Pilih ${student.name}`}
+																	disabled={actionLoading}
+																	onClick={(e) => e.stopPropagation()}
+																	onCheckedChange={(checked) => {
+																		setSelectedAvailableStudentIds((previous) => {
+																			const next = new Set(previous);
+																			if (checked) next.add(student.id);
+																			else next.delete(student.id);
+																			return next;
+																		});
+																	}}
+																/>
 																<div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary/20 to-primary/10 border border-primary/20 flex items-center justify-center">
 																	<span className="font-semibold text-primary text-sm">
 																		{student.name.charAt(0)}
 																	</span>
 																</div>
-																<div>
-																	<div className="font-semibold">{student.name}</div>
+																<div className="min-w-0">
+																	<div className="font-semibold whitespace-normal break-words leading-snug">
+																		{student.name}
+																	</div>
 																	<span className="font-mono bg-muted/30 px-2 py-1 rounded-md text-xs text-muted-foreground">
 																		{student.identifier}
 																	</span>
 																</div>
 															</div>
 														</TableCell>
-														<TableCell className="py-4 text-right">
-															<Button
-																size="sm"
-																onClick={() => handleAddStudent(student.id)}
-																disabled={actionLoading}
-															>
-																{actionLoading ? (
-																	<Loader2 className="w-4 h-4 animate-spin" />
-																) : (
-																	"Tambah"
-																)}
-															</Button>
-														</TableCell>
 													</TableRow>
+														);
+													})()
 												))
 											)}
 										</TableBody>
@@ -418,27 +599,6 @@ export default function MyClassPage() {
 							</DialogContent>
 						</Dialog>
 					</div>
-				</div>
-
-				<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-					<SummaryCard
-						label="Jumlah Pelajar"
-						value={students.length}
-						icon={Users}
-						tone="primary"
-					/>
-					<SummaryCard
-						label="Nama Kelas"
-						value={classInfo.name}
-						icon={Building2}
-						tone="emerald"
-					/>
-					<SummaryCard
-						label="Tingkatan"
-						value={`Tingkatan ${classInfo.grade}`}
-						icon={GraduationCap}
-						tone="blue"
-					/>
 				</div>
 
 				<Card className="border-border bg-card shadow-lg overflow-hidden">
@@ -453,9 +613,12 @@ export default function MyClassPage() {
 									Klik nama pelajar untuk lihat maklumat pelajar
 								</p>
 							</div>
-							<Badge className="bg-primary/10 text-primary border-primary/20 font-bold">
-								{students.length} PELAJAR
+							<div className="flex items-center gap-3">
+                                <Badge variant="outline" className="border-primary/30 bg-primary/5 text-primary font-medium">
+                                    <Filter className="w-3 h-3 mr-1" />
+								{students.length} pelajar
 							</Badge>
+							</div>
 						</div>
 					</CardHeader>
 					<CardContent className="p-6">
@@ -527,7 +690,10 @@ export default function MyClassPage() {
 															size="icon"
 															variant="outline"
 															className="h-8 w-8 text-rose-600"
-															onClick={() => handleRemoveStudent(student.id)}
+															onClick={() => {
+																setStudentToRemove(student);
+																setRemoveOpen(true);
+															}}
 															title="Keluarkan pelajar"
 														>
 															<Trash2 className="w-4 h-4" />
@@ -543,6 +709,50 @@ export default function MyClassPage() {
 					</CardContent>
 				</Card>
 			</div>
+
+			<AlertDialog
+				open={removeOpen}
+				onOpenChange={(open) => {
+					setRemoveOpen(open);
+					if (!open) setStudentToRemove(null);
+				}}
+			>
+				<AlertDialogContent>
+					<AlertDialogHeader>
+						<AlertDialogTitle className="text-destructive font-bold">
+							Keluarkan Pelajar?
+						</AlertDialogTitle>
+						<AlertDialogDescription>
+							Keluarkan{" "}
+							<span className="font-semibold text-foreground">
+								{studentToRemove?.name}
+							</span>{" "}
+							dari kelas ini?
+						</AlertDialogDescription>
+					</AlertDialogHeader>
+
+					<AlertDialogFooter>
+						<AlertDialogCancel disabled={removingStudent}>
+							Batal
+						</AlertDialogCancel>
+						<AlertDialogAction asChild>
+							<Button
+								variant="destructive"
+								onClick={(event) => {
+									event.preventDefault();
+									confirmRemoveStudent();
+								}}
+								disabled={removingStudent}
+							>
+								{removingStudent && (
+									<Loader2 className="w-4 h-4 mr-2 animate-spin" />
+								)}
+								{removingStudent ? "Mengeluarkan..." : "Ya, Keluarkan"}
+							</Button>
+						</AlertDialogAction>
+					</AlertDialogFooter>
+				</AlertDialogContent>
+			</AlertDialog>
 
 			<Dialog
 				open={Boolean(selectedStudent)}

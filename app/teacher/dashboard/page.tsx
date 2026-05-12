@@ -33,9 +33,9 @@ import {
 	FileText,
 	Shield,
 	Clock,
+	Mail as MailIcon,
 	Lightbulb,
 	Loader2,
-	Mail,
 	RefreshCw,
 	TrendingUp,
 	Trophy,
@@ -183,6 +183,37 @@ function statusClass(status?: string) {
 	return "bg-blue-100 text-blue-700 border-blue-200";
 }
 
+function statusLabel(status?: string) {
+	if (status === "Critical") return "Kritikal";
+	if (status === "Weak") return "Lemah";
+	if (!status) return "-";
+	return status;
+}
+
+function categoryLabel(name?: string) {
+	const key = String(name ?? "").trim();
+	if (key === "Excellent") return "Cemerlang";
+	if (key === "Good") return "Baik";
+	if (key === "Average") return "Sederhana";
+	if (key === "Weak") return "Lemah";
+	if (key === "Critical") return "Kritikal";
+	return key || "-";
+}
+
+function translateInsight(insight?: string) {
+	const text = String(insight ?? "").trim();
+	if (!text) return "";
+
+	// Pattern: "Most students perform well in X, but X shows the lowest average score."
+	const m1 = text.match(/^Most students perform well in (.+), but \1 shows the lowest average score\.$/i);
+	if (m1) {
+		const subject = m1[1].trim();
+		return `Kebanyakan pelajar berprestasi baik dalam ${subject}, namun ${subject} mempunyai purata markah paling rendah.`;
+	}
+
+	return text;
+}
+
 function EmptyText({ text }: { text: string }) {
 	return <p className="text-sm text-muted-foreground py-6 text-center">{text}</p>;
 }
@@ -258,6 +289,7 @@ function SubjectTeacherDashboard({ teacherId }: { teacherId: string }) {
 	const [loading, setLoading] = useState(true);
 	const [exams, setExams] = useState<Exam[]>([]);
 	const [selectedExamId, setSelectedExamId] = useState<string>("");
+	const [teacherInfo, setTeacherInfo] = useState<{ name: string; email: string } | null>(null);
 
 	useEffect(() => {
 		let cancelled = false;
@@ -302,6 +334,20 @@ function SubjectTeacherDashboard({ teacherId }: { teacherId: string }) {
 	useEffect(() => {
 		let cancelled = false;
 
+		async function loadTeacherInfo() {
+			try {
+				const res = await fetch("/api/auth/me", { method: "POST" });
+				if (!res.ok) return;
+				const json: unknown = await res.json();
+				if (!isRecord(json)) return;
+				const name = String(json.name ?? "").trim();
+				const email = String(json.email ?? "").trim();
+				if (!cancelled && name) setTeacherInfo({ name, email });
+			} catch {
+				// ignore
+			}
+		}
+
 		async function loadExams() {
 			try {
 				const res = await fetch("/api/admin/exams", { cache: "no-store" });
@@ -343,6 +389,7 @@ function SubjectTeacherDashboard({ teacherId }: { teacherId: string }) {
 			}
 		}
 
+		loadTeacherInfo();
 		loadExams();
 		return () => {
 			cancelled = true;
@@ -426,6 +473,47 @@ function SubjectTeacherDashboard({ teacherId }: { teacherId: string }) {
 		return `${names.slice(0, 2).join(", ")} +${names.length - 2} lagi`;
 	}, [assignments]);
 
+	const reminders = useMemo(() => {
+		if (!selectedExamId) return [];
+
+		const toLocalDate = (dateString: string) => {
+			const normalized = String(dateString ?? "").trim();
+			if (!normalized) return null;
+			const dt = new Date(`${normalized}T00:00:00`);
+			return Number.isNaN(dt.getTime()) ? null : dt;
+		};
+
+		const startOfToday = new Date();
+		startOfToday.setHours(0, 0, 0, 0);
+
+		const items = assignments
+			.map((a) => {
+				const deadline = deadlineBySubjectId.get(a.subject_id) || "";
+				const deadlineDate = toLocalDate(deadline);
+				if (!deadlineDate) return null;
+
+				const status = assignmentStatuses[a.id];
+				const isApproved = status?.approval?.status === "approved";
+				if (isApproved) return null;
+
+				const diffMs = deadlineDate.getTime() - startOfToday.getTime();
+				const daysLeft = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+
+				return {
+					id: a.id,
+					subject: a.subject_name,
+					classLabel: `${a.grade ?? "-"} ${a.class_name}`.trim(),
+					deadline,
+					daysLeft,
+				};
+			})
+			.filter((x): x is NonNullable<typeof x> => Boolean(x))
+			.filter((x) => x.daysLeft <= 7)
+			.sort((a, b) => a.daysLeft - b.daysLeft);
+
+		return items;
+	}, [assignments, assignmentStatuses, deadlineBySubjectId, selectedExamId]);
+
 	function openMarks(assignment: Assignment) {
 		localStorage.setItem(
 			"stg_marks_context",
@@ -440,7 +528,7 @@ function SubjectTeacherDashboard({ teacherId }: { teacherId: string }) {
 
 	return (
 		<div className="min-h-screen bg-background p-4 md:p-6">
-			<div className="max-w-7xl mx-auto space-y-8">
+			<div className="w-full max-w-none space-y-8">
 				<div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
 					<div className="space-y-3">
 						<div className="flex items-center gap-4">
@@ -509,35 +597,36 @@ function SubjectTeacherDashboard({ teacherId }: { teacherId: string }) {
 					/>
 				</div>
 
-				<Card className="border-border bg-card shadow-md rounded-xl overflow-hidden">
-					<CardContent className="grid grid-cols-1 gap-4 p-6 md:grid-cols-3">
-						<div className="space-y-2">
-							<div className="text-sm font-medium text-muted-foreground">Peperiksaan</div>
-							<Select value={selectedExamId} onValueChange={setSelectedExamId}>
-								<SelectTrigger className="h-11 rounded-lg border-border bg-background">
-									<SelectValue placeholder="Pilih peperiksaan" />
-								</SelectTrigger>
-								<SelectContent className="rounded-lg border-border">
-									{exams.map((e) => (
-										<SelectItem key={e.id} value={e.id}>
-											{e.name} ({e.academic_year})
-										</SelectItem>
-									))}
-								</SelectContent>
-							</Select>
-						</div>
-						<div className="space-y-2">
-							<div className="text-sm font-medium text-muted-foreground">Subjek Diajar</div>
-							<div className="inline-flex h-11 w-full items-center gap-2 rounded-md border border-border bg-background px-4 text-sm font-medium text-foreground shadow-xs">
-								<BookOpen className="h-4 w-4 shrink-0 text-primary" />
-								<span className="truncate">{subjectSummary}</span>
-							</div>
-						</div>
-					</CardContent>
-				</Card>
+				<div className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:items-start">
+					<div className="space-y-6 lg:col-span-2">
+						<Card className="border-border bg-card shadow-md rounded-xl overflow-hidden">
+							<CardContent className="grid grid-cols-1 gap-4 p-6 md:grid-cols-2">
+								<div className="space-y-2">
+									<div className="text-sm font-medium text-muted-foreground">Peperiksaan</div>
+									<Select value={selectedExamId} onValueChange={setSelectedExamId}>
+										<SelectTrigger className="h-11 rounded-lg border-border bg-background">
+											<SelectValue placeholder="Pilih peperiksaan" />
+										</SelectTrigger>
+										<SelectContent className="rounded-lg border-border">
+											{exams.map((e) => (
+												<SelectItem key={e.id} value={e.id}>
+													{e.name} ({e.academic_year})
+												</SelectItem>
+											))}
+										</SelectContent>
+									</Select>
+								</div>
+								<div className="space-y-2">
+									<div className="text-sm font-medium text-muted-foreground">Subjek Diajar</div>
+									<div className="inline-flex h-11 w-full items-center gap-2 rounded-md border border-border bg-background px-4 text-sm font-medium text-foreground shadow-xs">
+										<BookOpen className="h-4 w-4 shrink-0 text-primary" />
+										<span className="truncate">{subjectSummary}</span>
+									</div>
+								</div>
+							</CardContent>
+						</Card>
 
-				<div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-					<Card className="border-border bg-card shadow-md rounded-xl overflow-hidden lg:col-span-2">
+						<Card className="border-border bg-card shadow-md rounded-xl overflow-hidden">
 						<CardHeader className="border-b border-border bg-gradient-to-r from-card to-card/80 px-6 py-5">
 							<div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
 								<div>
@@ -708,34 +797,98 @@ function SubjectTeacherDashboard({ teacherId }: { teacherId: string }) {
 							</div>
 						</div>
 					</Card>
+					</div>
 
-					<Card className="border-border bg-card shadow-md rounded-xl overflow-hidden h-fit">
-						<CardHeader className="border-b border-border bg-gradient-to-r from-card to-card/80 px-6 py-5">
-							<CardTitle className="text-xl font-bold text-foreground">
-								Pautan Pantas
-							</CardTitle>
-						</CardHeader>
-						<CardContent className="space-y-3 p-6">
-							<QuickLink
-								href="/teacher/my-subject"
-								icon={ClipboardList}
-								title="Masuk Markah"
-								desc="Pemarkahan subjek & hantar untuk semakan"
-							/>
-							<QuickLink
-								href="/teacher/omr"
-								icon={Camera}
-								title="Imbasan OMR"
-								desc="Ambil gambar & proses OMR"
-							/>
-							<QuickLink
-								href="/teacher/report"
-								icon={FileText}
-								title="Laporan"
-								desc="Ringkasan keputusan peperiksaan"
-							/>
-						</CardContent>
-					</Card>
+					<div className="space-y-6">
+						<Card className="border-border bg-card shadow-md rounded-xl overflow-hidden h-fit">
+							<CardHeader className="border-b border-border bg-gradient-to-r from-card to-card/80 px-6 py-5">
+								<CardTitle className="text-xl font-bold text-foreground">
+									Maklumat Guru Subjek
+								</CardTitle>
+							</CardHeader>
+							<CardContent className="space-y-4 p-6">
+								<ProfileRow label="Nama" value={teacherInfo?.name || "Belum tersedia"} />
+								<ProfileRow label="Subjek" value={subjectSummary || "Belum tersedia"} />
+								<ProfileRow label="Email" value={teacherInfo?.email || "Belum tersedia"} icon={MailIcon} />
+								<ProfileRow label="Sesi akademik" value={selectedExam?.academic_year || "-"} />
+							</CardContent>
+						</Card>
+
+						<Card className="border-border bg-card shadow-md rounded-xl overflow-hidden h-fit">
+							<CardHeader className="border-b border-border bg-gradient-to-r from-card to-card/80 px-6 py-5">
+								<CardTitle className="text-xl font-bold text-foreground">
+									Peringatan
+								</CardTitle>
+								<p className="text-sm text-muted-foreground mt-1">
+									Tugasan yang hampir tarikh akhir (7 hari dan ke bawah)
+								</p>
+							</CardHeader>
+							<CardContent className="space-y-3 p-6">
+								{!selectedExamId ? (
+									<div className="rounded-lg border border-border bg-muted/20 p-4 text-sm text-muted-foreground">
+										Sila pilih peperiksaan untuk lihat peringatan tarikh akhir.
+									</div>
+								) : reminders.length === 0 ? (
+									<div className="rounded-lg border border-border bg-muted/20 p-4 text-sm text-muted-foreground">
+										Tiada peringatan buat masa ini.
+									</div>
+								) : (
+									reminders.slice(0, 6).map((item) => {
+										const urgencyClass =
+											item.daysLeft < 0
+												? "border-rose-200 bg-rose-50 text-rose-700"
+												: item.daysLeft <= 1
+													? "border-rose-200 bg-rose-50 text-rose-700"
+													: item.daysLeft <= 3
+														? "border-amber-200 bg-amber-50 text-amber-700"
+														: "border-blue-200 bg-blue-50 text-blue-700";
+
+										const daysText =
+											item.daysLeft < 0
+												? `Lewat ${Math.abs(item.daysLeft)} hari`
+												: item.daysLeft === 0
+													? "Hari ini"
+													: `Dalam ${item.daysLeft} hari`;
+
+										return (
+											<div
+												key={item.id}
+												className="rounded-lg border border-border/60 p-4 bg-background"
+											>
+												<div className="flex items-start justify-between gap-3">
+													<div className="min-w-0">
+														<div className="font-semibold text-foreground truncate">
+															{item.subject}
+														</div>
+														<div className="text-xs text-muted-foreground mt-1 truncate">
+															{item.classLabel}
+														</div>
+														<div className="mt-3 flex items-center gap-2">
+															<Badge variant="outline" className={urgencyClass}>
+																{item.deadline}
+															</Badge>
+															<span className="text-xs text-muted-foreground">{daysText}</span>
+														</div>
+													</div>
+													<Button
+														size="sm"
+														onClick={() => {
+															const a = assignments.find((x) => x.id === item.id);
+															if (a) openMarks(a);
+														}}
+														disabled={!selectedExamId}
+														className="shrink-0"
+													>
+														Masuk Markah
+													</Button>
+												</div>
+											</div>
+										);
+									})
+								)}
+							</CardContent>
+						</Card>
+					</div>
 				</div>
 			</div>
 		</div>
@@ -794,10 +947,16 @@ function ClassTeacherDashboard({ teacherId }: { teacherId: string }) {
 	const summary = selectedExamId ? data?.examSummaries?.[selectedExamId] : null;
 	const classAverage = summary?.classAverage ?? 0;
 	const attentionCount = summary?.studentsNeedAttention?.length ?? 0;
+	const categoryBreakdownDisplay = useMemo(() => {
+		return (summary?.categoryBreakdown ?? []).map((item) => ({
+			...item,
+			name: categoryLabel(item.name),
+		}));
+	}, [summary?.categoryBreakdown]);
 
 	return (
 		<div className="min-h-screen bg-background p-4 md:p-6">
-			<div className="max-w-7xl mx-auto space-y-8">
+			<div className="w-full max-w-none space-y-8">
 				<div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
 					<div className="space-y-3">
 						<div className="flex items-center gap-4">
@@ -877,7 +1036,7 @@ function ClassTeacherDashboard({ teacherId }: { teacherId: string }) {
 					/>
 				</div>
 
-				<div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_360px]">
+				<div className="grid grid-cols-1 gap-6">
 					<div className="space-y-6">
 						{loading ? (
 							<Card className="border-border bg-card shadow-lg">
@@ -1041,42 +1200,56 @@ function ClassTeacherDashboard({ teacherId }: { teacherId: string }) {
 										Pelajar Perlu Perhatian
 									</CardTitle>
 								</CardHeader>
-								<CardContent className="p-0">
-									<Table>
-										<TableHeader>
-											<TableRow>
-												<TableHead>Pelajar</TableHead>
-												<TableHead>Peratus Keseluruhan</TableHead>
-												<TableHead>Status</TableHead>
-											</TableRow>
-										</TableHeader>
-										<TableBody>
-											{summary.studentsNeedAttention.length === 0 ? (
-												<TableRow>
-													<TableCell colSpan={3} className="text-center py-10 text-muted-foreground">
-														Tiada pelajar dalam kategori perhatian.
-													</TableCell>
-												</TableRow>
-											) : (
-												summary.studentsNeedAttention.map((student) => (
-													<TableRow key={student.student_id}>
-														<TableCell className="font-medium">{student.name}</TableCell>
-														<TableCell>{student.average}%</TableCell>
-														<TableCell>
-															<Badge variant="outline" className={statusClass(student.status)}>
-																{student.status}
-															</Badge>
-														</TableCell>
+								<CardContent className="p-6">
+									<div className="rounded-lg border border-border overflow-hidden">
+										<div className="overflow-x-auto">
+											<Table>
+												<TableHeader className="bg-muted/30">
+													<TableRow className="hover:bg-transparent border-b border-border">
+														<TableHead className="font-semibold text-foreground py-4">
+															Pelajar
+														</TableHead>
+														<TableHead className="font-semibold text-foreground py-4">
+															Peratus Keseluruhan
+														</TableHead>
+														<TableHead className="font-semibold text-foreground py-4">
+															Status
+														</TableHead>
 													</TableRow>
-												))
-											)}
-										</TableBody>
-									</Table>
+												</TableHeader>
+												<TableBody>
+													{summary.studentsNeedAttention.length === 0 ? (
+														<TableRow>
+															<TableCell colSpan={3} className="text-center py-10 text-muted-foreground">
+																Tiada pelajar dalam kategori perhatian.
+															</TableCell>
+														</TableRow>
+													) : (
+														summary.studentsNeedAttention.map((student) => (
+															<TableRow key={student.student_id} className="hover:bg-muted/20">
+																<TableCell className="font-medium whitespace-nowrap">
+																	{student.name}
+																</TableCell>
+																<TableCell className="whitespace-nowrap">
+																	{student.average}%
+																</TableCell>
+																<TableCell className="whitespace-nowrap">
+																	<Badge variant="outline" className={statusClass(student.status)}>
+																		{statusLabel(student.status)}
+																	</Badge>
+																</TableCell>
+															</TableRow>
+														))
+													)}
+												</TableBody>
+											</Table>
+										</div>
+									</div>
 								</CardContent>
 							</Card>
 							<Card className="border-border bg-card shadow-md rounded-xl overflow-hidden">
 								<CardHeader className="border-b border-border bg-gradient-to-r from-card to-card/80 px-6 py-5">
-									<CardTitle>Performance Category Breakdown</CardTitle>
+									<CardTitle>Pecahan Kategori Prestasi</CardTitle>
 								</CardHeader>
 								<CardContent className="grid gap-4 md:grid-cols-[240px_1fr] md:items-center">
 									<div className="h-60">
@@ -1084,14 +1257,14 @@ function ClassTeacherDashboard({ teacherId }: { teacherId: string }) {
 											<PieChart>
 												<Tooltip />
 												<Pie
-													data={summary.categoryBreakdown}
+													data={categoryBreakdownDisplay}
 													dataKey="percent"
 													nameKey="name"
 													innerRadius={52}
 													outerRadius={86}
 													paddingAngle={3}
 												>
-													{summary.categoryBreakdown.map((entry, index) => (
+													{categoryBreakdownDisplay.map((entry, index) => (
 														<Cell key={entry.name} fill={PIE_COLORS[index % PIE_COLORS.length]} />
 													))}
 												</Pie>
@@ -1099,7 +1272,7 @@ function ClassTeacherDashboard({ teacherId }: { teacherId: string }) {
 										</ResponsiveContainer>
 									</div>
 									<div className="space-y-2">
-										{summary.categoryBreakdown.map((item, index) => (
+										{categoryBreakdownDisplay.map((item, index) => (
 											<div key={item.name} className="flex items-center justify-between text-sm">
 												<div className="flex items-center gap-2">
 													<span
@@ -1125,27 +1298,13 @@ function ClassTeacherDashboard({ teacherId }: { teacherId: string }) {
 							</CardHeader>
 							<CardContent>
 								<p className="text-sm leading-6 text-muted-foreground">
-									{summary.insight}
+									{translateInsight(summary.insight)}
 								</p>
 							</CardContent>
 						</Card>
 							</>
 						)}
 					</div>
-
-					<Card className="border-border bg-card shadow-md rounded-xl overflow-hidden h-fit">
-						<CardHeader className="border-b border-border bg-gradient-to-r from-card to-card/80 px-6 py-5">
-							<CardTitle className="text-xl font-bold text-foreground">
-								Guru Kelas Info
-							</CardTitle>
-						</CardHeader>
-						<CardContent className="space-y-4 p-6">
-							<ProfileRow label="Nama" value={teacherName} />
-							<ProfileRow label="Kelas" value={className || "-"} />
-							<ProfileRow label="Email" value={teacherEmail} icon={Mail} />
-							<ProfileRow label="Sesi Akademik" value={selectedExam?.academic_year ?? "-"} />
-						</CardContent>
-					</Card>
 				</div>
 			</div>
 		</div>

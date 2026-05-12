@@ -118,20 +118,21 @@ export default function AdminDashboardPage() {
 
         <SystemUsageChart />
 
-        <div className="space-y-2">
-          <h2 className="text-lg font-semibold text-foreground">
-            Log Penggunaan Sistem (Terkini)
-          </h2>
-          <p className="text-sm text-muted-foreground">
-            Paparan ringkas aktiviti pengguna untuk pemantauan pantas.
-          </p>
-        </div>
-
         <AdminSystemUsageTable
           logs={sessions}
           loading={loading}
           emptyText="Tiada rekod log ditemui."
+          title="Log Penggunaan Sistem"
+          description="Paparan ringkas aktiviti pengguna untuk pemantauan."
         />
+
+        {/* FOOTER NOTES */}
+        <div className="text-center pt-2">
+          <div className="inline-flex items-center gap-2 text-sm text-muted-foreground bg-card/50 backdrop-blur-sm px-4 py-2 rounded-full border border-border">
+            <ShieldCheck className="w-4 h-4" />
+            <span>Sistem Pengurusan Kelas v2.0 • Data kelas terkawal sepenuhnya</span>
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -151,25 +152,25 @@ function StatCard({
 }) {
   const styles = {
     primary: {
-      border: "hover:border-primary/30",
-      bg: "bg-primary/10",
-      iconBorder: "border-primary/20",
-      text: "text-primary",
-      valText: "text-foreground"
+      border: "hover:border-emerald-300",
+      bg: "bg-emerald-100",
+      iconBorder: "border-emerald-200",
+      text: "text-emerald-600",
+      valText: "text-emerald-600",
     },
     chart2: {
-      border: "hover:border-chart-2/30",
-      bg: "bg-chart-2/10",
-      iconBorder: "border-chart-2/20",
-      text: "text-chart-2",
-      valText: "text-chart-2"
+      border: "hover:border-blue-300",
+      bg: "bg-blue-100",
+      iconBorder: "border-blue-200",
+      text: "text-blue-600",
+      valText: "text-blue-600",
     },
     chart3: {
-      border: "hover:border-chart-3/30",
-      bg: "bg-chart-3/10",
-      iconBorder: "border-chart-3/20",
-      text: "text-chart-3",
-      valText: "text-foreground"
+      border: "hover:border-violet-300",
+      bg: "bg-violet-100",
+      iconBorder: "border-violet-200",
+      text: "text-violet-600",
+      valText: "text-violet-600",
     }
   }[variant];
 

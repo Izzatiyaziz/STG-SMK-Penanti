@@ -37,7 +37,7 @@ function formatRoleLabel(role?: string) {
         case "subject teacher":
             return "Guru Subjek";
         case "subject coordinator":
-            return "Penyelaras Subjek";
+            return "Panitia Subjek";
         case "teacher":
             return "Guru";
         default:
