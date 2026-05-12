@@ -43,7 +43,7 @@ export const teacherRoleConfig = {
             },
             {
                 title: "Laporan",
-                url: "/teacher/reports",
+                url: "/teacher/report",
                 icon: FileText,
             },
         ],
@@ -69,7 +69,7 @@ export const teacherRoleConfig = {
                 icon: Camera,
             },
             {
-                title: "Laporan",
+                title: "Analitik",
                 url: "/teacher/report",
                 icon: FileText,
             },

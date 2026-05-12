@@ -71,7 +71,6 @@ export async function GET(req: Request) {
                 .from("stg_report_cards")
                 .select("student_id, average_mark, class_position, ai_comment")
                 .eq("class_id", class_id)
-                .eq("teacher_id", teacher_id)
                 .eq("exam_id", exam_id),
         ]);
 

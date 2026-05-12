@@ -463,9 +463,63 @@ def _extract_column_text(columns: dict[str, Any], name: str) -> str | None:
     return text or None
 
 
+def _generate_report_comment_fallback(prompt_input: str) -> str:
+    """
+    Fallback generator when JamAI is not configured.
+    Produces a short Bahasa Melayu comment (roughly 2 sentences) using the JSON payload.
+    """
+    try:
+        payload = json.loads(prompt_input)
+    except Exception:
+        return (
+            "Teruskan usaha dalam pembelajaran. Kenal pasti topik yang lemah dan buat ulang kaji secara konsisten."
+        )
+
+    student = payload.get("student") or {}
+    performance = payload.get("performance") or {}
+
+    average_mark = performance.get("average_mark")
+    class_position = performance.get("class_position")
+    total_students = performance.get("total_students_in_class")
+    strongest = performance.get("strongest_subject")
+    weakest = performance.get("weakest_subject")
+
+    name = str(student.get("full_name") or "").strip()
+    prefix = f"{name} " if name else ""
+
+    # Sentence 1: performance summary
+    perf_bits: list[str] = []
+    if isinstance(average_mark, (int, float)):
+        perf_bits.append(f"purata {average_mark:.1f}%")
+    if isinstance(class_position, int) and class_position > 0 and isinstance(total_students, int) and total_students > 0:
+        perf_bits.append(f"kedudukan {class_position}/{total_students}")
+
+    if perf_bits:
+        sentence1 = f"{prefix}Tahniah, prestasi menunjukkan {', '.join(perf_bits)}."
+    else:
+        sentence1 = f"{prefix}Tahniah atas usaha yang ditunjukkan dalam peperiksaan ini."
+
+    # Sentence 2: strengths + focus
+    focus_bits: list[str] = []
+    if strongest and str(strongest).strip():
+        focus_bits.append(f"kekalkan kekuatan dalam {str(strongest).strip()}")
+    if weakest and str(weakest).strip():
+        focus_bits.append(f"tingkatkan penguasaan {str(weakest).strip()} dengan latihan tambahan")
+
+    if focus_bits:
+        sentence2 = " ".join([focus_bits[0].capitalize() + ".", *(b.capitalize() + "." for b in focus_bits[1:])])
+        # Ensure exactly one sentence if both exist by merging.
+        sentence2 = sentence2.replace("..", ".")
+    else:
+        sentence2 = "Teruskan ulang kaji secara konsisten dan beri tumpuan kepada topik yang masih lemah."
+
+    comment = f"{sentence1} {sentence2}".strip()
+    return comment
+
+
 def _generate_report_comment(prompt_input: str) -> str:
     if jamai_client is None or p is None or JAMAI_TABLE_TYPE_ACTION is None:
-        raise HTTPException(status_code=503, detail="JamAI is not configured on the Python service")
+        return _generate_report_comment_fallback(prompt_input)
 
     try:
         response = jamai_client.table.add_table_rows(
@@ -500,7 +554,8 @@ def health() -> dict[str, str]:
 @app.post("/report-comment", response_model=ReportCommentResponse)
 def report_comment(req: ReportCommentRequest) -> Any:
     ai_comment = _generate_report_comment(req.prompt_input.strip())
-    return ReportCommentResponse(ai_comment=ai_comment, source="jamai")
+    source = "jamai" if jamai_client is not None and p is not None and JAMAI_TABLE_TYPE_ACTION is not None else "fallback"
+    return ReportCommentResponse(ai_comment=ai_comment, source=source)
 
 
 @app.get("/template/spm-80")

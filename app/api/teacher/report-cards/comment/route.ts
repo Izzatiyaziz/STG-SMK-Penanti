@@ -132,36 +132,64 @@ export async function POST(req: Request) {
             return NextResponse.json({ message: "Akses ditolak" }, { status: 403 });
         }
 
-        const [{ data: studentRow }, { data: classRow }, { data: teacherRow }, { data: examRow }, { data: classmates }] =
-            await Promise.all([
-                supabase
-                    .from("stg_students")
-                    .select("student_id, fullname, ic_number, level")
-                    .eq("student_id", student_id)
-                    .maybeSingle(),
-                supabase
-                    .from("stg_classes")
-                    .select("class_id, class_name, grade")
-                    .eq("class_id", class_id)
-                    .maybeSingle(),
-                supabase
-                    .from("stg_teachers")
-                    .select("teacher_id, fullname")
-                    .eq("teacher_id", teacher_id)
-                    .maybeSingle(),
-                supabase
-                    .from("stg_exams")
-                    .select("exam_id, exam_name, academic_year")
-                    .eq("exam_id", exam_id)
-                    .maybeSingle(),
-                supabase
-                    .from("stg_students")
-                    .select("student_id")
-                    .eq("class_id", class_id),
-            ]);
+        const { data: classTeacherRow, error: ctErr } = await supabase
+            .from("stg_class_teachers")
+            .select("teacher_id")
+            .eq("class_id", class_id)
+            .maybeSingle();
+
+        if (ctErr) {
+            return NextResponse.json({ message: ctErr.message }, { status: 500 });
+        }
+
+        const class_teacher_id = toId(classTeacherRow?.teacher_id);
+        if (!class_teacher_id) {
+            return NextResponse.json({ message: "Kelas ini tiada Guru Kelas" }, { status: 409 });
+        }
+
+        if (guard.session.user_id !== class_teacher_id) {
+            return NextResponse.json(
+                { message: "Hanya Guru Kelas boleh kemaskini report card" },
+                { status: 403 }
+            );
+        }
+
+        const [
+            { data: studentRow },
+            { data: classRow },
+            { data: teacherRow },
+            { data: examRow },
+            { data: classmates },
+        ] = await Promise.all([
+            supabase
+                .from("stg_students")
+                .select("student_id, fullname, ic_number, level, class_id")
+                .eq("student_id", student_id)
+                .maybeSingle(),
+            supabase
+                .from("stg_classes")
+                .select("class_id, class_name, grade")
+                .eq("class_id", class_id)
+                .maybeSingle(),
+            supabase
+                .from("stg_teachers")
+                .select("teacher_id, fullname")
+                .eq("teacher_id", class_teacher_id)
+                .maybeSingle(),
+            supabase
+                .from("stg_exams")
+                .select("exam_id, exam_name, academic_year")
+                .eq("exam_id", exam_id)
+                .maybeSingle(),
+            supabase.from("stg_students").select("student_id").eq("class_id", class_id),
+        ]);
 
         if (!studentRow || !classRow || !teacherRow || !examRow) {
             return NextResponse.json({ message: "Maklumat pelajar/kelas/guru/peperiksaan tidak lengkap" }, { status: 400 });
+        }
+
+        if (toId((studentRow as { class_id?: unknown }).class_id) !== class_id) {
+            return NextResponse.json({ message: "Pelajar ini bukan dalam kelas tersebut" }, { status: 400 });
         }
 
         const { data: results, error: rErr } = await supabase
@@ -250,7 +278,7 @@ export async function POST(req: Request) {
                           level: String((studentRow as { level?: unknown }).level ?? (classRow as { grade?: unknown }).grade ?? "").trim(),
                       },
                       teacher: {
-                          teacher_id,
+                          teacher_id: class_teacher_id,
                           full_name: String((teacherRow as { fullname?: unknown }).fullname ?? "").trim(),
                       },
                       exam: {
@@ -280,7 +308,7 @@ export async function POST(req: Request) {
         const { error: insErr } = await supabase.from("stg_report_cards").insert({
             student_id,
             class_id,
-            teacher_id,
+            teacher_id: class_teacher_id,
             exam_id,
             average_mark: Number.isFinite(average_mark) ? Number(average_mark.toFixed(2)) : null,
             class_position: class_position > 0 ? class_position : null,
