@@ -148,7 +148,7 @@ export default function AdminStudentsPage() {
     const [rows, setRows] = useState<StudentRow[]>([]);
     const [loading, setLoading] = useState(false);
     const [searchQuery, setSearchQuery] = useState("");
-    const [filterLevel, setFilterLevel] = useState<string>("all");
+    const [filterLevel, setFilterLevel] = useState<string>("default-level-1");
     const [filterClassName, setFilterClassName] = useState<string>("all");
     const [sortBy, setSortBy] = useState<"name" | "level" | "date">("name");
     const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
@@ -202,7 +202,8 @@ export default function AdminStudentsPage() {
         .filter((s) => {
             const matchesSearch = s.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
                                  s.identifier.includes(searchQuery);
-            const matchesLevel = filterLevel === "all" || s.level?.toString() === filterLevel;
+            const effectiveFilterLevel = filterLevel === "default-level-1" ? "1" : filterLevel;
+            const matchesLevel = effectiveFilterLevel === "all" || s.level?.toString() === effectiveFilterLevel;
             const matchesClass =
                 filterClassName === "all" ||
                 (filterClassName === "__unassigned__"
@@ -282,7 +283,7 @@ export default function AdminStudentsPage() {
     };
 
     const handleLevelCardClick = (level: "1" | "2" | "3" | "4" | "5") => {
-        setFilterLevel((prev) => (prev === level ? "all" : level));
+        setFilterLevel(level);
     };
 
     // ================= LEVEL COLORS =================
@@ -513,7 +514,7 @@ export default function AdminStudentsPage() {
                                 handleLevelCardClick("1");
                             }
                         }}
-                        className={`border-border bg-card shadow-sm hover:shadow-md transition-all duration-300 hover:border-emerald-300 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${filterLevel === "1" ? "ring-2 ring-emerald-300 border-emerald-300" : ""}`}
+                        className={`border-border bg-card shadow-sm hover:shadow-md transition-all duration-300 hover:border-emerald-300 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${filterLevel === "1" || filterLevel === "default-level-1" ? "ring-2 ring-emerald-300 border-emerald-300" : ""}`}
                     >
                         <CardContent className="p-5">
                             <div className="flex items-start justify-between">
@@ -671,10 +672,10 @@ export default function AdminStudentsPage() {
                                             <SelectValue placeholder="Pilih Tingkatan" />
                                         </SelectTrigger>
                                         <SelectContent className="rounded-lg border-border">
-                                            <SelectItem value="all">
+                                            <SelectItem value="default-level-1">
                                                 <div className="flex items-center gap-2">
                                                     <GraduationCap className="w-4 h-4" />
-                                                    Semua Tingkatan
+                                                    Tingkatan
                                                 </div>
                                             </SelectItem>
                                             <SelectItem value="1">
@@ -739,7 +740,7 @@ export default function AdminStudentsPage() {
                                     variant="outline"
                                     onClick={() => {
                                         setSearchQuery("");
-                                        setFilterLevel("all");
+                                        setFilterLevel("default-level-1");
                                         setFilterClassName("all");
                                         setSortBy("name");
                                         setSortOrder("asc");
@@ -885,7 +886,7 @@ export default function AdminStudentsPage() {
                                 daripada{" "}
                                 <span className="font-semibold text-foreground">{filteredStudents.length}</span>{" "}
                                 pelajar
-                                {filterLevel !== "all" && <Badge variant="secondary" className="ml-2">Tingkatan {filterLevel}</Badge>}
+                                {filterLevel !== "all" && <Badge variant="secondary" className="ml-2">Tingkatan {filterLevel === "default-level-1" ? "1" : filterLevel}</Badge>}
                                 {filterClassName !== "all" && (
                                     <Badge variant="secondary" className="ml-2">
                                         {filterClassName === "__unassigned__" ? "Tiada Kelas" : filterClassName}

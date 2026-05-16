@@ -79,7 +79,7 @@ export default function AdminDashboardPage() {
                 <Activity className="w-7 h-7 text-primary" />
               </div>
               <div>
-                <h1 className="text-xl font-bold text-foreground">Dashboard Utama</h1>
+                <h1 className="text-xl font-bold text-foreground">Selamat Datang, Pentadbir Sekolah</h1>
                 <p className="text-muted-foreground font-medium mt-1">Ringkasan statistik dan log aktiviti sistem terkini</p>
               </div>
             </div>

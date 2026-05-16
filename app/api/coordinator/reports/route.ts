@@ -230,20 +230,33 @@ export async function GET(req: Request) {
 			value: studentPerformance.filter((row) => row.grade === grade).length,
 		}));
 
-		const classGroups = new Map<string, number[]>();
+		const classGroups = new Map<string, { className: string; gradeLevel: number; marks: number[] }>();
 		for (const row of studentPerformance) {
-			if (!classGroups.has(row.className)) classGroups.set(row.className, []);
-			classGroups.get(row.className)!.push(row.mark);
+			const classId = toId(row.class_id);
+			if (!classId) continue;
+			const existing = classGroups.get(classId);
+			if (!existing) {
+				classGroups.set(classId, {
+					className: row.className,
+					gradeLevel: row.gradeLevel,
+					marks: [row.mark],
+				});
+				continue;
+			}
+			existing.marks.push(row.mark);
 		}
+
 		const performanceByClass = new Map(
-			Array.from(classGroups.entries()).map(([className, classMarks]) => [
-				className,
+			Array.from(classGroups.entries()).map(([classId, group]) => [
+				classId,
 				{
-					className,
-					average: classMarks.length
-						? Math.round(classMarks.reduce((sum, mark) => sum + mark, 0) / classMarks.length)
+					class_id: classId,
+					className: group.className,
+					gradeLevel: group.gradeLevel,
+					average: group.marks.length
+						? Math.round(group.marks.reduce((sum, mark) => sum + mark, 0) / group.marks.length)
 						: 0,
-					students: classMarks.length,
+					students: group.marks.length,
 				},
 			]),
 		);
@@ -254,8 +267,10 @@ export async function GET(req: Request) {
 		});
 		const classPerformance = classPerformanceBase.length > 0
 			? classPerformanceBase.map((classItem) => (
-				performanceByClass.get(classItem.name) ?? {
+				performanceByClass.get(classItem.id) ?? {
+					class_id: classItem.id,
 					className: classItem.name,
+					gradeLevel: classItem.grade,
 					average: 0,
 					students: 0,
 				}

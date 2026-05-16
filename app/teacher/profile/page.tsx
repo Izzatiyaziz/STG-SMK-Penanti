@@ -113,6 +113,9 @@ export default function TeacherProfilePage() {
         }
     }
 
+    if (!sessionChecked) return null;
+    if (!session) return null;
+
     return (
         <ProfileShell
             accountLabel="Akaun Guru"
@@ -121,6 +124,8 @@ export default function TeacherProfilePage() {
             roleLabel="Warga Pengajar"
             accentLabel="Status"
             accentValue={forceFirstLogin ? "Persediaan kali pertama" : "Aktif"}
+            enableProfileColor
+            profileColorStorageKey={`teacher-profile-color:${session?.user_id ?? "default"}`}
             note={
                 forceFirstLogin
                     ? "Anda sedang melengkapkan log masuk kali pertama. Sila tetapkan kata laluan baharu sebelum meneruskan penggunaan sistem."

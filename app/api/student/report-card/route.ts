@@ -27,6 +27,24 @@ function gradeSummary(results: Array<{ grade: string }>) {
         .join(" ");
 }
 
+function normalizeClassName(value: unknown) {
+    return String(value ?? "")
+        .trim()
+        .replace(/^\s*[-–—]\s*/, "")
+        .trim();
+}
+
+function formatClassLabel(classRow: { class_name?: unknown; grade?: unknown } | null | undefined) {
+    const className = normalizeClassName(classRow?.class_name);
+    const grade = toNumber(classRow?.grade);
+    if (!className) return "";
+    if (grade > 0) {
+        const gradePrefix = String(grade);
+        return new RegExp(`^${gradePrefix}\\b`).test(className) ? className : `${gradePrefix} ${className}`;
+    }
+    return className;
+}
+
 export async function GET(req: Request) {
     try {
         const guard = await requireApiRole("student");
@@ -99,6 +117,15 @@ export async function GET(req: Request) {
                 .eq("status", "approved"),
         ]);
 
+        const classId = toId(reportCard.class_id);
+        const { count: totalStudents } = classId
+            ? await supabase
+                  .from("stg_students")
+                  .select("student_id", { count: "exact", head: true })
+                  .eq("class_id", classId)
+                  .eq("status", "active")
+            : { count: 0 };
+
         const subjectIds = Array.from(new Set((results ?? []).map((row: any) => toId(row?.subject_id)).filter(Boolean)));
         const { data: subjects } = subjectIds.length
             ? await supabase.from("stg_subjects").select("subject_id, subject_name").in("subject_id", subjectIds)
@@ -120,13 +147,14 @@ export async function GET(req: Request) {
             .sort((a, b) => a.subject.localeCompare(b.subject));
 
         const totalMarks = subjectResults.reduce((sum, row) => sum + row.mark, 0);
+        const position = toNumber(reportCard.class_position);
 
         return NextResponse.json({
             success: true,
             student: {
                 name: String(studentRow.fullname ?? ""),
                 ic: String(studentRow.ic_number ?? ""),
-                className: String(classRow?.class_name ?? ""),
+                className: formatClassLabel(classRow as any),
                 exam: String(examRow?.exam_name ?? ""),
                 year: String(examRow?.academic_year ?? ""),
                 classTeacher: String(teacherRow?.fullname ?? ""),
@@ -135,7 +163,12 @@ export async function GET(req: Request) {
             summary: {
                 totalSubjects: subjectResults.length,
                 totalMarks,
-                classRank: reportCard.class_position ? `${reportCard.class_position}` : "-",
+                totalStudents: totalStudents ?? 0,
+                classRank: position
+                    ? (totalStudents ?? 0) > 0
+                        ? `${position} / ${totalStudents}`
+                        : `${position}`
+                    : "-",
                 percentage: Number(toNumber(reportCard.average_mark).toFixed(1)),
                 gradeSummary: gradeSummary(subjectResults),
                 comment: String(reportCard.ai_comment ?? "").trim(),

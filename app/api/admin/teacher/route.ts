@@ -29,7 +29,7 @@ export async function POST(req: Request) {
 
     if (email && !EMAIL_REGEX.test(String(email).trim())) {
       return NextResponse.json(
-        { message: "Format email tidak sah" },
+        { message: "Format e-mel tidak sah" },
         { status: 400 }
       );
     }
@@ -54,7 +54,7 @@ export async function POST(req: Request) {
     }
 
     // NOTE: Untuk fasa semasa, semua akaun guru akan guna password default yang sama.
-    // (Email password sementara dimatikan sementara seperti diminta.)
+    // (E-mel password sementara dimatikan sementara seperti diminta.)
     const defaultPassword = "123456";
     const hashedPassword = await bcrypt.hash(defaultPassword, 10);
 
@@ -93,7 +93,7 @@ export async function POST(req: Request) {
       );
     }
 
-    // Penghantaran email password sementara dimatikan sementara.
+    // Penghantaran e-mel password sementara dimatikan sementara.
 
     return NextResponse.json({
       message: "Guru berjaya ditambah",

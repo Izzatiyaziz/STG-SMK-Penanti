@@ -53,6 +53,19 @@ type AssignmentRow = {
     teacher_subject_id: unknown;
     teacher_id: unknown;
     class_id: unknown;
+    subject_id?: unknown;
+};
+
+type SubjectRow = {
+    subject_id: unknown;
+    subject_name?: unknown;
+};
+
+type TeacherSubjectLoad = {
+    subject_id: string;
+    subject_name: string;
+    class_count: number;
+    classes: string[];
 };
 
 async function getSubjectTeacherIds() {
@@ -170,6 +183,107 @@ export async function GET(req: Request) {
                 subjectTeacherIds.has(String(t.teacher_id ?? ""))
             );
         });
+        const activeTeacherIds = activeTeachers
+            .map((t) => String(t.teacher_id ?? "").trim())
+            .filter(Boolean);
+
+        const subjectLoadByTeacherId = new Map<string, TeacherSubjectLoad[]>();
+        if (activeTeacherIds.length > 0) {
+            const { data: teacherSubjectRows } = await supabase
+                .from("stg_teacher_subject")
+                .select("teacher_subject_id, teacher_id, subject_id, class_id")
+                .in("teacher_id", activeTeacherIds);
+
+            const allTeacherAssignments = (teacherSubjectRows ?? []) as AssignmentRow[];
+            const assignedSubjectIds = Array.from(
+                new Set(
+                    allTeacherAssignments
+                        .map((row) => String(row.subject_id ?? "").trim())
+                        .filter(Boolean)
+                )
+            );
+            const assignedClassIds = Array.from(
+                new Set(
+                    allTeacherAssignments
+                        .map((row) => String(row.class_id ?? "").trim())
+                        .filter(Boolean)
+                )
+            );
+
+            const [{ data: assignedSubjects }, { data: assignedClasses }] =
+                await Promise.all([
+                    assignedSubjectIds.length > 0
+                        ? supabase
+                              .from("stg_subjects")
+                              .select("subject_id, subject_name")
+                              .in("subject_id", assignedSubjectIds)
+                        : Promise.resolve({ data: [] as SubjectRow[] }),
+                    assignedClassIds.length > 0
+                        ? supabase
+                              .from("stg_classes")
+                              .select("class_id, class_name, grade")
+                              .in("class_id", assignedClassIds)
+                        : Promise.resolve({ data: [] as ClassRow[] }),
+                ]);
+
+            const subjectNameById = new Map(
+                ((assignedSubjects ?? []) as SubjectRow[]).map((row) => [
+                    String(row.subject_id ?? "").trim(),
+                    String(row.subject_name ?? "").trim(),
+                ])
+            );
+            const classLabelById = new Map(
+                ((assignedClasses ?? []) as ClassRow[]).map((row) => [
+                    String(row.class_id ?? "").trim(),
+                    `${String(row.class_name ?? "").trim()} (T${String(row.grade ?? "").trim()})`,
+                ])
+            );
+            const subjectLoadDraft = new Map<
+                string,
+                Map<string, { subject_id: string; subject_name: string; classes: Set<string> }>
+            >();
+
+            for (const row of allTeacherAssignments) {
+                const teacherId = String(row.teacher_id ?? "").trim();
+                const subjectId = String(row.subject_id ?? "").trim();
+                if (!teacherId || !subjectId) continue;
+
+                if (!subjectLoadDraft.has(teacherId)) {
+                    subjectLoadDraft.set(teacherId, new Map());
+                }
+                const teacherLoad = subjectLoadDraft.get(teacherId)!;
+                if (!teacherLoad.has(subjectId)) {
+                    teacherLoad.set(subjectId, {
+                        subject_id: subjectId,
+                        subject_name: subjectNameById.get(subjectId) || subjectId,
+                        classes: new Set(),
+                    });
+                }
+
+                const classId = String(row.class_id ?? "").trim();
+                const classLabel = classLabelById.get(classId);
+                if (classLabel) teacherLoad.get(subjectId)!.classes.add(classLabel);
+            }
+
+            for (const [teacherId, subjectMap] of subjectLoadDraft) {
+                subjectLoadByTeacherId.set(
+                    teacherId,
+                    Array.from(subjectMap.values())
+                        .map((item) => {
+                            const classes = Array.from(item.classes).sort((a, b) =>
+                                a.localeCompare(b)
+                            );
+                            return {
+                                subject_id: item.subject_id,
+                                subject_name: item.subject_name,
+                                class_count: classes.length,
+                                classes,
+                            };
+                        })
+                        .sort((a, b) => a.subject_name.localeCompare(b.subject_name))
+                );
+            }
+        }
 
         return NextResponse.json({
             subject: subject
@@ -186,6 +300,8 @@ export async function GET(req: Request) {
             teachers: activeTeachers.map((t) => ({
                 id: t.teacher_id,
                 name: t.fullname,
+                subject_load:
+                    subjectLoadByTeacherId.get(String(t.teacher_id ?? "").trim()) ?? [],
             })),
             assignments: ((assignments ?? []) as AssignmentRow[])
                 .filter((a) => visibleClassIds.has(String(a.class_id ?? "")))

@@ -83,7 +83,7 @@ export function EditTeacherDialog({
 
   const emailError =
     emailTouched && !emailFocused && email.trim() && !EMAIL_REGEX.test(email.trim())
-      ? "Format email tidak sah. Contoh: guru@penanti.edu.my"
+      ? "Format e-mel tidak sah. Contoh: guru@penanti.edu.my"
       : "";
 
   useEffect(() => {
@@ -127,7 +127,7 @@ export function EditTeacherDialog({
 
     if (email.trim() && !EMAIL_REGEX.test(email.trim())) {
       setEmailTouched(true);
-      toast.error("Format email tidak sah");
+      toast.error("Format e-mel tidak sah");
       return;
     }
 
@@ -236,7 +236,7 @@ export function EditTeacherDialog({
               </div>
 
               <div className="space-y-2">
-                <label className="text-sm font-medium">Email</label>
+                <label className="text-sm font-medium">E-mel</label>
                 <Input
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
@@ -248,7 +248,7 @@ export function EditTeacherDialog({
                   placeholder="Contoh: teacher@school.com"
                   type="text"
                   inputMode="email"
-                  title="Masukkan format email yang sah"
+                  title="Masukkan format e-mel yang sah"
                   aria-invalid={Boolean(emailError)}
                   className={emailError ? "h-11 border-red-400" : "h-11"}
                 />

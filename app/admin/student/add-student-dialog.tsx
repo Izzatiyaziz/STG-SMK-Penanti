@@ -44,8 +44,11 @@ const normalizeSpaces = (value: string) => value.replace(/\s+/g, " ").trim();
 const isWordsOnlyName = (value: string) => {
     const normalized = normalizeSpaces(value);
     if (!normalized) return false;
-    // Only letters and spaces (Unicode letters supported).
-    return /^[\p{L}]+(?: [\p{L}]+)*$/u.test(normalized);
+    // Allow Unicode letters + spaces, plus name separators like "/" and apostrophe.
+    // Examples: "PHIT SAMAI A/P VILAI", "O'CONNOR"
+    return /^[\p{L}]+(?:[/'’][\p{L}]+)*(?: [\p{L}]+(?:[/'’][\p{L}]+)*)*$/u.test(
+        normalized
+    );
 };
 
 const formatIcNumber = (value: string) => {
@@ -216,7 +219,7 @@ export function AddStudentDialog({
         fullnameTouched && !formData.fullname.trim()
             ? "Nama penuh wajib diisi."
             : fullnameTouched && formData.fullname.trim() && !isWordsOnlyName(formData.fullname)
-                ? "Nama penuh hanya boleh mengandungi huruf sahaja"
+                ? "Nama penuh hanya boleh mengandungi huruf, ruang, '/' dan apostrof (')"
             : "";
 
     const icDigits = normalizeIcDigits(formData.ic_number);

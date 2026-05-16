@@ -1,8 +1,20 @@
 import { NextResponse } from "next/server";
 import supabase from "@/lib/supabase";
+import supabaseAdmin from "@/lib/supabase-admin";
 import { requireApiRole } from "@/lib/auth";
 
 export const runtime = "nodejs";
+
+type ExamRow = {
+  exam_id: string;
+  exam_name: string;
+  academic_year: string;
+  subject_settings?: unknown;
+};
+
+type OmrScanRow = {
+  omr_scan_id?: unknown;
+};
 
 // ================= GET EXAMS =================
 export async function GET() {
@@ -21,7 +33,7 @@ export async function GET() {
       return NextResponse.json([], { status: 200 });
     }
 
-    const exams = (data ?? []).map((e: any) => ({
+    const exams = ((data ?? []) as ExamRow[]).map((e) => ({
       id: e.exam_id,
       name: e.exam_name,
       academic_year: e.academic_year,
@@ -166,20 +178,112 @@ export async function DELETE(req: Request) {
       );
     }
 
-    const { error } = await supabase
+    const [
+      { count: reportCardCount },
+      { count: resultCount },
+      { count: subjectiveCount },
+      { count: omrScanCount },
+      { count: answerSchemeCount },
+      { data: omrScans, error: omrScanFetchErr },
+    ] = await Promise.all([
+      supabaseAdmin
+        .from("stg_report_cards")
+        .select("report_card_id", { count: "exact", head: true })
+        .eq("exam_id", exam_id),
+      supabaseAdmin
+        .from("stg_results")
+        .select("result_id", { count: "exact", head: true })
+        .eq("exam_id", exam_id),
+      supabaseAdmin
+        .from("stg_subjective_marks")
+        .select("subjective_id", { count: "exact", head: true })
+        .eq("exam_id", exam_id),
+      supabaseAdmin
+        .from("stg_omr_scans")
+        .select("omr_scan_id", { count: "exact", head: true })
+        .eq("exam_id", exam_id),
+      supabaseAdmin
+        .from("stg_answer_schema")
+        .select("schema_id", { count: "exact", head: true })
+        .eq("exam_id", exam_id),
+      supabaseAdmin
+        .from("stg_omr_scans")
+        .select("omr_scan_id")
+        .eq("exam_id", exam_id),
+    ]);
+
+    if (omrScanFetchErr) {
+      console.error("FETCH OMR SCANS BEFORE EXAM DELETE ERROR:", omrScanFetchErr);
+      return NextResponse.json(
+        { message: omrScanFetchErr.message },
+        { status: 500 }
+      );
+    }
+
+    const omrScanIds = ((omrScans ?? []) as OmrScanRow[])
+      .map((scan) => String(scan.omr_scan_id ?? "").trim())
+      .filter(Boolean);
+
+    if (omrScanIds.length > 0) {
+      const { error } = await supabaseAdmin
+        .from("stg_omr_scan_answers")
+        .delete()
+        .in("omr_scan_id", omrScanIds);
+
+      if (error) {
+        console.error("DELETE OMR SCAN ANSWERS ERROR:", error);
+        return NextResponse.json({ message: error.message }, { status: 500 });
+      }
+    }
+
+    const relatedDeletes = [
+      supabaseAdmin.from("stg_report_cards").delete().eq("exam_id", exam_id),
+      supabaseAdmin.from("stg_results").delete().eq("exam_id", exam_id),
+      supabaseAdmin.from("stg_omr_scans").delete().eq("exam_id", exam_id),
+      supabaseAdmin.from("stg_subjective_marks").delete().eq("exam_id", exam_id),
+      supabaseAdmin.from("stg_answer_schema").delete().eq("exam_id", exam_id),
+    ];
+
+    for (const deleteQuery of relatedDeletes) {
+      const { error } = await deleteQuery;
+      if (error) {
+        console.error("DELETE RELATED EXAM DATA ERROR:", error);
+        return NextResponse.json({ message: error.message }, { status: 500 });
+      }
+    }
+
+    const { error } = await supabaseAdmin
       .from("stg_exams")
       .delete()
       .eq("exam_id", exam_id);
 
     if (error) {
       console.error("DELETE EXAM ERROR:", error);
+      if (error.code === "23503") {
+        return NextResponse.json(
+          {
+            message:
+              "Peperiksaan ini tidak boleh dipadam kerana masih digunakan oleh data lain dalam sistem.",
+          },
+          { status: 409 }
+        );
+      }
       return NextResponse.json(
         { message: error.message },
         { status: 500 }
       );
     }
 
-    return NextResponse.json({ message: "Exam deleted successfully" });
+    return NextResponse.json({
+      message: "Peperiksaan dan data berkaitan berjaya dipadam",
+      deleted: {
+        report_cards: reportCardCount ?? 0,
+        results: resultCount ?? 0,
+        subjective_marks: subjectiveCount ?? 0,
+        omr_scans: omrScanCount ?? 0,
+        answer_schemes: answerSchemeCount ?? 0,
+      },
+    });
   } catch {
     return NextResponse.json(
       { message: "Ralat pelayan" },

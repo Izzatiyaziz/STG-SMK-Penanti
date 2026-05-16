@@ -61,7 +61,9 @@ const normalizeSpaces = (value: string) => value.replace(/\s+/g, " ").trim();
 const isWordsOnlyName = (value: string) => {
     const normalized = normalizeSpaces(value);
     if (!normalized) return false;
-    return /^[\p{L}]+(?: [\p{L}]+)*$/u.test(normalized);
+    return /^[\p{L}]+(?:[/'’][\p{L}]+)*(?: [\p{L}]+(?:[/'’][\p{L}]+)*)*$/u.test(
+        normalized
+    );
 };
 
 // Client-side only time component
@@ -106,7 +108,7 @@ export default function AdminSubjectsPage() {
         editNameTouched && !editNameNormalized
             ? "Nama subjek diperlukan."
             : editNameTouched && editNameNormalized && !isWordsOnlyName(editNameNormalized)
-                ? "Nama subjek hanya boleh mengandungi huruf sahaja"
+                ? "Nama subjek hanya boleh mengandungi huruf, ruang, '/' dan apostrof (')"
                 : "";
     const editNameIsValid = Boolean(editNameNormalized) && isWordsOnlyName(editNameNormalized);
 
@@ -115,7 +117,7 @@ export default function AdminSubjectsPage() {
         addNameTouched && !addNameNormalized
             ? "Nama subjek diperlukan."
             : addNameTouched && addNameNormalized && !isWordsOnlyName(addNameNormalized)
-                ? "Nama subjek hanya boleh mengandungi huruf dan ruang."
+                ? "Nama subjek hanya boleh mengandungi huruf, ruang, '/' dan apostrof (')"
                 : "";
     const addNameIsValid = Boolean(addNameNormalized) && isWordsOnlyName(addNameNormalized);
 

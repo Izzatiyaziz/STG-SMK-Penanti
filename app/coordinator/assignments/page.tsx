@@ -46,6 +46,7 @@ import {
 	ClipboardList,
 	Download,
 	Filter,
+	GraduationCap,
 	RefreshCw,
 	School,
 	Search,
@@ -61,7 +62,13 @@ type Session = {
 };
 
 type Subject = { id: string; name: string };
-type Teacher = { id: string; name: string };
+type TeacherSubjectLoad = {
+	subject_id: string;
+	subject_name: string;
+	class_count: number;
+	classes: string[];
+};
+type Teacher = { id: string; name: string; subject_load?: TeacherSubjectLoad[] };
 type ClassRow = { id: string; name: string; grade: number };
 type Assignment = { id: string; teacher_id: string; class_id: string };
 
@@ -83,6 +90,31 @@ type ApiMessage = {
 
 function getTimeLabel() {
 	return new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
+
+function normalizeSubjectName(value: unknown) {
+	return String(value ?? "")
+		.toLowerCase()
+		.trim()
+		.replace(/[^a-z0-9]+/g, " ")
+		.replace(/\s+/g, " ")
+		.trim();
+}
+
+function isUpperFormOnlySubject(subjectName: unknown) {
+	const name = normalizeSubjectName(subjectName);
+	if (!name) return false;
+
+	return (
+		/\bbiologi\b/.test(name) ||
+		/\bkimia\b/.test(name) ||
+		/\bfizik\b/.test(name) ||
+		/\bperniagaan\b/.test(name) ||
+		/\bakaun\b/.test(name) ||
+		/\bperakaunan\b/.test(name) ||
+		name.includes("matematik tambahan") ||
+		name.includes("additional mathematics")
+	);
 }
 
 const LastUpdatedTime = () => {
@@ -110,7 +142,7 @@ export default function SubjectCoordinatorAssignmentsPage() {
 	const [loading, setLoading] = useState(false);
 	const [savingClassId, setSavingClassId] = useState<string | null>(null);
 	const [searchQuery, setSearchQuery] = useState("");
-	const [filterGrade, setFilterGrade] = useState("all");
+	const [filterGrade, setFilterGrade] = useState("default-grade-1");
 	const [currentPage, setCurrentPage] = useState(1);
 	const [assigning, setAssigning] = useState<ClassRow | null>(null);
 	const [selectedTeacherId, setSelectedTeacherId] = useState("");
@@ -200,13 +232,23 @@ export default function SubjectCoordinatorAssignmentsPage() {
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [session, selectedSubjectId]);
 
+	const selectedSubject = useMemo(
+		() => subjects.find((subject) => subject.id === selectedSubjectId) ?? null,
+		[subjects, selectedSubjectId]
+	);
+	const isUpperFormSubject = isUpperFormOnlySubject(
+		data?.subject?.name ?? selectedSubject?.name
+	);
+	const defaultFilterGrade = isUpperFormSubject ? "default-grade-4" : "default-grade-1";
+	const defaultGradeNumber = isUpperFormSubject ? 4 : 1;
+
 	useEffect(() => {
 		setSearchQuery("");
-		setFilterGrade("all");
+		setFilterGrade(defaultFilterGrade);
 		setCurrentPage(1);
 		setAssigning(null);
 		setSelectedTeacherId("");
-	}, [selectedSubjectId]);
+	}, [selectedSubjectId, defaultFilterGrade]);
 
 	const assignmentTeacherByClassId = useMemo(() => {
 		const out = new Map<string, string>();
@@ -222,12 +264,36 @@ export default function SubjectCoordinatorAssignmentsPage() {
 		for (const t of data?.teachers ?? []) m.set(t.id, t.name);
 		return m;
 	}, [data?.teachers]);
+	const selectedTeacher = useMemo(() => {
+		if (!selectedTeacherId) return null;
+		return data?.teachers.find((teacher) => teacher.id === selectedTeacherId) ?? null;
+	}, [data?.teachers, selectedTeacherId]);
+
+	function formatTeacherSubjectLoad(subjectLoad?: TeacherSubjectLoad[]) {
+		if (!subjectLoad || subjectLoad.length === 0) return "Belum ada lantikan subjek";
+		return subjectLoad
+			.map((item) => `${item.subject_name} (${item.class_count} kelas)`)
+			.join(", ");
+	}
+
+	function getTeacherTotalClassCount(subjectLoad?: TeacherSubjectLoad[]) {
+		return (subjectLoad ?? []).reduce((total, item) => total + item.class_count, 0);
+	}
+
+	const dropdownTeachers = useMemo(() => {
+		return (data?.teachers ?? []).filter(
+			(teacher) => getTeacherTotalClassCount(teacher.subject_load) <= 4
+		);
+	}, [data?.teachers]);
 
 	const filteredRows = useMemo(() => {
 		let filtered = data?.classes ?? [];
+		const effectiveFilterGrade = filterGrade.startsWith("default-grade-")
+			? String(defaultGradeNumber)
+			: filterGrade;
 
-		if (filterGrade !== "all") {
-			filtered = filtered.filter((row) => row.grade === Number(filterGrade));
+		if (effectiveFilterGrade !== "all") {
+			filtered = filtered.filter((row) => row.grade === Number(effectiveFilterGrade));
 		}
 
 		if (searchQuery.trim()) {
@@ -236,13 +302,20 @@ export default function SubjectCoordinatorAssignmentsPage() {
 		}
 
 		return filtered;
-	}, [data?.classes, filterGrade, searchQuery]);
+	}, [data?.classes, defaultGradeNumber, filterGrade, searchQuery]);
 
 	const gradeOptions = useMemo(() => {
-		return Array.from(new Set((data?.classes ?? []).map((row) => row.grade)))
+		return Array.from(new Set([defaultGradeNumber, ...(data?.classes ?? []).map((row) => row.grade)]))
 			.filter((grade) => Number.isFinite(Number(grade)))
 			.sort((a, b) => Number(a) - Number(b));
-	}, [data?.classes]);
+	}, [data?.classes, defaultGradeNumber]);
+
+	const filterGradeLabel =
+		filterGrade === "default-grade-1"
+			? "1"
+			: filterGrade === "default-grade-4"
+				? "4"
+				: filterGrade;
 
 	useEffect(() => {
 		setCurrentPage(1);
@@ -319,7 +392,7 @@ export default function SubjectCoordinatorAssignmentsPage() {
 		if (!session || !selectedSubjectId || !assigning) return;
 
 		setSavingClassId(assigning.id);
-		const toastId = toast.loading("Menyimpan assignment...");
+		const toastId = toast.loading("Menyimpan...");
 		try {
 			const res = await fetch("/api/coordinator/teacher-subject", {
 				method: "POST",
@@ -353,7 +426,7 @@ export default function SubjectCoordinatorAssignmentsPage() {
 		if (!session || !selectedSubjectId || !assigning) return;
 
 		setSavingClassId(assigning.id);
-		const toastId = toast.loading("Membuang assignment...");
+		const toastId = toast.loading("Membuang lantikan...");
 		try {
 			const res = await fetch("/api/coordinator/teacher-subject", {
 				method: "POST",
@@ -372,7 +445,7 @@ export default function SubjectCoordinatorAssignmentsPage() {
 				return;
 			}
 
-			toast.success("Assignment dibuang", { id: toastId });
+			toast.success("Buang lantikan", { id: toastId });
 			setAssigning(null);
 			setSelectedTeacherId("");
 			await fetchAssignmentData();
@@ -489,10 +562,10 @@ export default function SubjectCoordinatorAssignmentsPage() {
 											<SelectValue placeholder="Pilih Tingkatan" />
 										</SelectTrigger>
 										<SelectContent className="rounded-lg border-border">
-											<SelectItem value="all">
+											<SelectItem value={defaultFilterGrade}>
 												<div className="flex items-center gap-2">
-													<School className="w-4 h-4" />
-													Semua Tingkatan
+													<GraduationCap className="w-4 h-4" />
+													Tingkatan
 												</div>
 											</SelectItem>
 											{gradeOptions.map((grade) => (
@@ -511,7 +584,7 @@ export default function SubjectCoordinatorAssignmentsPage() {
 									variant="outline"
 									onClick={() => {
 										setSearchQuery("");
-										setFilterGrade("all");
+										setFilterGrade(defaultFilterGrade);
 									}}
 									className="h-11 rounded-lg border-border hover:bg-accent hover:text-accent-foreground"
 								>
@@ -672,7 +745,7 @@ export default function SubjectCoordinatorAssignmentsPage() {
 									</div>
 									{filterGrade !== "all" && (
 										<Badge variant="secondary" className="ml-2">
-											Tingkatan {filterGrade}
+											Tingkatan {filterGradeLabel}
 										</Badge>
 									)}
 								</div>
@@ -820,17 +893,36 @@ export default function SubjectCoordinatorAssignmentsPage() {
 									<SelectValue placeholder="Pilih guru subjek" />
 								</SelectTrigger>
 								<SelectContent>
-									{(data?.teachers.length ?? 0) === 0 ? (
+									{dropdownTeachers.length === 0 ? (
 										<SelectItem value="none" disabled>Tiada guru subjek ditemui</SelectItem>
 									) : (
-										data?.teachers.map((teacher) => (
-											<SelectItem key={teacher.id} value={teacher.id}>
-												{teacher.name}
+										dropdownTeachers.map((teacher) => (
+											<SelectItem
+												key={teacher.id}
+												value={teacher.id}
+												textValue={teacher.name}
+											>
+												<div className="flex min-w-0 flex-col gap-1 py-1">
+													<span className="truncate font-medium">{teacher.name}</span>
+													<span className="truncate text-xs text-muted-foreground">
+														{formatTeacherSubjectLoad(teacher.subject_load)}
+													</span>
+												</div>
 											</SelectItem>
 										))
 									)}
 								</SelectContent>
 							</Select>
+							{selectedTeacher && (
+								<div className="rounded-md border border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+									<div className="font-medium text-foreground">
+										Ringkasan lantikan guru
+									</div>
+									<div className="mt-1 leading-5">
+										{formatTeacherSubjectLoad(selectedTeacher.subject_load)}
+									</div>
+								</div>
+							)}
 						</div>
 					</div>
 

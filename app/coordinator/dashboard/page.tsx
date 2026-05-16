@@ -332,7 +332,7 @@ export default function SubjectCoordinatorDashboard() {
 							</div>
 							<div>
 								<h2 className="text-2xl font-bold text-foreground">
-									Selamat Datang, Penyelaras {subjectName}
+									Selamat Datang, Ketua Panitia Subjek {subjectName}
 								</h2>
 								<p className="text-muted-foreground font-medium mt-1">
 									Mengurus guru subjek, semak kelulusan markah dan pantau kemas kini sistem
@@ -367,6 +367,28 @@ export default function SubjectCoordinatorDashboard() {
 							Muat Semula
 						</Button>
 					</div>
+				</div>
+
+				<div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+					{quickAccess.map((item) => (
+						<Link key={item.title} href={item.href} className="group">
+							<Card className="h-full border-border bg-card shadow-md rounded-xl overflow-hidden transition-all hover:-translate-y-0.5 hover:shadow-lg">
+								<CardContent className="flex items-start gap-4 p-6">
+									<div className={`rounded-xl border p-3 ${item.accent}`}>
+										<item.icon className="h-6 w-6" />
+									</div>
+									<div className="min-w-0">
+										<h3 className="text-lg font-bold text-foreground group-hover:text-primary">
+											{item.title}
+										</h3>
+										<p className="mt-1 text-sm text-muted-foreground">
+											{item.description}
+										</p>
+									</div>
+								</CardContent>
+							</Card>
+						</Link>
+					))}
 				</div>
 
 				<div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_360px]">
@@ -409,28 +431,6 @@ export default function SubjectCoordinatorDashboard() {
 							</CardContent>
 						</Card>
 
-						<div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-							{quickAccess.map((item) => (
-								<Link key={item.title} href={item.href} className="group">
-									<Card className="h-full border-border bg-card shadow-md rounded-xl overflow-hidden transition-all hover:-translate-y-0.5 hover:shadow-lg">
-										<CardContent className="flex items-start gap-4 p-6">
-											<div className={`rounded-xl border p-3 ${item.accent}`}>
-												<item.icon className="h-6 w-6" />
-											</div>
-											<div className="min-w-0">
-												<h3 className="text-lg font-bold text-foreground group-hover:text-primary">
-													{item.title}
-												</h3>
-												<p className="mt-1 text-sm text-muted-foreground">
-													{item.description}
-												</p>
-											</div>
-										</CardContent>
-									</Card>
-								</Link>
-							))}
-						</div>
-
 						<div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
 							<PanelCard title="Notifikasi" icon={Bell}>
 								<div className="space-y-3">
@@ -471,7 +471,7 @@ export default function SubjectCoordinatorDashboard() {
 							<CardContent className="space-y-4 p-6">
 								<ProfileRow label="Nama" value={coordinatorName} />
 								<ProfileRow label="Subjek" value={subjectName} />
-								<ProfileRow label="Email" value="Belum tersedia" icon={Mail} />
+								<ProfileRow label="E-mel" value="Belum tersedia" icon={Mail} />
 								<ProfileRow label="Sesi akademik" value={selectedExam?.academic_year ?? "-"} />
 							</CardContent>
 						</Card>

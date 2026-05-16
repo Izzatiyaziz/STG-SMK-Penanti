@@ -39,7 +39,7 @@ import {
     PaginationPrevious,
 } from "@/components/ui/pagination";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Trash2, Edit, UserPlus, UserMinus, Search, RefreshCw, School, Users, Clock, Shield, Filter, GraduationCap, AlertCircle } from "lucide-react";
+import { Plus, Trash2, Edit, UserPlus, UserMinus, Search, RefreshCw, School, Users, Clock, Shield, Filter, AlertCircle, GraduationCap } from "lucide-react";
 
 type ClassRow = {
     id: string;
@@ -52,7 +52,9 @@ const normalizeSpaces = (value: string) => value.replace(/\s+/g, " ").trim();
 const isWordsOnlyName = (value: string) => {
     const normalized = normalizeSpaces(value);
     if (!normalized) return false;
-    return /^[\p{L}]+(?: [\p{L}]+)*$/u.test(normalized);
+    return /^[\p{L}]+(?:[/'’][\p{L}]+)*(?: [\p{L}]+(?:[/'’][\p{L}]+)*)*$/u.test(
+        normalized
+    );
 };
 
 type TeacherOption = {
@@ -82,7 +84,7 @@ export default function AdminClassesPage() {
     const [rows, setRows] = useState<ClassRow[]>([]);
     const [loading, setLoading] = useState(false);
     const [searchQuery, setSearchQuery] = useState("");
-    const [filterGrade, setFilterGrade] = useState<string>("all");
+    const [filterGrade, setFilterGrade] = useState<string>("default-grade-1");
     const [filterClassName, setFilterClassName] = useState<string>("all");
     const [currentPage, setCurrentPage] = useState(1);
     const [addOpen, setAddOpen] = useState(false);
@@ -108,7 +110,7 @@ export default function AdminClassesPage() {
         addNameTouched && !addNameNormalized
             ? "Nama kelas diperlukan."
             : addNameTouched && !isWordsOnlyName(addNameNormalized)
-                ? "Nama kelas hanya boleh mengandungi huruf"
+                ? "Nama kelas hanya boleh mengandungi huruf, ruang, '/' dan apostrof (')"
                 : "";
     const addNameIsValid = Boolean(addNameNormalized) && isWordsOnlyName(addNameNormalized);
 
@@ -117,7 +119,7 @@ export default function AdminClassesPage() {
         editNameTouched && !editNameNormalized
             ? "Nama kelas diperlukan."
             : editNameTouched && !isWordsOnlyName(editNameNormalized)
-                ? "Nama kelas hanya boleh mengandungi huruf"
+                ? "Nama kelas hanya boleh mengandungi huruf, ruang, '/' dan apostrof (')"
                 : "";
     const editNameIsValid = Boolean(editNameNormalized) && isWordsOnlyName(editNameNormalized);
 
@@ -224,10 +226,11 @@ export default function AdminClassesPage() {
     // Filtered rows based on search and grade filter
     const filteredRows = useMemo(() => {
         let filtered = rows;
+        const effectiveFilterGrade = filterGrade === "default-grade-1" ? "1" : filterGrade;
 
         // Filter by grade
-        if (filterGrade !== "all") {
-            filtered = filtered.filter((row) => row.grade === parseInt(filterGrade));
+        if (effectiveFilterGrade !== "all") {
+            filtered = filtered.filter((row) => row.grade === parseInt(effectiveFilterGrade));
         }
 
         // Filter by class name (exact match)
@@ -690,10 +693,10 @@ export default function AdminClassesPage() {
                                             <SelectValue placeholder="Pilih Tingkatan" />
                                         </SelectTrigger>
                                         <SelectContent className="rounded-lg border-border">
-                                            <SelectItem value="all">
+                                            <SelectItem value="default-grade-1">
                                                 <div className="flex items-center gap-2">
                                                     <GraduationCap className="w-4 h-4" />
-                                                    Semua Tingkatan
+                                                    Tingkatan
                                                 </div>
                                             </SelectItem>
                                             <SelectItem value="1">
@@ -756,7 +759,7 @@ export default function AdminClassesPage() {
                                     variant="outline"
                                     onClick={() => {
                                         setSearchQuery("");
-                                        setFilterGrade("all");
+                                        setFilterGrade("default-grade-1");
                                         setFilterClassName("all");
                                     }}
                                     className="h-11 rounded-lg border-border hover:bg-accent hover:text-accent-foreground"
@@ -1012,7 +1015,7 @@ export default function AdminClassesPage() {
                                     </div>
                                     {filterGrade !== "all" && (
                                         <Badge variant="secondary" className="ml-2">
-                                            Tingkatan {filterGrade}
+                                            Tingkatan {filterGrade === "default-grade-1" ? "1" : filterGrade}
                                         </Badge>
                                     )}
                                 </div>

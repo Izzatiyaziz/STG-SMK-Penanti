@@ -40,6 +40,7 @@ import {
 	TableRow,
 } from "@/components/ui/table";
 import {
+	BookOpen,
 	CheckCircle,
 	Clock,
 	ClipboardCheck,
@@ -66,6 +67,7 @@ type Submission = {
 	subject_id: string;
 	class_id: string | null;
 	className: string;
+	classGrade: number;
 	teacher_id: string | null;
 	teacher: string;
 	exam_id: string;
@@ -87,6 +89,10 @@ type Submission = {
 type ApprovalResponse = {
 	data?: Submission[];
 	message?: string;
+};
+
+type SubjectResponse = {
+	data?: Array<{ id?: unknown; name?: unknown }>;
 };
 
 function getTimeLabel() {
@@ -146,6 +152,7 @@ export default function SubjectCoordinatorApprovalPage() {
 	const [searchQuery, setSearchQuery] = useState("");
 	const [statusFilter, setStatusFilter] = useState<"all" | SubmissionStatus>("all");
 	const [currentPage, setCurrentPage] = useState(1);
+	const [subjectName, setSubjectName] = useState("");
 
 	useEffect(() => {
 		try {
@@ -166,16 +173,25 @@ export default function SubjectCoordinatorApprovalPage() {
 
 		setLoading(true);
 		try {
-			const res = await fetch(
-				`/api/coordinator/approvals?teacher_id=${session.user_id}&status=all`,
-			);
+			const subjectRequest = fetch(
+				`/api/coordinator/subjects?teacher_id=${session.user_id}`,
+			)
+				.then((res) => (res.ok ? res.json() : null))
+				.catch(() => null);
+			const res = await fetch(`/api/coordinator/approvals?teacher_id=${session.user_id}&status=all`);
 			const json = (await res.json()) as ApprovalResponse;
+			const subjectJson = (await subjectRequest) as SubjectResponse | null;
+			const firstSubjectName = subjectJson?.data?.[0]?.name;
+			if (firstSubjectName) setSubjectName(String(firstSubjectName));
 			if (!res.ok) {
 				toast.error(json?.message ?? "Gagal memuatkan data");
 				setData([]);
 				return;
 			}
 			setData(json?.data ?? []);
+			if (!firstSubjectName && json?.data?.[0]?.subject) {
+				setSubjectName(json.data[0].subject);
+			}
 		} catch {
 			setData([]);
 		} finally {
@@ -342,6 +358,10 @@ export default function SubjectCoordinatorApprovalPage() {
 					</div>
 
 					<div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+						<div className="inline-flex h-10 w-full items-center gap-2 rounded-md border border-border bg-background px-4 text-sm font-medium text-foreground shadow-xs sm:w-auto sm:max-w-[260px]">
+							<BookOpen className="h-4 w-4 shrink-0 text-primary" />
+							<span className="truncate">{subjectName || "Subjek"}</span>
+						</div>
 						<Button
 							variant="outline"
 							onClick={fetchApprovals}
@@ -535,9 +555,11 @@ export default function SubjectCoordinatorApprovalPage() {
 															<div className="font-semibold text-foreground group-hover:text-primary transition-colors">
 																{submission.subject || "-"}
 															</div>
-														</TableCell>
+										</TableCell>
 														<TableCell className="py-4">
-															{submission.className || "-"}
+															{submission.class_id
+																? `${submission.classGrade || ""} ${submission.className || ""}`.trim() || "-"
+																: "-"}
 														</TableCell>
 														<TableCell className="py-4">
 															{submission.examName
@@ -602,6 +624,7 @@ export default function SubjectCoordinatorApprovalPage() {
 										<Clock className="w-4 h-4" />
 										<span>Kemas kini: <LastUpdatedTime /></span>
 									</div>
+									
 									<Button
 										variant="ghost"
 										size="sm"

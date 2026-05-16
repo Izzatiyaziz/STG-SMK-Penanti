@@ -69,7 +69,7 @@ export const teacherRoleConfig = {
                 icon: Camera,
             },
             {
-                title: "Analitik",
+                title: "Laporan",
                 url: "/teacher/report",
                 icon: FileText,
             },
@@ -156,11 +156,11 @@ export const sidebarConfig = {
                 url: "/admin/subjects",
                 icon: Folder,
             },
-           /* {
+            {
                 title: "Peperiksaan",
                 url: "/admin/exams",
                 icon: FileCheck2,
-            },*/
+            },
             // {
             //     title: "Assign Guru",
             //     url: "/admin/assignments",

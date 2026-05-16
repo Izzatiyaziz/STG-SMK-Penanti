@@ -113,7 +113,7 @@ export default function AdminAssignmentsPage() {
 
     async function handleAdd() {
         if (!canSubmit) return;
-        const toastId = toast.loading("Menyimpan assignment...");
+        const toastId = toast.loading("Menyimpan...");
 
         try {
             const res = await fetch("/api/admin/teacher-subject", {

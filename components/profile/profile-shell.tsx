@@ -1,11 +1,11 @@
 "use client";
 
-import { ReactNode } from "react";
+import { ReactNode, useMemo, useState } from "react";
 import {
 	BadgeCheck,
-	KeyRound,
+	Check,
 	Mail,
-	ShieldCheck,
+	Palette,
 	UserCircle2,
 } from "lucide-react";
 
@@ -23,7 +23,52 @@ type ProfileShellProps = {
 	securityTitle?: string;
 	securityDescription?: string;
 	securityContent?: ReactNode;
+	enableProfileColor?: boolean;
+	profileColorStorageKey?: string;
 };
+
+const profileColorOptions = [
+	{
+		value: "blue",
+		label: "Biru",
+		accent: "#2563eb",
+		soft: "#eff6ff",
+		border: "#bfdbfe",
+		header: "linear-gradient(90deg, rgba(37, 99, 235, 0.12), rgba(37, 99, 235, 0.05), transparent)",
+	},
+	{
+		value: "emerald",
+		label: "Hijau",
+		accent: "#059669",
+		soft: "#ecfdf5",
+		border: "#a7f3d0",
+		header: "linear-gradient(90deg, rgba(5, 150, 105, 0.12), rgba(5, 150, 105, 0.05), transparent)",
+	},
+	{
+		value: "purple",
+		label: "Ungu",
+		accent: "#7c3aed",
+		soft: "#f5f3ff",
+		border: "#ddd6fe",
+		header: "linear-gradient(90deg, rgba(124, 58, 237, 0.12), rgba(124, 58, 237, 0.05), transparent)",
+	},
+	{
+		value: "rose",
+		label: "Rose",
+		accent: "#e11d48",
+		soft: "#fff1f2",
+		border: "#fecdd3",
+		header: "linear-gradient(90deg, rgba(225, 29, 72, 0.12), rgba(225, 29, 72, 0.05), transparent)",
+	},
+	{
+		value: "amber",
+		label: "Amber",
+		accent: "#d97706",
+		soft: "#fffbeb",
+		border: "#fde68a",
+		header: "linear-gradient(90deg, rgba(217, 119, 6, 0.12), rgba(217, 119, 6, 0.05), transparent)",
+	},
+] as const;
 
 export function ProfileShell({
 	accountLabel,
@@ -36,14 +81,52 @@ export function ProfileShell({
 	securityTitle,
 	securityDescription,
 	securityContent,
+	enableProfileColor = false,
+	profileColorStorageKey,
 }: ProfileShellProps) {
+	const colorStorageKey = profileColorStorageKey ?? `profile-color:${accountLabel}`;
+	const [selectedColor, setSelectedColor] = useState<string>(() => {
+		if (!enableProfileColor || typeof window === "undefined") return "blue";
+		try {
+			const stored = localStorage.getItem(colorStorageKey);
+			if (stored && profileColorOptions.some((option) => option.value === stored)) {
+				return stored;
+			}
+		} catch {
+			// ignore storage failures
+		}
+		return "blue";
+	});
+	const colorOption = useMemo(
+		() =>
+			profileColorOptions.find((option) => option.value === selectedColor) ??
+			profileColorOptions[0],
+		[selectedColor]
+	);
+
+	function handleColorChange(value: string) {
+		setSelectedColor(value);
+		try {
+			localStorage.setItem(colorStorageKey, value);
+		} catch {
+			// ignore storage failures
+		}
+	}
+
 	return (
 		<div className="min-h-screen bg-gradient-to-b from-background via-background to-muted/20 p-4 sm:p-5 md:p-6">
             <div className="mx-auto max-w-7xl space-y-5 sm:space-y-6">
 				<div className="flex flex-col gap-3">
 					<div className="flex items-start gap-3 sm:items-center">
-						<div className="rounded-2xl border border-primary/20 bg-primary/10 p-2.5 shadow-sm sm:p-3">
-							<UserCircle2 className="h-6 w-6 text-primary sm:h-7 sm:w-7" />
+						<div
+							className="rounded-2xl border p-2.5 shadow-sm sm:p-3"
+							style={{
+								backgroundColor: colorOption.soft,
+								borderColor: colorOption.border,
+								color: colorOption.accent,
+							}}
+						>
+							<UserCircle2 className="h-6 w-6 sm:h-7 sm:w-7" />
 						</div>
 						<div className="min-w-0">
 							<h1 className="text-xl font-bold tracking-tight text-foreground sm:text-2xl md:text-3xl">
@@ -58,11 +141,20 @@ export function ProfileShell({
 
 				<div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.15fr_0.85fr]">
 					<Card className="overflow-hidden border border-border/50 shadow-lg pt-0">
-						<div className="border-b border-border/50 bg-gradient-to-r from-primary/10 via-primary/5 to-transparent px-4 py-5 sm:px-6 sm:py-6">
+						<div
+							className="border-b border-border/50 px-4 py-5 sm:px-6 sm:py-6"
+							style={{ background: colorOption.header }}
+						>
 							<div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
 								<div className="flex min-w-0 flex-col items-start gap-4 sm:flex-row sm:items-center">
-									<div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border border-primary/20 bg-background/80 shadow-sm sm:h-16 sm:w-16">
-										<span className="text-xl font-bold text-primary sm:text-2xl">
+									<div
+										className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border bg-background/80 shadow-sm sm:h-16 sm:w-16"
+										style={{
+											borderColor: colorOption.border,
+											color: colorOption.accent,
+										}}
+									>
+										<span className="text-xl font-bold sm:text-2xl">
 											{name.charAt(0).toUpperCase()}
 										</span>
 									</div>
@@ -73,7 +165,12 @@ export function ProfileShell({
 											</h2>
 											<Badge
 												variant="secondary"
-												className="max-w-full rounded-full border border-primary/15 bg-primary/10 text-primary"
+												className="max-w-full rounded-full border"
+												style={{
+													backgroundColor: colorOption.soft,
+													borderColor: colorOption.border,
+													color: colorOption.accent,
+												}}
 											>
 												<BadgeCheck className="mr-1 h-3 w-3" />
 												{roleLabel}
@@ -82,7 +179,7 @@ export function ProfileShell({
 										<div className="mt-2 flex min-w-0 items-start gap-2 text-sm text-muted-foreground">
 											<Mail className="mt-0.5 h-4 w-4 shrink-0" />
 											<span className="min-w-0 break-all sm:break-words">
-												{email ?? "Tiada emel direkodkan"}
+												{email ?? "Tiada e-mel direkodkan"}
 											</span>
 										</div>
 									</div>
@@ -98,25 +195,47 @@ export function ProfileShell({
 							</div>
 						</div>
 
-						<CardContent className="grid grid-cols-1 gap-4 p-4 sm:p-6 md:grid-cols-2">
-							<ProfileInfoTile
-								icon={<ShieldCheck className="h-5 w-5 text-primary" />}
-								label="Status Akaun"
-								value="Aktif"
-								hint="Akses sistem tersedia."
-							/>
-							<ProfileInfoTile
-								icon={<Mail className="h-5 w-5 text-primary" />}
-								label="Emel"
-								value={email ?? "Belum ditetapkan"}
-								hint="Digunakan untuk pengesahan akaun."
-							/>
-							<ProfileInfoTile
-								icon={<KeyRound className="h-5 w-5 text-primary" />}
-								label="Keselamatan"
-								value="Kata laluan dilindungi"
-								hint="Kemas kini jika perlu."
-							/>
+						<CardContent className="p-4 sm:p-6">
+							{enableProfileColor && (
+								<div className="rounded-2xl border border-border/60 bg-muted/20 p-4 shadow-sm">
+									<div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+										<Palette
+											className="h-4 w-4"
+											style={{ color: colorOption.accent }}
+										/>
+										Warna Profil
+									</div>
+									<div className="mt-4 grid grid-cols-5 gap-3 sm:flex sm:flex-wrap">
+										{profileColorOptions.map((option) => {
+											const isSelected = option.value === selectedColor;
+											return (
+												<button
+													key={option.value}
+													type="button"
+													onClick={() => handleColorChange(option.value)}
+													className="flex h-11 w-11 items-center justify-center rounded-full border-2 transition hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+													style={{
+														backgroundColor: option.soft,
+														borderColor: isSelected ? option.accent : option.border,
+														color: option.accent,
+													}}
+													title={option.label}
+													aria-label={option.label}
+												>
+													{isSelected ? (
+														<Check className="h-4 w-4" />
+													) : (
+														<span
+															className="h-4 w-4 rounded-full"
+															style={{ backgroundColor: option.accent }}
+														/>
+													)}
+												</button>
+											);
+										})}
+									</div>
+								</div>
+							)}
 						</CardContent>
 					</Card>
 
@@ -148,33 +267,6 @@ export function ProfileShell({
 					</div>
 				</div>
 			</div>
-		</div>
-	);
-}
-
-function ProfileInfoTile({
-	icon,
-	label,
-	value,
-	hint,
-}: {
-	icon: ReactNode;
-	label: string;
-	value: string;
-	hint: string;
-}) {
-	return (
-		<div className="rounded-2xl border border-border/60 bg-muted/20 p-4 shadow-sm">
-			<div className="flex items-start gap-2">
-				<div className="rounded-lg bg-primary/10 p-2">{icon}</div>
-				<div className="min-w-0 text-sm font-medium text-muted-foreground">
-					{label}
-				</div>
-			</div>
-			<div className="mt-4 break-words text-base font-semibold text-foreground">
-				{value}
-			</div>
-			<div className="mt-1 text-sm text-muted-foreground">{hint}</div>
 		</div>
 	);
 }

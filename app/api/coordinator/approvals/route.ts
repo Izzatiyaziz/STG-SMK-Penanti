@@ -23,6 +23,7 @@ type SubmissionOut = {
     subject_id: string;
     class_id: string | null;
     className: string;
+    classGrade: number;
     teacher_id: string | null;
     teacher: string;
     exam_id: string;
@@ -179,7 +180,7 @@ export async function GET(req: Request) {
                     .in("student_id", studentIds),
                 supabase
                     .from("stg_classes")
-                    .select("class_id, class_name")
+                    .select("class_id, class_name, grade")
                     .limit(5000),
                 supabase
                     .from("stg_subjects")
@@ -209,12 +210,13 @@ export async function GET(req: Request) {
             studentInfoById.set(id, { name, classId: classIdRaw || null });
         }
 
-        const classNameById = new Map<string, string>();
+        const classInfoById = new Map<string, { name: string; grade: number }>();
         for (const c of Array.isArray(classes) ? classes : []) {
             if (!c || typeof c !== "object") continue;
             const id = toId((c as { class_id?: unknown }).class_id);
             const name = toId((c as { class_name?: unknown }).class_name);
-            if (id) classNameById.set(id, name);
+            const grade = toNumber((c as { grade?: unknown }).grade);
+            if (id) classInfoById.set(id, { name, grade });
         }
 
         const subjectNameById = new Map<string, string>();
@@ -310,7 +312,9 @@ export async function GET(req: Request) {
 
             const studentInfo = studentInfoById.get(student_id);
             const class_id = studentInfo?.classId ?? null;
-            const className = class_id ? classNameById.get(class_id) ?? "" : "";
+            const classInfo = class_id ? classInfoById.get(class_id) ?? null : null;
+            const className = classInfo?.name ?? "";
+            const classGrade = classInfo?.grade ?? 0;
 
             const subjectName = subjectNameById.get(subject_id) ?? "";
             const examInfo = examInfoById.get(exam_id);
@@ -333,6 +337,7 @@ export async function GET(req: Request) {
                     subject: subjectName,
                     class_id,
                     className,
+                    classGrade,
                     subject_id,
                     exam_id,
                     examName: examInfo?.name ?? "",

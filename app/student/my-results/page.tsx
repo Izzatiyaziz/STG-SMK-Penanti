@@ -171,12 +171,12 @@ export default function MyResultsPage() {
                 {/* ================= AI INSIGHT ================= */}
                 <Card className="shadow-lg border border-border/50">
                     <CardContent className="p-6 space-y-2">
-                        <div className="flex items-center gap-2">
-                            <TrendingUp className="w-5 h-5 text-primary" />
-                            <h2 className="text-lg font-semibold">
-                                AI Performance Insight
-                            </h2>
-                        </div>
+                         <div className="flex items-center gap-2">
+                             <TrendingUp className="w-5 h-5 text-primary" />
+                             <h2 className="text-lg font-semibold">
+                                 Sorotan Prestasi AI
+                             </h2>
+                         </div>
                         <p className="text-sm">
                             <b>Kekuatan:</b> {aiInsight.strength}
                         </p>

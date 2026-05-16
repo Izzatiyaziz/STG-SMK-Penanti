@@ -67,6 +67,13 @@ export async function GET(req: Request) {
             .map((s: any) => toId(s?.student_id))
             .filter(Boolean);
 
+        const studentNameById = new Map<string, string>();
+        for (const student of Array.isArray(students) ? students : []) {
+            const id = toId((student as any)?.student_id);
+            const name = String((student as any)?.fullname ?? "").trim();
+            if (id) studentNameById.set(id, name);
+        }
+
         if (studentIds.length === 0) {
             return NextResponse.json({
                 class: {
@@ -84,6 +91,8 @@ export async function GET(req: Request) {
                     average_total: 0,
                 },
                 grades: [],
+                student_results: [],
+                top_students: [],
             });
         }
 
@@ -128,6 +137,14 @@ export async function GET(req: Request) {
         let approved = 0;
         let rejected = 0;
 
+        const studentResults: Array<{
+            student_id: string;
+            student_name: string;
+            total: number;
+            grade: string;
+            status: string;
+        }> = [];
+
         for (const r of Array.isArray(results) ? results : []) {
             if (!r || typeof r !== "object") continue;
             const grade = String((r as any).grade ?? "").trim();
@@ -135,6 +152,15 @@ export async function GET(req: Request) {
             const st = String((r as any).status ?? "pending").trim();
             const hasSubjective = Boolean((r as any).subjective_id);
             if (!hasSubjective) continue;
+
+            const studentId = toId((r as any).student_id);
+            studentResults.push({
+                student_id: studentId,
+                student_name: studentNameById.get(studentId) ?? "",
+                total,
+                grade,
+                status: st,
+            });
 
             resultsCount += 1;
             totalSum += total;
@@ -146,6 +172,11 @@ export async function GET(req: Request) {
         }
 
         const avg = resultsCount ? totalSum / resultsCount : 0;
+
+        const topStudents = studentResults
+            .slice()
+            .sort((a, b) => b.total - a.total)
+            .slice(0, 3);
 
         return NextResponse.json({
             class: {
@@ -166,6 +197,8 @@ export async function GET(req: Request) {
             grades: Object.entries(gradeCounts)
                 .map(([grade, value]) => ({ grade, value }))
                 .filter((g) => g.value > 0),
+            student_results: studentResults,
+            top_students: topStudents,
         });
     } catch (err) {
         console.error("GET teacher class-summary FAILED:", err);

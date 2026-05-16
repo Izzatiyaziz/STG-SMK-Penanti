@@ -34,13 +34,24 @@ import {
 } from "@/components/ui/select";
 import { Button as UIButton } from "@/components/ui/button";
 
+type SubjectOption = { id: string; name: string };
+type SubjectExamSettings = {
+    deadline?: string | null;
+    objective_questions?: number | string | null;
+    objective_max?: number | string | null;
+    subjective_max?: number | string | null;
+};
+type ExamWithSettings = ExamItem & {
+    subject_settings?: Record<string, SubjectExamSettings>;
+};
+
 export default function ExamsPage() {
-    const [exams, setExams] = useState<ExamItem[]>([]);
+    const [exams, setExams] = useState<ExamWithSettings[]>([]);
     const [loading, setLoading] = useState(false);
-    const [editing, setEditing] = useState<ExamItem | null>(null);
-    const [deleting, setDeleting] = useState<ExamItem | null>(null);
-    const [settingExam, setSettingExam] = useState<any | null>(null);
-    const [subjects, setSubjects] = useState<Array<{ id: string; name: string }>>([]);
+    const [editing, setEditing] = useState<ExamWithSettings | null>(null);
+    const [deleting, setDeleting] = useState<ExamWithSettings | null>(null);
+    const [settingExam, setSettingExam] = useState<ExamWithSettings | null>(null);
+    const [subjects, setSubjects] = useState<SubjectOption[]>([]);
     const [selectedSubjectId, setSelectedSubjectId] = useState<string>("");
     const [deadline, setDeadline] = useState<string>("");
     const [objectiveQuestions, setObjectiveQuestions] = useState<number>(40);
@@ -62,15 +73,24 @@ export default function ExamsPage() {
         try {
             const res = await fetch("/api/admin/subjects", { cache: "no-store" });
             const data = await res.json();
-            setSubjects((data ?? []).map((s: any) => ({ id: s.id, name: s.name })));
+            const list = Array.isArray(data) ? data : [];
+            setSubjects(
+                list
+                    .map((s: { id?: unknown; name?: unknown }) => ({
+                        id: String(s.id ?? ""),
+                        name: String(s.name ?? ""),
+                    }))
+                    .filter((s) => s.id && s.name)
+            );
         } catch {
             setSubjects([]);
         }
     }
 
     useEffect(() => {
-        fetchExams();
-        fetchSubjects();
+        void (async () => {
+            await Promise.all([fetchExams(), fetchSubjects()]);
+        })();
     }, []);
 
     // ================= ADD EXAM =================
@@ -152,7 +172,9 @@ export default function ExamsPage() {
         const data = await res.json();
 
         if (!res.ok) {
-            toast.error(data.message || "Gagal memadam peperiksaan");
+            toast.error(data.message || "Gagal memadam peperiksaan", {
+                duration: 7000,
+            });
             setLoading(false);
             return;
         }
@@ -163,7 +185,7 @@ export default function ExamsPage() {
         fetchExams();
     }
 
-    function openSettings(exam: any) {
+    function openSettings(exam: ExamWithSettings) {
         setSettingExam(exam);
         setSelectedSubjectId("");
         setDeadline("");
@@ -172,8 +194,8 @@ export default function ExamsPage() {
         setSubjectiveMax(60);
     }
 
-    function loadSubjectSettings(exam: any, subjectId: string) {
-        const settings = (exam?.subject_settings ?? {}) as Record<string, any>;
+    function loadSubjectSettings(exam: ExamWithSettings | null, subjectId: string) {
+        const settings = exam?.subject_settings ?? {};
         const s = settings?.[subjectId] ?? null;
         setDeadline(String(s?.deadline ?? ""));
         setObjectiveQuestions(Number(s?.objective_questions ?? 40));
@@ -298,7 +320,7 @@ export default function ExamsPage() {
                     <Table>
                         <TableHeader>
                             <TableRow>
-                                <TableHead>No</TableHead>
+                                <TableHead>#</TableHead>
                                 <TableHead>Nama Peperiksaan</TableHead>
                                 <TableHead>Tahun Akademik</TableHead>
                                 <TableHead>Tindakan</TableHead>
@@ -322,13 +344,7 @@ export default function ExamsPage() {
                                         <TableCell>{exam.name}</TableCell>
                                         <TableCell>{exam.academic_year}</TableCell>
                                         <TableCell className="flex flex-wrap gap-2">
-                                            <Button
-                                                size="sm"
-                                                variant="secondary"
-                                                onClick={() => openSettings(exam)}
-                                            >
-                                                Settings
-                                            </Button>
+                                           
                                             <Button
                                                 size="icon"
                                                 variant="outline"

@@ -14,7 +14,7 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { AlertCircle, Loader2, Mail, User, UserPlus } from "lucide-react";
+import { AlertCircle, Loader2, User, UserPlus } from "lucide-react";
 
 interface AddTeacherDialogProps {
   onSuccess: () => void;
@@ -39,8 +39,11 @@ const normalizeSpaces = (value: string) => value.replace(/\s+/g, " ").trim();
 const isWordsOnlyName = (value: string) => {
   const normalized = normalizeSpaces(value);
   if (!normalized) return false;
-  // Only letters and spaces (Unicode letters supported).
-  return /^[\p{L}]+(?: [\p{L}]+)*$/u.test(normalized);
+  // Allow Unicode letters + spaces, plus name separators like "/" and apostrophe.
+  // Examples: "PHIT SAMAI A/P VILAI", "O'CONNOR"
+  return /^[\p{L}]+(?:[/'’][\p{L}]+)*(?: [\p{L}]+(?:[/'’][\p{L}]+)*)*$/u.test(
+    normalized
+  );
 };
 
 function generateTeacherUsername() {
@@ -61,16 +64,16 @@ export function AddTeacherDialog({ onSuccess, children }: AddTeacherDialogProps)
 
   const emailError =
     emailTouched && !emailFocused && !email.trim()
-      ? "Email wajib diisi."
+      ? "E-mel wajib diisi."
       : emailTouched && !emailFocused && email.trim() && !EMAIL_REGEX.test(email.trim())
-        ? "Format email tidak sah. Contoh: guru@penanti.edu.my"
+        ? "Format e-mel tidak sah. Contoh: guru@penanti.edu.my"
         : "";
 
   const fullnameError =
     fullnameTouched && !fullname.trim()
       ? "Nama penuh wajib diisi."
       : fullnameTouched && fullname.trim() && !isWordsOnlyName(fullname)
-        ? "Nama penuh hanya boleh mengandungi huruf sahaja"
+        ? "Nama penuh hanya boleh mengandungi huruf, ruang, '/' dan apostrof (')"
         : "";
 
   const toggleRole = (value: TeacherRoleName, checked: boolean) => {
@@ -238,7 +241,7 @@ export function AddTeacherDialog({ onSuccess, children }: AddTeacherDialogProps)
               <div className="grid grid-cols-1 gap-4">
                 <div className="space-y-2">
                                    <Label htmlFor="fullname" className="text-sm font-medium flex items-center gap-1">
-                    Email <span className="text-red-500">*</span>
+                    E-mel <span className="text-red-500">*</span>
                   </Label>
                   <Input
                     id="email"
@@ -254,7 +257,7 @@ export function AddTeacherDialog({ onSuccess, children }: AddTeacherDialogProps)
                       setEmailTouched(true);
                     }}
                     placeholder="guru@penanti.edu.my"
-                    title="Masukkan format email yang sah"
+                    title="Masukkan format e-mel yang sah"
                     aria-invalid={Boolean(emailError)}
                     className={`rounded-xl border-2 focus:border-primary/50 h-11 ${
                       emailError ? "border-red-400" : "border-border/30"
@@ -322,7 +325,7 @@ export function AddTeacherDialog({ onSuccess, children }: AddTeacherDialogProps)
 
           <div className="pt-2 border-t border-border/20">
             <p className="text-xs text-muted-foreground text-center">
-              Password default guru buat masa ini ialah <span className="font-mono">123456</span> (tiada email dihantar).
+              Password default guru buat masa ini ialah <span className="font-mono">123456</span> (tiada e-mel dihantar).
             </p>
           </div>
         </form>

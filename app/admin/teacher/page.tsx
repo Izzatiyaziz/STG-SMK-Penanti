@@ -66,13 +66,15 @@ type User = {
 };
 
 // Client-side only time component
+const getTimeLabel = () =>
+    new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
 const LastUpdatedTime = () => {
-    const [time, setTime] = useState<string>("");
+    const [time, setTime] = useState<string>(() => getTimeLabel());
 
     useEffect(() => {
-        setTime(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
         const interval = setInterval(() => {
-            setTime(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+            setTime(getTimeLabel());
         }, 60000);
         return () => clearInterval(interval);
     }, []);
@@ -467,7 +469,7 @@ export default function UsersPage() {
                         <div className="flex-1 relative">
                             <Search className="absolute left-3.5 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                             <Input
-                            placeholder="Cari guru, ID atau email..."
+                            placeholder="Cari guru (nama, no. staff atau e-mel)..."
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
                             className="pl-10 h-11 rounded-lg border-border bg-background focus:border-primary focus:ring-primary/20"
@@ -565,7 +567,7 @@ export default function UsersPage() {
                                                 No. Staff
                                             </TableHead>
                                             <TableHead className="font-semibold text-foreground py-4">
-                                                Email
+                                                E-mel
                                             </TableHead>
                                             <TableHead className="font-semibold text-foreground py-4">
                                                 <Button
@@ -681,7 +683,7 @@ export default function UsersPage() {
         </div>
       </TableCell>
 
-      {/* Email */}
+      {/* E-mel */}
       <TableCell className="py-4">
         <div className="flex items-center gap-2 text-muted-foreground">
           {user.email ? (

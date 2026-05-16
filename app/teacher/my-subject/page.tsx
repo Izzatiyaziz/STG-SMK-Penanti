@@ -68,6 +68,13 @@ type ClassSummary = {
 	grades: Array<{ grade: string; value: number }>;
 };
 
+type MarksDraft = {
+	v: 1;
+	updatedAt: string;
+	subjectiveMarks: Record<string, string>;
+	manualObjectiveMarks: Record<string, string>;
+};
+
 function toIsoDateString(d: Date) {
 	return d.toISOString().slice(0, 10);
 }
@@ -115,6 +122,46 @@ function getManualObjectiveMark(
 	return Number.isFinite(value) ? value : 0;
 }
 
+function buildDraftKey(params: {
+	teacherId: string;
+	classId: string;
+	subjectId: string;
+	examId: string;
+}) {
+	return `stg_marks_draft:v1:${params.teacherId}:${params.classId}:${params.subjectId}:${params.examId}`;
+}
+
+function readDraft(key: string): MarksDraft | null {
+	if (typeof window === "undefined") return null;
+	try {
+		const raw = localStorage.getItem(key);
+		if (!raw) return null;
+		const parsed = JSON.parse(raw) as Partial<MarksDraft>;
+		if (parsed?.v !== 1) return null;
+		if (typeof parsed.updatedAt !== "string") return null;
+		if (!parsed.subjectiveMarks || typeof parsed.subjectiveMarks !== "object") return null;
+		if (!parsed.manualObjectiveMarks || typeof parsed.manualObjectiveMarks !== "object") return null;
+		return parsed as MarksDraft;
+	} catch {
+		return null;
+	}
+}
+
+function writeDraft(key: string, value: MarksDraft) {
+	if (typeof window === "undefined") return;
+	localStorage.setItem(key, JSON.stringify(value));
+}
+
+function removeDraft(key: string) {
+	if (typeof window === "undefined") return;
+	localStorage.removeItem(key);
+}
+
+function formatClassLabel(grade: number | null | undefined, className: string) {
+	const name = String(className ?? "").trim() || "-";
+	return typeof grade === "number" && Number.isFinite(grade) ? `${grade} ${name}` : name;
+}
+
 export default function SubjectTeacherPage() {
 	const router = useRouter();
 	const [session, setSession] = useState<Session | null>(null);
@@ -123,6 +170,7 @@ export default function SubjectTeacherPage() {
 	const [exams, setExams] = useState<Exam[]>([]);
 
 	const [selectedAssignmentId, setSelectedAssignmentId] = useState("");
+	const [selectedSubjectId, setSelectedSubjectId] = useState("");
 	const [selectedExamId, setSelectedExamId] = useState("");
 	const [students, setStudents] = useState<Student[]>([]);
 	const [subjectiveMarks, setSubjectiveMarks] = useState<Record<string, string>>(
@@ -138,6 +186,7 @@ export default function SubjectTeacherPage() {
 
 	const [loading, setLoading] = useState(false);
 	const [submitLoading, setSubmitLoading] = useState(false);
+	const [draftLoading, setDraftLoading] = useState(false);
 
 	const [submission, setSubmission] = useState<{
 		totalStudents: number;
@@ -203,6 +252,30 @@ export default function SubjectTeacherPage() {
 		return assignments.find((a) => a.id === selectedAssignmentId) ?? null;
 	}, [assignments, selectedAssignmentId]);
 
+	const subjectOptions = useMemo(() => {
+		const byId = new Map<string, string>();
+		for (const assignment of assignments) {
+			if (assignment.subject_id && assignment.subject_name) {
+				byId.set(assignment.subject_id, assignment.subject_name);
+			}
+		}
+		return Array.from(byId.entries())
+			.map(([id, name]) => ({ id, name }))
+			.sort((a, b) => a.name.localeCompare(b.name));
+	}, [assignments]);
+
+	const classOptions = useMemo(() => {
+		if (!selectedSubjectId) return [];
+		return assignments
+			.filter((assignment) => assignment.subject_id === selectedSubjectId)
+			.slice()
+			.sort((a, b) => {
+				const gradeCompare = Number(a.grade ?? 0) - Number(b.grade ?? 0);
+				if (gradeCompare !== 0) return gradeCompare;
+				return a.class_name.localeCompare(b.class_name);
+			});
+	}, [assignments, selectedSubjectId]);
+
 	const selectedExam = useMemo(() => {
 		return exams.find((e) => e.id === selectedExamId) ?? null;
 	}, [exams, selectedExamId]);
@@ -232,6 +305,39 @@ export default function SubjectTeacherPage() {
 		const today = toIsoDateString(new Date());
 		return today > limits.deadline;
 	}, [limits.deadline]);
+
+	const allMarksFilled = useMemo(() => {
+		if (!selectedAssignmentId || !selectedExamId) return false;
+		if (students.length === 0) return false;
+		const requireObjective = limits.objectiveMax > 0;
+		const requireSubjective = limits.subjectiveMax > 0;
+
+		for (const s of students) {
+			if (requireSubjective && (subjectiveMarks[s.id] ?? "") === "") return false;
+			if (requireObjective && (manualObjectiveMarks[s.id] ?? "") === "") return false;
+		}
+		return true;
+	}, [
+		limits.objectiveMax,
+		limits.subjectiveMax,
+		manualObjectiveMarks,
+		selectedAssignmentId,
+		selectedExamId,
+		students,
+		subjectiveMarks,
+	]);
+
+	const liveMarkedCount = useMemo(() => {
+		if (students.length === 0) return 0;
+		let count = 0;
+		for (const s of students) {
+			const raw = subjectiveMarks[s.id];
+			if (raw !== undefined && raw !== "") count += 1;
+		}
+		return count;
+	}, [students, subjectiveMarks]);
+
+	const liveTotalStudents = students.length || submission.totalStudents;
 
 	async function loadAssignmentsAndExams() {
 		if (!session) return;
@@ -275,6 +381,7 @@ export default function SubjectTeacherPage() {
 				);
 
 				if (matchedAssignment) {
+					setSelectedSubjectId(matchedAssignment.subject_id);
 					setSelectedAssignmentId(matchedAssignment.id);
 				}
 			}
@@ -290,6 +397,18 @@ export default function SubjectTeacherPage() {
 		loadAssignmentsAndExams();
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [session?.user_id, selectedExamId]);
+
+	useEffect(() => {
+		if (!selectedAssignment) return;
+		if (selectedSubjectId === selectedAssignment.subject_id) return;
+		setSelectedSubjectId(selectedAssignment.subject_id);
+	}, [selectedAssignment, selectedSubjectId]);
+
+	useEffect(() => {
+		if (!selectedSubjectId || !selectedAssignmentId) return;
+		if (classOptions.some((assignment) => assignment.id === selectedAssignmentId)) return;
+		setSelectedAssignmentId("");
+	}, [classOptions, selectedAssignmentId, selectedSubjectId]);
 
 	async function loadStudents() {
 		if (!selectedAssignment) return;
@@ -366,6 +485,12 @@ export default function SubjectTeacherPage() {
 		const teacherId = session.user_id;
 		const classId = selectedAssignment.class_id;
 		const subjectId = selectedAssignment.subject_id;
+		const draftKey = buildDraftKey({
+			teacherId,
+			classId,
+			subjectId,
+			examId: selectedExamId,
+		});
 		let cancelled = false;
 
 		async function loadSummaryAndObjective() {
@@ -408,6 +533,12 @@ export default function SubjectTeacherPage() {
 							),
 						),
 					);
+
+					const draft = readDraft(draftKey);
+					if (draft) {
+						setManualObjectiveMarks((prev) => ({ ...prev, ...draft.manualObjectiveMarks }));
+						setSubjectiveMarks((prev) => ({ ...prev, ...draft.subjectiveMarks }));
+					}
 				}
 			} catch {
 				if (!cancelled) {
@@ -424,8 +555,46 @@ export default function SubjectTeacherPage() {
 		};
 	}, [selectedAssignment, selectedExamId, session]);
 
+	async function handleSaveDraft() {
+		if (!session || !selectedAssignment || !selectedExamId) return;
+		setDraftLoading(true);
+		const toastId = toast.loading("Menyimpan draf...");
+		try {
+			const studentIdSet = new Set(students.map((s) => s.id));
+			const filteredSubjective = Object.fromEntries(
+				Object.entries(subjectiveMarks).filter(([sid]) => studentIdSet.has(sid)),
+			);
+			const filteredManualObjective = Object.fromEntries(
+				Object.entries(manualObjectiveMarks).filter(([sid]) => studentIdSet.has(sid)),
+			);
+
+			const key = buildDraftKey({
+				teacherId: session.user_id,
+				classId: selectedAssignment.class_id,
+				subjectId: selectedAssignment.subject_id,
+				examId: selectedExamId,
+			});
+			writeDraft(key, {
+				v: 1,
+				updatedAt: new Date().toISOString(),
+				subjectiveMarks: filteredSubjective,
+				manualObjectiveMarks: filteredManualObjective,
+			});
+
+			toast.success("Draf disimpan", { id: toastId });
+		} catch {
+			toast.error("Gagal menyimpan draf", { id: toastId });
+		} finally {
+			setDraftLoading(false);
+		}
+	}
+
 	async function handleSubmitMarks() {
 		if (!session || !selectedAssignment || !selectedExamId) return;
+		if (!allMarksFilled) {
+			toast.error("Sila isi semua markah dahulu sebelum hantar.");
+			return;
+		}
 		if (!limits.subjectiveMax && limits.subjectiveMax !== 0) {
 			toast.error("Sila set limit peperiksaan dahulu (Admin > Exams > Settings)");
 			return;
@@ -485,6 +654,14 @@ export default function SubjectTeacherPage() {
 			}
 
 			toast.success("Markah dihantar untuk semakan penyelaras", { id: toastId });
+			removeDraft(
+				buildDraftKey({
+					teacherId: session.user_id,
+					classId: selectedAssignment.class_id,
+					subjectId: selectedAssignment.subject_id,
+					examId: selectedExamId,
+				}),
+			);
 			loadSubmissionStatus();
 		} catch {
 			toast.error("Ralat sistem", { id: toastId });
@@ -575,7 +752,7 @@ export default function SubjectTeacherPage() {
 				)}
 
 				<Card className="shadow-lg border border-border/50">
-					<CardContent className="p-4 grid grid-cols-1 md:grid-cols-3 gap-4">
+					<CardContent className="p-4 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
 						<div className="space-y-2">
 							<div className="text-sm text-muted-foreground">Peperiksaan</div>
 							<Select value={selectedExamId} onValueChange={setSelectedExamId}>
@@ -593,18 +770,41 @@ export default function SubjectTeacherPage() {
 						</div>
 
 						<div className="space-y-2">
-							<div className="text-sm text-muted-foreground">Subjek & Kelas</div>
+							<div className="text-sm text-muted-foreground">Subjek</div>
+							<Select
+								value={selectedSubjectId}
+								onValueChange={(value) => {
+									setSelectedSubjectId(value);
+									setSelectedAssignmentId("");
+								}}
+							>
+								<SelectTrigger>
+									<SelectValue placeholder="Pilih subjek" />
+								</SelectTrigger>
+								<SelectContent>
+									{subjectOptions.map((subject) => (
+										<SelectItem key={subject.id} value={subject.id}>
+											{subject.name}
+										</SelectItem>
+									))}
+								</SelectContent>
+							</Select>
+						</div>
+
+						<div className="space-y-2">
+							<div className="text-sm text-muted-foreground">Kelas</div>
 							<Select
 								value={selectedAssignmentId}
 								onValueChange={setSelectedAssignmentId}
+								disabled={!selectedSubjectId}
 							>
 								<SelectTrigger>
-									<SelectValue placeholder="Pilih tugasan" />
+									<SelectValue placeholder={selectedSubjectId ? "Pilih kelas" : "Pilih subjek dahulu"} />
 								</SelectTrigger>
 								<SelectContent>
-									{assignments.map((a) => (
-										<SelectItem key={a.id} value={a.id}>
-											{a.subject_name} • {a.grade ?? "-"} {a.class_name}
+									{classOptions.map((assignment) => (
+										<SelectItem key={assignment.id} value={assignment.id}>
+											{formatClassLabel(assignment.grade, assignment.class_name)}
 										</SelectItem>
 									))}
 								</SelectContent>
@@ -615,7 +815,7 @@ export default function SubjectTeacherPage() {
 							<div className="text-sm text-muted-foreground">Status Hantaran</div>
 							<div className="flex flex-wrap items-center gap-2">
 								<Badge variant="outline">
-									{submission.submittedCount}/{submission.totalStudents} ditanda
+									{liveMarkedCount}/{liveTotalStudents} ditanda
 								</Badge>
 								{submission.isComplete ? (
 									<Badge className="bg-green-100 text-green-700">Lengkap</Badge>
@@ -662,7 +862,7 @@ export default function SubjectTeacherPage() {
 
 							<div className="flex flex-wrap items-center gap-2 sm:justify-end">
 								<Badge variant="outline">
-									{submission.submittedCount}/{submission.totalStudents} ditanda
+									{liveMarkedCount}/{liveTotalStudents} ditanda
 								</Badge>
 								{(() => {
 									const isDraft = submission.submittedCount === 0 || !submission.isComplete;
@@ -928,13 +1128,17 @@ export default function SubjectTeacherPage() {
 				</Card>
 
 				<div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
-					<Button variant="outline" disabled>
+					<Button
+						variant="outline"
+						onClick={handleSaveDraft}
+						disabled={draftLoading || submitLoading || !selectedAssignmentId || !selectedExamId}
+					>
 						<Save className="w-4 h-4 mr-2" />
-						Simpan Draf
+						{draftLoading ? "Menyimpan..." : "Simpan Draf"}
 					</Button>
 					<Button
 						onClick={handleSubmitMarks}
-						disabled={submitLoading || !selectedAssignmentId || !selectedExamId}
+						disabled={submitLoading || !selectedAssignmentId || !selectedExamId || !allMarksFilled}
 					>
 						<Send className="w-4 h-4 mr-2" />
 						{submitLoading ? "Menghantar..." : "Hantar"}

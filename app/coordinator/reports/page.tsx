@@ -39,9 +39,11 @@ import {
 	BarChart3,
 	BookOpen,
 	CheckCircle,
+	ClipboardList,
 	Download,
-	Filter,
+	GraduationCap,
 	RefreshCw,
+	School,
 	Shield,
 	TrendingDown,
 	TrendingUp,
@@ -77,7 +79,13 @@ type ReportData = {
 		passRate: number;
 	};
 	gradeDistribution: Array<{ grade: string; value: number }>;
-	classPerformance: Array<{ className: string; average: number; students: number }>;
+	classPerformance: Array<{
+		class_id: string;
+		className: string;
+		gradeLevel: number;
+		average: number;
+		students: number;
+	}>;
 	topStudents: StudentPerformance[];
 	weakStudents: StudentPerformance[];
 	trend: Array<{ exam: string; average: number; year: string }>;
@@ -108,22 +116,71 @@ function getStoredSession() {
 	}
 }
 
+function normalizeSubjectName(value: unknown) {
+	return String(value ?? "")
+		.toLowerCase()
+		.trim()
+		.replace(/[^a-z0-9]+/g, " ")
+		.replace(/\s+/g, " ")
+		.trim();
+}
+
+function isUpperFormOnlySubject(subjectName: unknown) {
+	const name = normalizeSubjectName(subjectName);
+	if (!name) return false;
+
+	return (
+		/\bbiologi\b/.test(name) ||
+		/\bkimia\b/.test(name) ||
+		/\bfizik\b/.test(name) ||
+		/\bperniagaan\b/.test(name) ||
+		/\bakaun\b/.test(name) ||
+		/\bperakaunan\b/.test(name) ||
+		name.includes("matematik tambahan") ||
+		name.includes("additional mathematics")
+	);
+}
+
+function getGradeDotColor(grade: number) {
+	switch (grade) {
+		case 1:
+			return "bg-emerald-500";
+		case 2:
+			return "bg-blue-500";
+		case 3:
+			return "bg-amber-500";
+		case 4:
+			return "bg-purple-500";
+		case 5:
+			return "bg-rose-500";
+		default:
+			return "bg-gray-500";
+	}
+}
+
 export default function SubjectCoordinatorReportsPage() {
 	const [session] = useState<Session | null>(() => getStoredSession());
 	const [data, setData] = useState<ReportData | null>(null);
 	const [loading, setLoading] = useState(false);
-	const [gradeFilter, setGradeFilter] = useState("all");
+	const [gradeFilter, setGradeFilter] = useState("default-grade-1");
 	const [classFilter, setClassFilter] = useState("all");
 	const [examFilter, setExamFilter] = useState("all");
+	const subjectName = data?.subject?.name ?? "Mathematics";
+	const isUpperFormSubject = isUpperFormOnlySubject(subjectName);
+	const defaultFilterGrade = isUpperFormSubject ? "default-grade-4" : "default-grade-1";
+	const defaultGradeNumber = isUpperFormSubject ? 4 : 1;
 
 	async function fetchReport() {
 		if (!session?.user_id) return;
 
 		setLoading(true);
+		const effectiveGradeFilter = gradeFilter.startsWith("default-grade-")
+			? String(defaultGradeNumber)
+			: gradeFilter;
 		try {
 			const params = new URLSearchParams({
 				teacher_id: session.user_id,
-				grade: gradeFilter,
+				grade: effectiveGradeFilter,
 				class_id: classFilter,
 				exam_id: examFilter,
 			});
@@ -150,19 +207,42 @@ export default function SubjectCoordinatorReportsPage() {
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [classFilter, examFilter, gradeFilter, session?.user_id]);
 
+	useEffect(() => {
+		if (!isUpperFormSubject || gradeFilter !== "default-grade-1") return;
+		setGradeFilter("default-grade-4");
+		setClassFilter("all");
+	}, [gradeFilter, isUpperFormSubject]);
+
 	const gradeData = useMemo(() => data?.gradeDistribution ?? [], [data]);
-	const subjectName = data?.subject?.name ?? "Mathematics";
 	const hasReportShell = Boolean(data);
 	const classOptions = useMemo(() => {
 		const options = data?.filterOptions.classes ?? [];
-		if (gradeFilter === "all") return options;
-		return options.filter((option) => option.grade === Number(gradeFilter));
-	}, [data?.filterOptions.classes, gradeFilter]);
+		const effectiveGradeFilter = gradeFilter.startsWith("default-grade-")
+			? String(defaultGradeNumber)
+			: gradeFilter;
+		if (effectiveGradeFilter === "all") return options;
+		return options.filter((option) => option.grade === Number(effectiveGradeFilter));
+	}, [data?.filterOptions.classes, defaultGradeNumber, gradeFilter]);
+
+	const gradeOptions = useMemo(() => {
+		const grades = data?.filterOptions.grades ?? [1, 2, 3, 4, 5];
+		return Array.from(new Set([defaultGradeNumber, ...grades]))
+			.filter((grade) => Number.isFinite(Number(grade)))
+			.filter((grade) => !isUpperFormSubject || Number(grade) >= 4)
+			.sort((a, b) => Number(a) - Number(b));
+	}, [data?.filterOptions.grades, defaultGradeNumber, isUpperFormSubject]);
 
 	function handleGradeFilter(value: string) {
 		setGradeFilter(value);
 		setClassFilter("all");
 	}
+
+	const classPerformanceChartData = useMemo(() => {
+		return (data?.classPerformance ?? []).map((row) => ({
+			...row,
+			classLabel: row.gradeLevel ? `${row.gradeLevel} ${row.className}` : row.className,
+		}));
+	}, [data?.classPerformance]);
 
 	return (
 		<div className="min-h-screen bg-background p-4 md:p-6">
@@ -230,15 +310,18 @@ export default function SubjectCoordinatorReportsPage() {
 									<SelectValue placeholder="Pilih tingkatan" />
 								</SelectTrigger>
 								<SelectContent className="rounded-lg border-border">
-									<SelectItem value="all">
+									<SelectItem value={defaultFilterGrade}>
 										<div className="flex items-center gap-2">
-											<Filter className="h-4 w-4" />
-											Semua Tingkatan
+											<GraduationCap className="h-4 w-4" />
+											Tingkatan
 										</div>
 									</SelectItem>
-									{(data?.filterOptions.grades ?? [1, 2, 3, 4, 5]).map((grade) => (
+									{gradeOptions.map((grade) => (
 										<SelectItem key={grade} value={String(grade)}>
-											Tingkatan {grade}
+											<div className="flex items-center gap-2">
+												<div className={`h-2 w-2 rounded-full ${getGradeDotColor(grade)}`} />
+												Tingkatan {grade}
+											</div>
 										</SelectItem>
 									))}
 								</SelectContent>
@@ -252,7 +335,12 @@ export default function SubjectCoordinatorReportsPage() {
 									<SelectValue placeholder="Pilih kelas" />
 								</SelectTrigger>
 								<SelectContent className="rounded-lg border-border">
-									<SelectItem value="all">Semua Kelas</SelectItem>
+									<SelectItem value="all">
+										<div className="flex items-center gap-2">
+											<School className="h-4 w-4" />
+											Semua Kelas
+										</div>
+									</SelectItem>
 									{classOptions.map((classItem) => (
 										<SelectItem key={classItem.id} value={classItem.id}>
 											{classItem.name}
@@ -269,7 +357,12 @@ export default function SubjectCoordinatorReportsPage() {
 									<SelectValue placeholder="Pilih peperiksaan" />
 								</SelectTrigger>
 								<SelectContent className="rounded-lg border-border">
-									<SelectItem value="all">Semua Peperiksaan</SelectItem>
+									<SelectItem value="all">
+										<div className="flex items-center gap-2">
+											<ClipboardList className="h-4 w-4" />
+											Semua Peperiksaan
+										</div>
+									</SelectItem>
 									{(data?.filterOptions.exams ?? []).map((exam) => (
 										<SelectItem key={exam.id} value={exam.id}>
 											{exam.name} {exam.year ? `(${exam.year})` : ""}
@@ -283,7 +376,7 @@ export default function SubjectCoordinatorReportsPage() {
 							<Button
 								variant="outline"
 								onClick={() => {
-									setGradeFilter("all");
+									setGradeFilter(defaultFilterGrade);
 									setClassFilter("all");
 									setExamFilter("all");
 								}}
@@ -342,13 +435,13 @@ export default function SubjectCoordinatorReportsPage() {
 								className="lg:col-span-2"
 							>
 								<ResponsiveContainer width="100%" height={300}>
-									<BarChart data={data?.classPerformance ?? []}>
+									<BarChart data={classPerformanceChartData}>
 										<CartesianGrid strokeDasharray="3 3" />
-										<XAxis dataKey="className" />
+										<XAxis dataKey="classLabel" />
 										<YAxis domain={[0, 100]} />
 										<Tooltip />
 										<Bar dataKey="average" radius={7}>
-											{(data?.classPerformance ?? []).map((_, index) => (
+											{classPerformanceChartData.map((_, index) => (
 												<Cell key={index} fill={barColors[index % barColors.length]} />
 											))}
 										</Bar>

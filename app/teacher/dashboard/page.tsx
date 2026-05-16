@@ -289,6 +289,7 @@ function SubjectTeacherDashboard({ teacherId }: { teacherId: string }) {
 	const [loading, setLoading] = useState(true);
 	const [exams, setExams] = useState<Exam[]>([]);
 	const [selectedExamId, setSelectedExamId] = useState<string>("");
+	const [selectedSubjectId, setSelectedSubjectId] = useState<string>("all");
 	const [teacherInfo, setTeacherInfo] = useState<{ name: string; email: string } | null>(null);
 
 	useEffect(() => {
@@ -443,6 +444,12 @@ function SubjectTeacherDashboard({ teacherId }: { teacherId: string }) {
 		};
 	}, [assignments, selectedExamId, teacherId]);
 
+	useEffect(() => {
+		if (selectedSubjectId === "all") return;
+		if (assignments.some((assignment) => assignment.subject_id === selectedSubjectId)) return;
+		setSelectedSubjectId("all");
+	}, [assignments, selectedSubjectId]);
+
 	const selectedExam = useMemo(() => {
 		return exams.find((e) => e.id === selectedExamId) ?? null;
 	}, [exams, selectedExamId]);
@@ -473,6 +480,23 @@ function SubjectTeacherDashboard({ teacherId }: { teacherId: string }) {
 		return `${names.slice(0, 2).join(", ")} +${names.length - 2} lagi`;
 	}, [assignments]);
 
+	const subjectOptions = useMemo(() => {
+		const byId = new Map<string, string>();
+		for (const assignment of assignments) {
+			if (assignment.subject_id && assignment.subject_name) {
+				byId.set(assignment.subject_id, assignment.subject_name);
+			}
+		}
+		return Array.from(byId.entries())
+			.map(([id, name]) => ({ id, name }))
+			.sort((a, b) => a.name.localeCompare(b.name));
+	}, [assignments]);
+
+	const filteredAssignments = useMemo(() => {
+		if (selectedSubjectId === "all") return assignments;
+		return assignments.filter((assignment) => assignment.subject_id === selectedSubjectId);
+	}, [assignments, selectedSubjectId]);
+
 	const reminders = useMemo(() => {
 		if (!selectedExamId) return [];
 
@@ -486,7 +510,7 @@ function SubjectTeacherDashboard({ teacherId }: { teacherId: string }) {
 		const startOfToday = new Date();
 		startOfToday.setHours(0, 0, 0, 0);
 
-		const items = assignments
+		const items = filteredAssignments
 			.map((a) => {
 				const deadline = deadlineBySubjectId.get(a.subject_id) || "";
 				const deadlineDate = toLocalDate(deadline);
@@ -512,7 +536,7 @@ function SubjectTeacherDashboard({ teacherId }: { teacherId: string }) {
 			.sort((a, b) => a.daysLeft - b.daysLeft);
 
 		return items;
-	}, [assignments, assignmentStatuses, deadlineBySubjectId, selectedExamId]);
+	}, [assignmentStatuses, deadlineBySubjectId, filteredAssignments, selectedExamId]);
 
 	function openMarks(assignment: Assignment) {
 		localStorage.setItem(
@@ -618,10 +642,24 @@ function SubjectTeacherDashboard({ teacherId }: { teacherId: string }) {
 								</div>
 								<div className="space-y-2">
 									<div className="text-sm font-medium text-muted-foreground">Subjek Diajar</div>
-									<div className="inline-flex h-11 w-full items-center gap-2 rounded-md border border-border bg-background px-4 text-sm font-medium text-foreground shadow-xs">
-										<BookOpen className="h-4 w-4 shrink-0 text-primary" />
-										<span className="truncate">{subjectSummary}</span>
-									</div>
+									<Select value={selectedSubjectId} onValueChange={setSelectedSubjectId}>
+										<SelectTrigger className="h-11 rounded-lg border-border bg-background">
+											<SelectValue placeholder="Pilih subjek" />
+										</SelectTrigger>
+										<SelectContent className="rounded-lg border-border">
+											<SelectItem value="all">
+												<div className="flex items-center gap-2">
+													<BookOpen className="h-4 w-4" />
+													Semua subjek
+												</div>
+											</SelectItem>
+											{subjectOptions.map((subject) => (
+												<SelectItem key={subject.id} value={subject.id}>
+													{subject.name}
+												</SelectItem>
+											))}
+										</SelectContent>
+									</Select>
 								</div>
 							</CardContent>
 						</Card>
@@ -639,7 +677,7 @@ function SubjectTeacherDashboard({ teacherId }: { teacherId: string }) {
 									</p>
 								</div>
 								<Badge variant="outline" className="border-primary/30 bg-primary/5 text-primary font-medium">
-									{assignments.length} tugasan
+									{filteredAssignments.length} tugasan
 								</Badge>
 							</div>
 						</CardHeader>
@@ -704,8 +742,26 @@ function SubjectTeacherDashboard({ teacherId }: { teacherId: string }) {
 														</div>
 													</TableCell>
 												</TableRow>
+											) : filteredAssignments.length === 0 ? (
+												<TableRow>
+													<TableCell colSpan={6} className="py-16">
+														<div className="flex flex-col items-center justify-center gap-4">
+															<div className="p-4 rounded-full bg-muted/50">
+																<BookOpen className="w-12 h-12 text-muted-foreground/50" />
+															</div>
+															<div className="text-center">
+																<p className="font-semibold text-foreground">
+																	Tiada tugasan untuk subjek ini
+																</p>
+																<p className="text-sm text-muted-foreground mt-1 max-w-md">
+																	Pilih subjek lain atau semak semula tugasan yang telah ditetapkan.
+																</p>
+															</div>
+														</div>
+													</TableCell>
+												</TableRow>
 											) : (
-												assignments.map((a, index) => (
+												filteredAssignments.map((a, index) => (
 													<TableRow
 														key={a.id}
 														className="hover:bg-muted/50 transition-colors border-b border-border last:border-0 group"
@@ -772,7 +828,7 @@ function SubjectTeacherDashboard({ teacherId }: { teacherId: string }) {
 							<div className="flex flex-col sm:flex-row items-center justify-between gap-4 text-sm">
 								<div className="text-muted-foreground">
 									<span className="font-semibold text-foreground">
-										{assignments.length}
+										{filteredAssignments.length}
 									</span>{" "}
 									tugasan subjek dipaparkan
 								</div>
@@ -809,8 +865,8 @@ function SubjectTeacherDashboard({ teacherId }: { teacherId: string }) {
 							<CardContent className="space-y-4 p-6">
 								<ProfileRow label="Nama" value={teacherInfo?.name || "Belum tersedia"} />
 								<ProfileRow label="Subjek" value={subjectSummary || "Belum tersedia"} />
-								<ProfileRow label="Email" value={teacherInfo?.email || "Belum tersedia"} icon={MailIcon} />
-								<ProfileRow label="Sesi akademik" value={selectedExam?.academic_year || "-"} />
+								<ProfileRow label="E-mel" value={teacherInfo?.email || "Belum tersedia"} icon={MailIcon} />
+								<ProfileRow label="Sesi akademik" value={String(new Date().getFullYear())} />
 							</CardContent>
 						</Card>
 
@@ -997,7 +1053,7 @@ function ClassTeacherDashboard({ teacherId }: { teacherId: string }) {
 
 					<div className="flex flex-col gap-3 sm:flex-row sm:items-center">
 						<Select value={selectedExamId} onValueChange={setSelectedExamId}>
-							<SelectTrigger className="w-full sm:w-72">
+							<SelectTrigger className="w-full sm:w-auto h-11 rounded-lg border-border bg-background">
 								<SelectValue placeholder="Pilih peperiksaan" />
 							</SelectTrigger>
 							<SelectContent>

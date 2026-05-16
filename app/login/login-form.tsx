@@ -294,16 +294,26 @@ export function LoginForm({
 
                             {teacherRoles.length > 0 && (
                                 <Field>
-                                    <FieldLabel>Pilih Peranan</FieldLabel>
+                                    <FieldLabel>Pilih Jawatan</FieldLabel>
                                     <select
                                         className="w-full border rounded-md p-2 bg-background"
                                         value={selectedTeacherRole}
                                         onChange={(e) => setSelectedTeacherRole(e.target.value)}
                                         required
                                     >
-                                        <option value="">-- Pilih Peranan --</option>
+                                        <option value="">-- Pilih Jawatan --</option>
                                         {teacherRoles.map((r) => (
-                                            <option key={r} value={r}>{r}</option>
+                                            <option key={r} value={r}>
+                                                {r === "principal"
+                                                    ? "Pengetua"
+                                                    : r === "class teacher"
+                                                        ? "Guru Kelas"
+                                                        : r === "subject teacher"
+                                                            ? "Guru Subjek"
+                                                            : r === "subject coordinator"
+                                                                ? "Panitia Subjek"
+                                                                : r}
+                                            </option>
                                         ))}
                                     </select>
                                 </Field>

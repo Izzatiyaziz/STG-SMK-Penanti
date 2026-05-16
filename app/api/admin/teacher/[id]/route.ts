@@ -33,7 +33,7 @@ export async function PUT(
 
         if (email && !EMAIL_REGEX.test(String(email).trim())) {
             return NextResponse.json(
-                { error: "Format email tidak sah" },
+                { error: "Format e-mel tidak sah" },
                 { status: 400 }
             );
         }
