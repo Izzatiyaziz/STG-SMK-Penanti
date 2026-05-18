@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import supabaseAdmin from "@/lib/supabase-admin";
 import { requireApiRole } from "@/lib/auth";
+import { getGradeTemplateForClass, getPrimaryOmrComponent } from "@/lib/marking-template";
 
 export const runtime = "nodejs";
 
@@ -50,11 +51,19 @@ export async function GET(req: Request) {
       return NextResponse.json({ message: "Akses ditolak" }, { status: 403 });
     }
 
+    const { data: classMeta } = await supabaseAdmin
+      .from("stg_classes")
+      .select("grade")
+      .eq("class_id", class_id)
+      .maybeSingle();
+    const gradeGroup = Number(classMeta?.grade ?? 0) >= 4 ? "upper" : "lower";
+
     const { data: answerRows, error: answerErr } = await supabaseAdmin
       .from("stg_answer_schema")
       .select("question_no, correct_answer")
       .eq("exam_id", exam_id)
       .eq("subject_id", subject_id)
+      .eq("grade_group", gradeGroup)
       .order("question_no", { ascending: true });
 
     if (answerErr) {
@@ -67,27 +76,32 @@ export async function GET(req: Request) {
       return question_no > 0 && ["A", "B", "C", "D"].includes(correct_answer);
     });
 
-    const { data: examRow } = await supabaseAdmin
-      .from("stg_exams")
-      .select("subject_settings")
-      .eq("exam_id", exam_id)
-      .maybeSingle();
+    const [{ data: examRow }, { data: classRow }, { data: subjectRow }] = await Promise.all([
+      supabaseAdmin
+        .from("stg_exams")
+        .select("subject_settings")
+        .eq("exam_id", exam_id)
+        .maybeSingle(),
+      supabaseAdmin.from("stg_classes").select("grade").eq("class_id", class_id).maybeSingle(),
+      supabaseAdmin.from("stg_subjects").select("subject_name").eq("subject_id", subject_id).maybeSingle(),
+    ]);
 
-    const subjectSettings =
-      examRow &&
-      typeof examRow === "object" &&
-      "subject_settings" in examRow &&
-      examRow.subject_settings &&
-      typeof examRow.subject_settings === "object"
-        ? (examRow.subject_settings as Record<string, unknown>)
-        : {};
+    const templateInfo = getGradeTemplateForClass({
+      subjectSettings:
+        examRow &&
+        typeof examRow === "object" &&
+        "subject_settings" in examRow &&
+        examRow.subject_settings &&
+        typeof examRow.subject_settings === "object"
+          ? (examRow.subject_settings as Record<string, unknown>)
+          : {},
+      subjectId: subject_id,
+      subjectName: typeof subjectRow?.subject_name === "string" ? subjectRow.subject_name : "",
+      grade: typeof classRow?.grade === "number" ? classRow.grade : Number(classRow?.grade ?? 0),
+    });
+    const primaryOmr = getPrimaryOmrComponent(templateInfo.template);
 
-    const settingsForSubject =
-      subjectSettings && typeof subjectSettings === "object"
-        ? (subjectSettings[subject_id] as Record<string, unknown> | undefined)
-        : undefined;
-
-    const configuredQuestionCount = toNumber(settingsForSubject?.objective_questions);
+    const configuredQuestionCount = toNumber(primaryOmr?.question_count ?? primaryOmr?.max_mark ?? 0);
     const questionNumbers = validRows.map((row: AnswerRow) => toNumber(row.question_no));
     const question_count = validRows.length || configuredQuestionCount;
 

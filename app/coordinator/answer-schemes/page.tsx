@@ -6,475 +6,553 @@ import { toast } from "sonner";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
-	Select,
-	SelectContent,
-	SelectItem,
-	SelectTrigger,
-	SelectValue,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { FileSignature, Save, Settings2 } from "lucide-react";
+import { FileSignature, Plus, Save, Settings2, Trash2, Wand2 } from "lucide-react";
+import {
+  buildSubjectTemplatePreset,
+  getPrimaryOmrComponent,
+  getSubjectSettingsForTemplate,
+  serializeTemplateForStorage,
+  type GradeTemplate,
+  type MarkComponent,
+  type TemplateGroup,
+} from "@/lib/marking-template";
 
 type Session = {
-	user_id: string;
-	userType: "teacher";
-	role: string;
+  user_id: string;
+  userType: "teacher";
+  role: string;
 };
 
 type Exam = {
-	id: string;
-	name: string;
-	academic_year: string;
-	subject_settings?: Record<string, any>;
+  id: string;
+  name: string;
+  academic_year: string;
+  subject_settings?: Record<string, unknown>;
 };
 
 type Subject = { id: string; name: string };
 
+function createBlankComponent(index: number): MarkComponent {
+  return {
+    key: `component_${index + 1}`,
+    label: `Komponen ${index + 1}`,
+    type: "manual",
+    max_mark: 0,
+    included_in_total: true,
+  };
+}
+
 export default function AnswerSchemesPage() {
-	const router = useRouter();
-	const [session, setSession] = useState<Session | null>(null);
+  const router = useRouter();
+  const [session, setSession] = useState<Session | null>(null);
 
-	const [subjects, setSubjects] = useState<Subject[]>([]);
-	const [exams, setExams] = useState<Exam[]>([]);
-	const [subjectId, setSubjectId] = useState("");
-	const [examId, setExamId] = useState("");
+  const [subjects, setSubjects] = useState<Subject[]>([]);
+  const [exams, setExams] = useState<Exam[]>([]);
+  const [subjectId, setSubjectId] = useState("");
+  const [examId, setExamId] = useState("");
+  const [gradeGroup, setGradeGroup] = useState<TemplateGroup>("lower");
 
-	const [answers, setAnswers] = useState<Record<number, string>>({});
-	const [loading, setLoading] = useState(false);
-	const [savingSettings, setSavingSettings] = useState(false);
-	const [objectiveQuestionsInput, setObjectiveQuestionsInput] =
-		useState<string>("");
-	const [objectiveMaxInput, setObjectiveMaxInput] = useState<string>("");
-	const [subjectiveQuestionsInput, setSubjectiveQuestionsInput] =
-		useState<string>("");
-	const [subjectiveMaxInput, setSubjectiveMaxInput] = useState<string>("");
-	const [deadlineInput, setDeadlineInput] = useState<string>("");
+  const [deadlineInput, setDeadlineInput] = useState<string>("");
+  const [templates, setTemplates] = useState<Record<TemplateGroup, GradeTemplate>>({
+    lower: buildSubjectTemplatePreset("", "lower"),
+    upper: buildSubjectTemplatePreset("", "upper"),
+  });
+  const [answers, setAnswers] = useState<Record<number, string>>({});
+  const [loading, setLoading] = useState(false);
+  const [savingSettings, setSavingSettings] = useState(false);
 
-	useEffect(() => {
-		try {
-			const raw = localStorage.getItem("stg_session");
-			if (!raw) return;
-			const parsed = JSON.parse(raw);
-			if (parsed?.userType !== "teacher") return;
-			setSession(parsed as Session);
-		} catch {
-			// ignore
-		}
-	}, []);
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem("stg_session");
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      if (parsed?.userType !== "teacher") return;
+      setSession(parsed as Session);
+    } catch {
+      // ignore
+    }
+  }, []);
 
-	useEffect(() => {
-		if (!session) return;
-		const role = String(session.role ?? "")
-			.toLowerCase()
-			.trim();
-		if (role !== "subject coordinator") {
-			toast.error("Hanya Panitia Subjek boleh akses halaman ini");
-			router.replace("/teacher/dashboard");
-		}
-	}, [router, session]);
+  useEffect(() => {
+    if (!session) return;
+    const role = String(session.role ?? "").toLowerCase().trim();
+    if (role !== "subject coordinator") {
+      toast.error("Hanya Penyelaras Subjek boleh akses halaman ini");
+      router.replace("/teacher/dashboard");
+    }
+  }, [router, session]);
 
-	const selectedExam = useMemo(() => {
-		return exams.find((e) => e.id === examId) ?? null;
-	}, [examId, exams]);
+  const selectedExam = useMemo(() => exams.find((exam) => exam.id === examId) ?? null, [examId, exams]);
+  const selectedSubject = useMemo(
+    () => subjects.find((subject) => subject.id === subjectId) ?? null,
+    [subjectId, subjects],
+  );
+  const activeTemplate = templates[gradeGroup];
+  const primaryOmrComponent = getPrimaryOmrComponent(activeTemplate);
+  const answerQuestionCount = primaryOmrComponent?.question_count ?? primaryOmrComponent?.max_mark ?? 0;
 
-	const objectiveQuestions = useMemo(() => {
-		if (!selectedExam || !subjectId) return 0;
-		const settings = (selectedExam.subject_settings ?? {}) as Record<string, any>;
-		return Number(settings?.[subjectId]?.objective_questions ?? 0);
-	}, [selectedExam, subjectId]);
+  async function loadOptions() {
+    if (!session) return;
+    setLoading(true);
+    try {
+      const [sRes, eRes] = await Promise.all([
+        fetch(`/api/coordinator/subjects?teacher_id=${session.user_id}`, {
+          cache: "no-store",
+        }),
+        fetch("/api/admin/exams", { cache: "no-store" }),
+      ]);
 
-	const currentSubjectSettings = useMemo(() => {
-		if (!selectedExam || !subjectId) return {} as Record<string, any>;
-		const all = (selectedExam.subject_settings ?? {}) as Record<string, any>;
-		const s = all?.[subjectId];
-		return s && typeof s === "object"
-			? (s as Record<string, any>)
-			: ({} as Record<string, any>);
-	}, [selectedExam, subjectId]);
+      const sJson = await sRes.json();
+      const eJson = await eRes.json();
 
-	async function loadOptions() {
-		if (!session) return;
-		setLoading(true);
-		try {
-			const [sRes, eRes] = await Promise.all([
-				fetch(`/api/coordinator/subjects?teacher_id=${session.user_id}`, {
-					cache: "no-store",
-				}),
-				fetch("/api/admin/exams", { cache: "no-store" }),
-			]);
+      const subjectList = Array.isArray(sJson?.data) ? (sJson.data as Subject[]) : [];
+      const examList: Exam[] = Array.isArray(eJson) ? eJson : [];
+      setSubjects(subjectList);
+      setExams(examList);
 
-			const sJson = await sRes.json();
-			const eJson = await eRes.json();
+      if (subjectList.length > 0) setSubjectId((current) => current || subjectList[0].id);
+      if (examList.length > 0) setExamId((current) => current || examList[0].id);
+    } catch {
+      setSubjects([]);
+      setExams([]);
+    } finally {
+      setLoading(false);
+    }
+  }
 
-			setSubjects(sJson?.data ?? []);
-			// /api/admin/exams can return either an array or a wrapper like { data: [...] }.
-			const examsList: Exam[] = Array.isArray(eJson)
-				? eJson
-				: Array.isArray((eJson as { data?: unknown })?.data)
-					? ((eJson as { data: Exam[] }).data ?? [])
-					: [];
-			setExams(examsList);
+  useEffect(() => {
+    if (!session) return;
+    loadOptions();
+  }, [session]);
 
-			if ((sJson?.data ?? []).length > 0) setSubjectId(sJson.data[0].id);
-			if (examsList.length > 0) setExamId(examsList[0].id);
-		} catch {
-			setSubjects([]);
-			setExams([]);
-		} finally {
-			setLoading(false);
-		}
-	}
+  useEffect(() => {
+    if (!selectedExam || !selectedSubject) return;
+    const settings = getSubjectSettingsForTemplate(
+      selectedExam.subject_settings as Record<string, unknown> | undefined,
+      selectedSubject.id,
+      selectedSubject.name,
+    );
+    setTemplates({
+      lower: settings.grade_templates?.lower ?? buildSubjectTemplatePreset(selectedSubject.name, "lower"),
+      upper: settings.grade_templates?.upper ?? buildSubjectTemplatePreset(selectedSubject.name, "upper"),
+    });
+    setDeadlineInput(typeof settings.deadline === "string" ? settings.deadline : "");
+  }, [selectedExam, selectedSubject]);
 
-	async function loadExistingSchema() {
-		if (!examId || !subjectId) return;
-		try {
-			const res = await fetch(
-				`/api/coordinator/answer-schemes?exam_id=${examId}&subject_id=${subjectId}`,
-				{ cache: "no-store" },
-			);
-			const json = await res.json();
-			const map: Record<number, string> = {};
-			for (const row of json?.data ?? []) {
-				map[Number(row.question_no)] = String(row.correct_answer ?? "");
-			}
-			setAnswers(map);
-		} catch {
-			setAnswers({});
-		}
-	}
+  async function loadExistingSchema() {
+    if (!examId || !subjectId) return;
+    try {
+      const res = await fetch(
+        `/api/coordinator/answer-schemes?exam_id=${examId}&subject_id=${subjectId}&grade_group=${gradeGroup}`,
+        { cache: "no-store" },
+      );
+      const json = await res.json();
+      const map: Record<number, string> = {};
+      for (const row of json?.data ?? []) {
+        map[Number(row.question_no)] = String(row.correct_answer ?? "");
+      }
+      setAnswers(map);
+    } catch {
+      setAnswers({});
+    }
+  }
 
-	useEffect(() => {
-		if (!session) return;
-		loadOptions();
-		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [session?.user_id]);
+  useEffect(() => {
+    loadExistingSchema();
+  }, [examId, subjectId, gradeGroup]);
 
-	useEffect(() => {
-		loadExistingSchema();
-		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [examId, subjectId]);
+  function updateActiveTemplate(updater: (template: GradeTemplate) => GradeTemplate) {
+    setTemplates((current) => ({
+      ...current,
+      [gradeGroup]: updater(current[gradeGroup]),
+    }));
+  }
 
-	useEffect(() => {
-		const oq = currentSubjectSettings?.objective_questions;
-		const om = currentSubjectSettings?.objective_max;
-		const sq = currentSubjectSettings?.subjective_questions;
-		const sm = currentSubjectSettings?.subjective_max;
-		const dl = currentSubjectSettings?.deadline;
+  function applyPreset(group: TemplateGroup) {
+    const subjectName = selectedSubject?.name ?? "";
+    setTemplates((current) => ({
+      ...current,
+      [group]: buildSubjectTemplatePreset(subjectName, group),
+    }));
+    toast.success(`Preset ${group === "lower" ? "Form 1-3" : "Form 4-5"} dimuatkan`);
+  }
 
-		setObjectiveQuestionsInput(oq === undefined || oq === null ? "" : String(oq));
-		setObjectiveMaxInput(om === undefined || om === null ? "" : String(om));
-		setSubjectiveQuestionsInput(
-			sq === undefined || sq === null ? "" : String(sq),
-		);
-		setSubjectiveMaxInput(sm === undefined || sm === null ? "" : String(sm));
-		setDeadlineInput(typeof dl === "string" ? dl : "");
-		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [examId, subjectId, selectedExam?.subject_settings]);
+  async function handleSaveSettings() {
+    if (!session || !examId || !subjectId) return;
+    if (deadlineInput && !/^\d{4}-\d{2}-\d{2}$/.test(deadlineInput)) {
+      toast.error("Format deadline mesti YYYY-MM-DD");
+      return;
+    }
 
-	async function handleSaveSettings() {
-		if (!session || !examId || !subjectId) return;
+    setSavingSettings(true);
+    const toastId = toast.loading("Menyimpan template pemarkahan...");
+    try {
+      const res = await fetch("/api/coordinator/exam-subject-settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          coordinator_teacher_id: session.user_id,
+          exam_id: examId,
+          subject_id: subjectId,
+          deadline: deadlineInput.trim(),
+          grade_templates: {
+            lower: serializeTemplateForStorage(templates.lower),
+            upper: serializeTemplateForStorage(templates.upper),
+          },
+        }),
+      });
 
-		const oq =
-			objectiveQuestionsInput === "" ? null : Number(objectiveQuestionsInput);
-		const om = objectiveMaxInput === "" ? null : Number(objectiveMaxInput);
-		const sq =
-			subjectiveQuestionsInput === "" ? null : Number(subjectiveQuestionsInput);
-		const sm = subjectiveMaxInput === "" ? null : Number(subjectiveMaxInput);
-		const deadline = deadlineInput.trim();
+      const json = await res.json();
+      if (!res.ok) {
+        toast.error(json?.message ?? "Gagal simpan template", { id: toastId });
+        return;
+      }
 
-		if (oq !== null && (!Number.isFinite(oq) || oq < 0 || oq > 200)) {
-			toast.error("Bil. soalan objektif tidak sah");
-			return;
-		}
-		if (om !== null && (!Number.isFinite(om) || om < 0 || om > 200)) {
-			toast.error("Markah maks objektif tidak sah");
-			return;
-		}
-		if (sq !== null && (!Number.isFinite(sq) || sq < 0 || sq > 50)) {
-			toast.error("Bil. soalan subjektif tidak sah");
-			return;
-		}
-		if (sm !== null && (!Number.isFinite(sm) || sm < 0 || sm > 200)) {
-			toast.error("Markah maks subjektif tidak sah");
-			return;
-		}
-		if (deadline && !/^\d{4}-\d{2}-\d{2}$/.test(deadline)) {
-			toast.error("Format deadline mesti YYYY-MM-DD");
-			return;
-		}
+      toast.success("Template pemarkahan disimpan", { id: toastId });
+      await loadOptions();
+    } catch {
+      toast.error("Ralat sistem", { id: toastId });
+    } finally {
+      setSavingSettings(false);
+    }
+  }
 
-		setSavingSettings(true);
-		const toastId = toast.loading("Menyimpan settings...");
-		try {
-			const res = await fetch("/api/coordinator/exam-subject-settings", {
-				method: "POST",
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({
-					coordinator_teacher_id: session.user_id,
-					exam_id: examId,
-					subject_id: subjectId,
-					objective_questions: oq,
-					objective_max: om,
-					subjective_questions: sq,
-					subjective_max: sm,
-					deadline,
-				}),
-			});
+  async function handleSaveAnswers() {
+    if (!examId || !subjectId) return;
+    if (!primaryOmrComponent || answerQuestionCount <= 0) {
+      toast.error("Template aktif tiada komponen OMR");
+      return;
+    }
 
-			const json = await res.json();
-			if (!res.ok) {
-				toast.error(json?.message ?? "Gagal simpan settings", { id: toastId });
-				return;
-			}
+    const payload = Array.from({ length: answerQuestionCount }).map((_, index) => {
+      const questionNo = index + 1;
+      return {
+        question_no: questionNo,
+        correct_answer: answers[questionNo] ?? "",
+      };
+    });
 
-			toast.success("Settings disimpan", { id: toastId });
+    const toastId = toast.loading("Menyimpan skema jawapan...");
+    try {
+      const res = await fetch("/api/coordinator/answer-schemes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          exam_id: examId,
+          subject_id: subjectId,
+          grade_group: gradeGroup,
+          answers: payload,
+        }),
+      });
 
-			const eRes = await fetch("/api/admin/exams", { cache: "no-store" });
-			const eJson = await eRes.json();
-			const examsList: Exam[] = Array.isArray(eJson)
-				? eJson
-				: Array.isArray((eJson as { data?: unknown })?.data)
-					? ((eJson as { data: Exam[] }).data ?? [])
-					: [];
-			setExams(examsList);
-		} catch {
-			toast.error("Ralat sistem", { id: toastId });
-		} finally {
-			setSavingSettings(false);
-		}
-	}
+      const json = await res.json();
+      if (!res.ok) {
+        toast.error(json?.message ?? "Gagal", { id: toastId });
+        return;
+      }
 
-	async function handleSave() {
-		if (!examId || !subjectId) return;
-		if (!objectiveQuestions) {
-			toast.error(
-				"Sila set bilangan soalan objektif dahulu (Admin > Exams > Settings untuk subjek ini).",
-			);
-			return;
-		}
+      toast.success("Skema jawapan berjaya disimpan", { id: toastId });
+      loadExistingSchema();
+    } catch {
+      toast.error("Ralat sistem", { id: toastId });
+    }
+  }
 
-		const payload = Array.from({ length: objectiveQuestions }).map((_, i) => {
-			const q = i + 1;
-			return { question_no: q, correct_answer: answers[q] ?? "" };
-		});
+  function totalIncludedMax(template: GradeTemplate) {
+    return template.components
+      .filter((component) => component.included_in_total !== false)
+      .reduce((sum, component) => sum + Number(component.max_mark || 0), 0);
+  }
 
-		const toastId = toast.loading("Menyimpan skema jawapan...");
-		try {
-			const res = await fetch("/api/coordinator/answer-schemes", {
-				method: "POST",
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({
-					exam_id: examId,
-					subject_id: subjectId,
-					answers: payload,
-				}),
-			});
+  return (
+    <div className="min-h-screen bg-gradient-to-b from-background to-muted/20 p-4 md:p-6 overflow-x-hidden">
+      <div className="mx-auto max-w-7xl space-y-6">
+        <div className="flex items-center gap-3">
+          <div className="rounded-xl bg-primary/10 p-2">
+            <FileSignature className="h-6 w-6 text-primary" />
+          </div>
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight">Template Pemarkahan</h1>
+            <p className="text-muted-foreground">
+              Urus template `Form 1-3` dan `Form 4-5` untuk setiap subjek dan peperiksaan.
+            </p>
+          </div>
+        </div>
 
-			const json = await res.json();
-			if (!res.ok) {
-				toast.error(json?.message ?? "Gagal", { id: toastId });
-				return;
-			}
+        <Card className="border border-border/50 shadow-lg">
+          <CardContent className="grid grid-cols-1 gap-4 p-4 md:grid-cols-4">
+            <div className="space-y-2">
+              <div className="text-sm text-muted-foreground">Peperiksaan</div>
+              <Select value={examId} onValueChange={setExamId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Pilih peperiksaan" />
+                </SelectTrigger>
+                <SelectContent>
+                  {exams.map((exam) => (
+                    <SelectItem key={exam.id} value={exam.id}>
+                      {exam.name} ({exam.academic_year})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
 
-			toast.success("Skema jawapan berjaya disimpan", { id: toastId });
-			loadExistingSchema();
-		} catch {
-			toast.error("Ralat sistem", { id: toastId });
-		}
-	}
+            <div className="space-y-2">
+              <div className="text-sm text-muted-foreground">Subjek</div>
+              <Select value={subjectId} onValueChange={setSubjectId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Pilih subjek" />
+                </SelectTrigger>
+                <SelectContent>
+                  {subjects.map((subject) => (
+                    <SelectItem key={subject.id} value={subject.id}>
+                      {subject.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
 
-	return (
-		<div className="min-h-screen bg-gradient-to-b from-background to-muted/20 p-4 md:p-6 overflow-x-hidden">
-			<div className="max-w-7xl mx-auto space-y-6">
-				<div className="flex items-center gap-3">
-					<div className="p-2 rounded-xl bg-primary/10">
-						<FileSignature className="w-6 h-6 text-primary" />
-					</div>
-					<div>
-						<h1 className="text-3xl font-bold tracking-tight">Skema Jawapan</h1>
-						<p className="text-muted-foreground">
-							Tetapkan jawapan objektif untuk semakan OMR / pemarkahan.
-						</p>
-					</div>
-				</div>
+            <div className="space-y-2">
+              <div className="text-sm text-muted-foreground">Template Aktif</div>
+              <Select value={gradeGroup} onValueChange={(value) => setGradeGroup(value as TemplateGroup)}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Pilih template" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="lower">Form 1-3</SelectItem>
+                  <SelectItem value="upper">Form 4-5</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
 
-				<Card className="shadow-lg border border-border/50">
-					<CardContent className="p-4 grid grid-cols-1 md:grid-cols-3 gap-4">
-						<div className="space-y-2 min-w-0">
-							<div className="text-sm text-muted-foreground">Peperiksaan</div>
-							<Select value={examId} onValueChange={setExamId}>
-								<SelectTrigger className="w-full min-w-0">
-									<SelectValue placeholder="Pilih peperiksaan" className="truncate" />
-								</SelectTrigger>
-								<SelectContent className="max-w-[calc(100vw-2rem)] w-[--radix-select-trigger-width]">
-									{exams.map((e) => (
-										<SelectItem key={e.id} value={e.id}>
-											<span className="block truncate">
-												{e.name} ({e.academic_year})
-											</span>
-										</SelectItem>
-									))}
-								</SelectContent>
-							</Select>
-						</div>
+            <div className="space-y-2">
+              <div className="text-sm text-muted-foreground">Deadline</div>
+              <Input value={deadlineInput} onChange={(event) => setDeadlineInput(event.target.value)} placeholder="2026-05-31" />
+            </div>
+          </CardContent>
+        </Card>
 
-						<div className="space-y-2 min-w-0">
-							<div className="text-sm text-muted-foreground">Subjek</div>
-							<Select value={subjectId} onValueChange={setSubjectId}>
-								<SelectTrigger className="w-full min-w-0">
-									<SelectValue placeholder="Pilih subjek" className="truncate" />
-								</SelectTrigger>
-								<SelectContent className="max-w-[calc(100vw-2rem)] w-[--radix-select-trigger-width]">
-									{subjects.map((s) => (
-										<SelectItem key={s.id} value={s.id}>
-											<span className="block truncate">{s.name}</span>
-										</SelectItem>
-									))}
-								</SelectContent>
-							</Select>
-						</div>
+        <Card className="border border-border/50 shadow-lg">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Settings2 className="h-5 w-5 text-primary" />
+              Struktur Komponen {gradeGroup === "lower" ? "Form 1-3" : "Form 4-5"}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" variant="outline" onClick={() => applyPreset(gradeGroup)}>
+                <Wand2 className="mr-2 h-4 w-4" />
+                Muat Preset
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() =>
+                  updateActiveTemplate((template) => ({
+                    ...template,
+                    components: [...template.components, createBlankComponent(template.components.length)],
+                  }))
+                }
+              >
+                <Plus className="mr-2 h-4 w-4" />
+                Tambah Komponen
+              </Button>
+            </div>
 
-						<div className="space-y-2">
-							<div className="text-sm text-muted-foreground">Bil. Soalan</div>
-							<div className="flex items-center gap-2">
-								<Badge variant="outline">{objectiveQuestions || 0}</Badge>
-								{loading && (
-									<span className="text-sm text-muted-foreground">Memuatkan...</span>
-								)}
-							</div>
-						</div>
-					</CardContent>
-				</Card>
+            <div className="grid gap-3">
+              {activeTemplate.components.map((component, index) => (
+                <div key={`${component.key}-${index}`} className="grid gap-3 rounded-lg border border-border/60 p-4 lg:grid-cols-[1.1fr_1.2fr_0.8fr_0.8fr_0.9fr_0.9fr_auto]">
+                  <Input
+                    value={component.key}
+                    onChange={(event) =>
+                      updateActiveTemplate((template) => ({
+                        ...template,
+                        components: template.components.map((item, itemIndex) =>
+                          itemIndex === index ? { ...item, key: event.target.value } : item,
+                        ),
+                      }))
+                    }
+                    placeholder="key"
+                  />
+                  <Input
+                    value={component.label}
+                    onChange={(event) =>
+                      updateActiveTemplate((template) => ({
+                        ...template,
+                        components: template.components.map((item, itemIndex) =>
+                          itemIndex === index ? { ...item, label: event.target.value } : item,
+                        ),
+                      }))
+                    }
+                    placeholder="Label"
+                  />
+                  <Select
+                    value={component.type}
+                    onValueChange={(value) =>
+                      updateActiveTemplate((template) => ({
+                        ...template,
+                        components: template.components.map((item, itemIndex) =>
+                          itemIndex === index ? { ...item, type: value as "manual" | "omr" } : item,
+                        ),
+                      }))
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="manual">Manual</SelectItem>
+                      <SelectItem value="omr">OMR</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Input
+                    type="number"
+                    min={0}
+                    value={component.max_mark}
+                    onChange={(event) =>
+                      updateActiveTemplate((template) => ({
+                        ...template,
+                        components: template.components.map((item, itemIndex) =>
+                          itemIndex === index ? { ...item, max_mark: Number(event.target.value) || 0 } : item,
+                        ),
+                      }))
+                    }
+                    placeholder="Markah"
+                  />
+                  <Input
+                    type="number"
+                    min={0}
+                    value={component.question_count ?? ""}
+                    onChange={(event) =>
+                      updateActiveTemplate((template) => ({
+                        ...template,
+                        components: template.components.map((item, itemIndex) =>
+                          itemIndex === index
+                            ? {
+                                ...item,
+                                question_count: event.target.value ? Number(event.target.value) || 0 : undefined,
+                              }
+                            : item,
+                        ),
+                      }))
+                    }
+                    placeholder="Bil. soalan"
+                  />
+                  <Select
+                    value={component.included_in_total === false ? "exclude" : "include"}
+                    onValueChange={(value) =>
+                      updateActiveTemplate((template) => ({
+                        ...template,
+                        components: template.components.map((item, itemIndex) =>
+                          itemIndex === index
+                            ? { ...item, included_in_total: value !== "exclude" }
+                            : item,
+                        ),
+                      }))
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="include">Masuk jumlah</SelectItem>
+                      <SelectItem value="exclude">Tak masuk jumlah</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    onClick={() =>
+                      updateActiveTemplate((template) => ({
+                        ...template,
+                        components: template.components.filter((_, itemIndex) => itemIndex !== index),
+                      }))
+                    }
+                  >
+                    <Trash2 className="h-4 w-4 text-rose-600" />
+                  </Button>
+                </div>
+              ))}
+            </div>
 
-				<Card className="shadow-lg border border-border/50">
-					<CardHeader>
-						<CardTitle className="flex items-center gap-2">
-							<Settings2 className="w-5 h-5 text-primary" />
-							Settings Subjek (Peperiksaan)
-						</CardTitle>
-					</CardHeader>
-					<CardContent className="space-y-4">
-						<div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
-							<div className="space-y-2">
-								<div className="text-sm text-muted-foreground">Objektif (Bil.)</div>
-								<Input
-									type="number"
-									min={0}
-									value={objectiveQuestionsInput}
-									onChange={(e) => setObjectiveQuestionsInput(e.target.value)}
-									placeholder="40"
-								/>
-							</div>
-							<div className="space-y-2">
-								<div className="text-sm text-muted-foreground">Objektif (Markah)</div>
-								<Input
-									type="number"
-									min={0}
-									value={objectiveMaxInput}
-									onChange={(e) => setObjectiveMaxInput(e.target.value)}
-									placeholder="40"
-								/>
-							</div>
-							<div className="space-y-2">
-								<div className="text-sm text-muted-foreground">Subjektif (Bil.)</div>
-								<Input
-									type="number"
-									min={0}
-									value={subjectiveQuestionsInput}
-									onChange={(e) => setSubjectiveQuestionsInput(e.target.value)}
-									placeholder="5"
-								/>
-							</div>
-							<div className="space-y-2">
-								<div className="text-sm text-muted-foreground">Subjektif (Markah)</div>
-								<Input
-									type="number"
-									min={0}
-									value={subjectiveMaxInput}
-									onChange={(e) => setSubjectiveMaxInput(e.target.value)}
-									placeholder="60"
-								/>
-							</div>
-							<div className="space-y-2">
-								<div className="text-sm text-muted-foreground">
-									Deadline (YYYY-MM-DD)
-								</div>
-								<Input
-									value={deadlineInput}
-									onChange={(e) => setDeadlineInput(e.target.value)}
-									placeholder="2026-04-30"
-								/>
-							</div>
-						</div>
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge variant="outline">Komponen: {activeTemplate.components.length}</Badge>
+              <Badge variant="outline">Jumlah dikira: {totalIncludedMax(activeTemplate)}</Badge>
+              <Badge variant="outline">OMR aktif: {primaryOmrComponent ? primaryOmrComponent.label : "Tiada"}</Badge>
+            </div>
 
-						<div className="flex justify-end">
-							<Button
-								variant="outline"
-								className="w-full sm:w-auto"
-								onClick={handleSaveSettings}
-								disabled={loading || savingSettings || !examId || !subjectId}
-							>
-								<Save className="w-4 h-4 mr-2" />
-								Simpan Settings
-							</Button>
-						</div>
-					</CardContent>
-				</Card>
+            <div className="flex justify-end">
+              <Button onClick={handleSaveSettings} disabled={loading || savingSettings || !examId || !subjectId}>
+                <Save className="mr-2 h-4 w-4" />
+                Simpan Template
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
 
-				<Card className="shadow-lg border border-border/50">
-					<CardHeader>
-						<CardTitle>Jawapan Objektif</CardTitle>
-					</CardHeader>
-					<CardContent className="space-y-3">
-						{!objectiveQuestions && (
-							<div className="text-sm text-muted-foreground">
-								Sila set bilangan soalan objektif dahulu di Settings Subjek
-								(Peperiksaan).
-							</div>
-						)}
+        <Card className="border border-border/50 shadow-lg">
+          <CardHeader>
+            <CardTitle>Skema Jawapan OMR</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {!primaryOmrComponent && (
+              <div className="text-sm text-muted-foreground">
+                Template aktif tiada komponen OMR. Skema jawapan tidak diperlukan.
+              </div>
+            )}
 
-						{objectiveQuestions > 0 && (
-						<div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
-								{Array.from({ length: objectiveQuestions }).map((_, i) => {
-									const q = i + 1;
-									return (
-										<div key={q} className="space-y-1 min-w-0">
-											<div className="text-xs text-muted-foreground">Q{q}</div>
-											<Input
-												value={answers[q] ?? ""}
-												onChange={(e) =>
-													setAnswers((prev) => ({
-														...prev,
-														[q]: e.target.value
-															.toUpperCase()
-															.replace(/[^ABCD]/g, "")
-															.slice(0, 1),
-													}))
-												}
-												maxLength={1}
-												placeholder="A"
-											/>
-										</div>
-									);
-								})}
-							</div>
-						)}
+            {primaryOmrComponent && (
+              <>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge variant="outline">{primaryOmrComponent.label}</Badge>
+                  <Badge variant="outline">{answerQuestionCount} soalan</Badge>
+                </div>
 
-						<div className="flex justify-end">
-							<Button
-								className="w-full sm:w-auto"
-								onClick={handleSave}
-								disabled={loading || !examId || !subjectId || !objectiveQuestions}
-							>
-								<Save className="w-4 h-4 mr-2" />
-								Simpan Skema
-							</Button>
-						</div>
-					</CardContent>
-				</Card>
-			</div>
-		</div>
-	);
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
+                  {Array.from({ length: answerQuestionCount }).map((_, index) => {
+                    const questionNo = index + 1;
+                    return (
+                      <div key={questionNo} className="space-y-1">
+                        <div className="text-xs text-muted-foreground">Q{questionNo}</div>
+                        <Input
+                          value={answers[questionNo] ?? ""}
+                          onChange={(event) =>
+                            setAnswers((current) => ({
+                              ...current,
+                              [questionNo]: event.target.value.toUpperCase().replace(/[^ABCD]/g, "").slice(0, 1),
+                            }))
+                          }
+                          maxLength={1}
+                          placeholder="A"
+                        />
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <div className="flex justify-end">
+                  <Button onClick={handleSaveAnswers} disabled={!examId || !subjectId}>
+                    <Save className="mr-2 h-4 w-4" />
+                    Simpan Skema OMR
+                  </Button>
+                </div>
+              </>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
 }

@@ -11,8 +11,14 @@ type SubmissionMark = {
     result_id: string;
     student: string;
     student_id: string;
-    objective: number;
-    subjective: number;
+    components: Array<{
+        key: string;
+        label: string;
+        type: string;
+        mark: number;
+        max_mark: number;
+        included_in_total: boolean;
+    }>;
     total: number;
     grade: string;
 };
@@ -172,7 +178,7 @@ export async function GET(req: Request) {
             new Set(canonicalResults.map((r) => toId(r.subjective_id)))
         ).filter(Boolean);
 
-        const [{ data: students }, { data: classes }, { data: subjects }, { data: exams }, { data: omrScans }, { data: subjectiveMarks }] =
+        const [{ data: students }, { data: classes }, { data: subjects }, { data: exams }, { data: omrScans }, { data: subjectiveMarks }, { data: componentRows }] =
             await Promise.all([
                 supabase
                     .from("stg_students")
@@ -198,6 +204,14 @@ export async function GET(req: Request) {
                     .from("stg_subjective_marks")
                     .select("subjective_id, subjective_mark, teacher_id, input_date")
                     .in("subjective_id", subjectiveIds),
+                supabase
+                    .from("stg_mark_components")
+                    .select(
+                        "student_id, subject_id, exam_id, component_key, component_label, component_type, mark, max_mark, included_in_total"
+                    )
+                    .in("student_id", studentIds)
+                    .in("subject_id", subjectIds)
+                    .in("exam_id", examIds),
             ]);
 
         const studentInfoById = new Map<string, { name: string; classId: string | null }>();
@@ -268,6 +282,36 @@ export async function GET(req: Request) {
             if (teacherId) teacherIds.add(teacherId);
         }
 
+        const componentMapByCompositeKey = new Map<
+            string,
+            Array<{
+                key: string;
+                label: string;
+                type: string;
+                mark: number;
+                max_mark: number;
+                included_in_total: boolean;
+            }>
+        >();
+        for (const row of Array.isArray(componentRows) ? componentRows : []) {
+            if (!row || typeof row !== "object") continue;
+            const studentId = toId((row as { student_id?: unknown }).student_id);
+            const subjectId = toId((row as { subject_id?: unknown }).subject_id);
+            const examId = toId((row as { exam_id?: unknown }).exam_id);
+            const componentKey = toId((row as { component_key?: unknown }).component_key);
+            if (!studentId || !subjectId || !examId || !componentKey) continue;
+            const key = [studentId, subjectId, examId].join("|");
+            if (!componentMapByCompositeKey.has(key)) componentMapByCompositeKey.set(key, []);
+            componentMapByCompositeKey.get(key)!.push({
+                key: componentKey,
+                label: toId((row as { component_label?: unknown }).component_label) || componentKey,
+                type: toId((row as { component_type?: unknown }).component_type),
+                mark: toNumber((row as { mark?: unknown }).mark),
+                max_mark: toNumber((row as { max_mark?: unknown }).max_mark),
+                included_in_total: Boolean((row as { included_in_total?: unknown }).included_in_total),
+            });
+        }
+
         const { data: teachers } = teacherIds.size
             ? await supabase
                   .from("stg_teachers")
@@ -326,10 +370,31 @@ export async function GET(req: Request) {
 
             const key = [subject_id, class_id ?? "no-class", exam_id, teacher_id ?? "no-teacher"].join("|");
 
-            const objective = omr_scan_id ? objectiveTotalByOmrId.get(omr_scan_id) ?? 0 : 0;
-            const subjective = subjectiveInfo?.mark ?? 0;
             const total = toNumber((row as { total?: unknown }).total);
             const grade = toId((row as { grade?: unknown }).grade);
+            const compositeKey = [student_id, subject_id, exam_id].join("|");
+            const components = componentMapByCompositeKey.get(compositeKey) ?? [];
+            const fallbackComponents =
+                components.length > 0
+                    ? components
+                    : [
+                          {
+                              key: "objective",
+                              label: "Objektif",
+                              type: "omr",
+                              mark: omr_scan_id ? objectiveTotalByOmrId.get(omr_scan_id) ?? 0 : 0,
+                              max_mark: 0,
+                              included_in_total: true,
+                          },
+                          {
+                              key: "subjective",
+                              label: "Subjektif",
+                              type: "manual",
+                              mark: subjectiveInfo?.mark ?? 0,
+                              max_mark: 0,
+                              included_in_total: true,
+                          },
+                      ];
 
             if (!submissionsByKey.has(key)) {
                 submissionsByKey.set(key, {
@@ -360,8 +425,7 @@ export async function GET(req: Request) {
                 result_id,
                 student: studentInfo?.name ?? student_id,
                 student_id,
-                objective,
-                subjective,
+                components: fallbackComponents,
                 total,
                 grade,
             });

@@ -79,8 +79,14 @@ type Submission = {
 		result_id: string;
 		student: string;
 		student_id: string;
-		objective: number;
-		subjective: number;
+		components: Array<{
+			key: string;
+			label: string;
+			type: string;
+			mark: number;
+			max_mark: number;
+			included_in_total: boolean;
+		}>;
 		total: number;
 		grade: string;
 	}>;
@@ -745,15 +751,12 @@ export default function SubjectCoordinatorApprovalPage() {
 												<TableHead className="font-semibold text-foreground py-4">
 													Pelajar
 												</TableHead>
-												<TableHead className="font-semibold text-foreground py-4 text-center">
-													Objektif
-												</TableHead>
-												<TableHead className="font-semibold text-foreground py-4 text-center">
-													Subjektif
-												</TableHead>
-												<TableHead className="font-semibold text-foreground py-4 text-center">
-													Jumlah
-												</TableHead>
+										<TableHead className="font-semibold text-foreground py-4 text-center">
+											Komponen
+										</TableHead>
+										<TableHead className="font-semibold text-foreground py-4 text-center">
+											Jumlah
+										</TableHead>
 												<TableHead className="font-semibold text-foreground py-4 text-center">
 													Gred
 												</TableHead>
@@ -761,8 +764,7 @@ export default function SubjectCoordinatorApprovalPage() {
 										</TableHeader>
 										<TableBody>
 											{selected.marks.map((mark) => {
-												const total = Number(mark.objective) + Number(mark.subjective);
-												const invalid = total > 100;
+												const invalid = Number(mark.total) > 100;
 												return (
 													<TableRow
 														key={mark.result_id}
@@ -772,13 +774,19 @@ export default function SubjectCoordinatorApprovalPage() {
 															{mark.student}
 														</TableCell>
 														<TableCell className="py-4 text-center">
-															{mark.objective}
-														</TableCell>
-														<TableCell className="py-4 text-center">
-															{mark.subjective}
+															<div className="space-y-1 text-left">
+																{mark.components.map((component) => (
+																	<div key={component.key} className="flex justify-between gap-3 text-sm">
+																		<span>{component.label}</span>
+																		<span className="font-medium">
+																			{component.mark}/{component.max_mark || "-"}
+																		</span>
+																	</div>
+																))}
+															</div>
 														</TableCell>
 														<TableCell className="py-4 text-center font-semibold">
-															{total}
+															{mark.total}%
 														</TableCell>
 														<TableCell className="py-4 text-center">
 															{mark.grade || "-"}
