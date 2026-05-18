@@ -23,6 +23,7 @@ export async function GET(req: Request) {
         const { searchParams } = new URL(req.url);
         const exam_id = String(searchParams.get("exam_id") ?? "").trim();
         const subject_id = String(searchParams.get("subject_id") ?? "").trim();
+        const grade_group = String(searchParams.get("grade_group") ?? "").trim();
 
         if (!exam_id || !subject_id) {
             return NextResponse.json({ data: [] });
@@ -33,9 +34,10 @@ export async function GET(req: Request) {
 
         const { data, error } = await supabaseAdmin
             .from("stg_answer_schema")
-            .select("schema_id, question_no, correct_answer")
+            .select("schema_id, question_no, correct_answer, grade_group")
             .eq("exam_id", exam_id)
             .eq("subject_id", subject_id)
+            .eq("grade_group", grade_group || "lower")
             .order("question_no", { ascending: true });
 
         if (error) {
@@ -47,6 +49,7 @@ export async function GET(req: Request) {
                 id: r.schema_id,
                 question_no: r.question_no,
                 correct_answer: r.correct_answer,
+                grade_group: r.grade_group,
             })),
         });
     } catch (err) {
@@ -63,6 +66,7 @@ export async function POST(req: Request) {
         const body = await req.json();
         const exam_id = String(body?.exam_id ?? "").trim();
         const subject_id = String(body?.subject_id ?? "").trim();
+        const grade_group = String(body?.grade_group ?? "").trim() || "lower";
         const answers = Array.isArray(body?.answers) ? body.answers : [];
 
         if (!exam_id || !subject_id || answers.length === 0) {
@@ -79,6 +83,7 @@ export async function POST(req: Request) {
             .map((a: any) => ({
                 exam_id,
                 subject_id,
+                grade_group,
                 question_no: Number(a?.question_no ?? 0),
                 correct_answer: String(a?.correct_answer ?? "").trim().toUpperCase(),
             }))
@@ -100,7 +105,8 @@ export async function POST(req: Request) {
             .from("stg_answer_schema")
             .delete()
             .eq("exam_id", exam_id)
-            .eq("subject_id", subject_id);
+            .eq("subject_id", subject_id)
+            .eq("grade_group", grade_group);
 
         const { error } = await supabaseAdmin.from("stg_answer_schema").insert(payload);
 

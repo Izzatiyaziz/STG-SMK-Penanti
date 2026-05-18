@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
 import supabaseAdmin from "@/lib/supabase-admin";
 import { requireApiRole } from "@/lib/auth";
+import {
+    computeMarkSummary,
+    getGradeTemplateForClass,
+    getPrimaryOmrComponent,
+} from "@/lib/marking-template";
 
 export const runtime = "nodejs";
 
@@ -15,7 +20,6 @@ type OMRTemplateMap = Record<
 >;
 type AnswerRegion = { x: number; y: number; width: number; height: number };
 
-type ExamSubjectSettings = Record<string, { objective_max?: number; objective_questions?: number }>;
 type ScanInsertRow = { omr_scan_id?: unknown } | null;
 type OMRServiceResultRow = {
     question_no?: unknown;
@@ -95,11 +99,19 @@ export async function POST(req: Request) {
             return NextResponse.json({ message: "Akses ditolak" }, { status: 403 });
         }
 
+        const { data: classGradeRow } = await supabaseAdmin
+            .from("stg_classes")
+            .select("grade")
+            .eq("class_id", class_id)
+            .maybeSingle();
+        const gradeGroup = Number(classGradeRow?.grade ?? 0) >= 4 ? "upper" : "lower";
+
         const { data: answerRows, error: answerErr } = await supabaseAdmin
             .from("stg_answer_schema")
             .select("question_no, correct_answer")
             .eq("exam_id", exam_id)
             .eq("subject_id", subject_id)
+            .eq("grade_group", gradeGroup)
             .order("question_no", { ascending: true });
 
         if (answerErr) return NextResponse.json({ message: answerErr.message }, { status: 500 });
@@ -170,27 +182,34 @@ export async function POST(req: Request) {
             const correct = toNumber(json?.correct);
             const total_questions = toNumber(json?.total_questions);
 
-            // Determine objective_max from stg_exams.subject_settings (fallback to total_questions).
-            const { data: examRow } = await supabaseAdmin
-                .from("stg_exams")
-                .select("subject_settings")
-                .eq("exam_id", exam_id)
-                .maybeSingle();
+            const [{ data: examRow }, { data: classRow }, { data: subjectRow }] = await Promise.all([
+                supabaseAdmin
+                    .from("stg_exams")
+                    .select("subject_settings")
+                    .eq("exam_id", exam_id)
+                    .maybeSingle(),
+                supabaseAdmin.from("stg_classes").select("grade").eq("class_id", class_id).maybeSingle(),
+                supabaseAdmin.from("stg_subjects").select("subject_name").eq("subject_id", subject_id).maybeSingle(),
+            ]);
 
-            const subjectSettings =
-                examRow &&
-                typeof examRow === "object" &&
-                "subject_settings" in examRow &&
-                examRow.subject_settings &&
-                typeof examRow.subject_settings === "object"
-                    ? (examRow.subject_settings as ExamSubjectSettings)
-                    : {};
+            const templateInfo = getGradeTemplateForClass({
+                subjectSettings:
+                    examRow &&
+                    typeof examRow === "object" &&
+                    "subject_settings" in examRow &&
+                    examRow.subject_settings &&
+                    typeof examRow.subject_settings === "object"
+                        ? (examRow.subject_settings as Record<string, unknown>)
+                        : {},
+                subjectId: subject_id,
+                subjectName: typeof subjectRow?.subject_name === "string" ? subjectRow.subject_name : "",
+                grade: typeof classRow?.grade === "number" ? classRow.grade : Number(classRow?.grade ?? 0),
+            });
+            const primaryOmrComponent = getPrimaryOmrComponent(templateInfo.template);
 
-            const settingsForSubject =
-                subjectSettings && typeof subjectSettings === "object" ? subjectSettings[subject_id] ?? null : null;
-
-            const objectiveMax = toNumber(settingsForSubject?.objective_max) || total_questions || 0;
-            const objectiveQuestions = toNumber(settingsForSubject?.objective_questions) || total_questions || 0;
+            const objectiveMax = toNumber(primaryOmrComponent?.max_mark) || total_questions || 0;
+            const objectiveQuestions =
+                toNumber(primaryOmrComponent?.question_count) || total_questions || 0;
 
             const objective_total_mark =
                 objectiveQuestions > 0 ? Math.round((correct / objectiveQuestions) * objectiveMax) : 0;
@@ -243,6 +262,35 @@ export async function POST(req: Request) {
             }
 
             if (omr_scan_id) {
+                const componentLabel = primaryOmrComponent?.label ?? "Objektif";
+                const componentKey = primaryOmrComponent?.key ?? "objective";
+                const { error: componentErr } = await supabaseAdmin
+                    .from("stg_mark_components")
+                    .upsert(
+                        {
+                            student_id,
+                            subject_id,
+                            exam_id,
+                            class_id,
+                            teacher_id,
+                            component_key: componentKey,
+                            component_label: componentLabel,
+                            component_type: "omr",
+                            mark: objective_total_mark,
+                            max_mark: objectiveMax,
+                            included_in_total: primaryOmrComponent?.included_in_total !== false,
+                            question_count: primaryOmrComponent?.question_count ?? null,
+                            group_name: templateInfo.group,
+                            input_date: new Date().toISOString(),
+                        },
+                        { onConflict: "student_id,subject_id,exam_id,component_key" },
+                    );
+                if (componentErr) {
+                    console.warn("Failed to save OMR component breakdown:", componentErr.message);
+                    resultWarning =
+                        "OMR scan saved, tetapi breakdown komponen gagal disimpan. Jalankan migration stg_mark_components.";
+                }
+
                 const { data: subjectiveRow, error: subjectiveErr } = await supabaseAdmin
                     .from("stg_subjective_marks")
                     .select("subjective_id, subjective_mark")
@@ -258,8 +306,23 @@ export async function POST(req: Request) {
                     resultWarning = "OMR scan saved, but failed to read subjective mark for result sync.";
                 } else {
                     const subjective_id = toId((subjectiveRow as SubjectiveRow)?.subjective_id) || null;
-                    const subjective_mark = toNumber((subjectiveRow as SubjectiveRow)?.subjective_mark);
-                    const total = objective_total_mark + subjective_mark;
+                    const { data: componentRows } = await supabaseAdmin
+                        .from("stg_mark_components")
+                        .select("component_key, mark")
+                        .eq("student_id", student_id)
+                        .eq("subject_id", subject_id)
+                        .eq("exam_id", exam_id);
+
+                    const marksByKey: Record<string, number> = {};
+                    for (const componentRow of Array.isArray(componentRows) ? componentRows : []) {
+                        if (!componentRow || typeof componentRow !== "object") continue;
+                        const key = toId((componentRow as { component_key?: unknown }).component_key);
+                        if (!key) continue;
+                        marksByKey[key] = toNumber((componentRow as { mark?: unknown }).mark);
+                    }
+                    marksByKey[componentKey] = objective_total_mark;
+
+                    const total = computeMarkSummary(templateInfo.template, marksByKey).percentage;
                     const grade = gradeFromTotal(total);
 
                     const { data: existingResult, error: existingResultErr } = await supabaseAdmin
