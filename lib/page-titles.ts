@@ -20,8 +20,8 @@ const staticPageTitles: Record<string, string> = {
   "/teacher/omr": "Pengimbas OMR",
   "/teacher/omr/results": "Keputusan OMR",
   "/teacher/profile": "Profil Guru",
-  "/teacher/report": "Laporan Kelas",
-  "/teacher/reports": "Laporan",
+  "/teacher/report": "Kad Laporan Pelajar",
+  "/teacher/analytics": "Laporan Kelas",
   "/student/dashboard": "Dashboard Pelajar",
   "/student/my-results": "Keputusan Saya",
   "/student/profile": "Profil Pelajar",
@@ -31,6 +31,8 @@ const staticPageTitles: Record<string, string> = {
   "/coordinator/answer-schemes": "Skema Jawapan",
   "/coordinator/approvals": "Kelulusan Markah",
   "/coordinator/reports": "Laporan Penyelaras",
+  "/principal/dashboard": "Dashboard Pengetua",
+  "/principal/class-teachers": "Lantikan Guru Kelas",
 };
 
 const dynamicPageTitles: Array<[RegExp, string]> = [

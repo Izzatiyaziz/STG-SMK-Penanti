@@ -149,13 +149,13 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
 
 	if (!user || !session) return null;
 
-	if (session.userType === "principal") return null;
-
 	/* ========== RESOLVE SIDEBAR CONFIG ========== */
 
 	let config: SidebarResolvedConfig | undefined;
 
-	if (session.userType === "teacher") {
+	if (session.userType === "principal" || normalize(session.role) === "principal") {
+		config = sidebarConfig.principal;
+	} else if (session.userType === "teacher") {
 		const selectedRole = normalize(session.role);
 		const availableRoles = Array.isArray(session.roles)
 			? session.roles.map(normalize).filter(isTeacherRole)
@@ -179,24 +179,27 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
 
 	return (
 		<Sidebar collapsible="icon" {...props}>
-			<SidebarHeader>
+			<SidebarHeader className="border-b border-sidebar-border/70">
 				<SidebarMenu>
 					<SidebarMenuItem>
 						<SidebarMenuButton
 							size="lg"
-							className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
+							className="h-14 data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
 						>
-							<div className="bg-sidebar-primary text-sidebar-primary-foreground flex aspect-square size-8 items-center justify-center rounded-lg">
+							<div className="bg-sidebar-primary text-sidebar-primary-foreground flex aspect-square size-9 items-center justify-center rounded-lg shadow-xs">
 								<Image
 									src="/img/smkp-logo.png"
 									alt="SMK Penanti"
 									width={500}
 									height={500}
-									className="size-6"
+									className="size-7"
 								/>
 							</div>
 							<div className="grid flex-1 text-left text-sm leading-tight">
-								<span className="ml-2 text-base font-semibold">STG SMK Penanti</span>
+								<span className="ml-2 truncate text-base font-semibold">STG SMK Penanti</span>
+								<span className="ml-2 truncate text-xs font-medium text-sidebar-foreground/70">
+									Portal akademik
+								</span>
 							</div>
 						</SidebarMenuButton>
 					</SidebarMenuItem>

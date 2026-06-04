@@ -31,7 +31,6 @@ type User = {
   identifier: string;
   roles?: string[];
   email?: string;
-  phone_number?: string;
   status?: "active" | "inactive";
 };
 

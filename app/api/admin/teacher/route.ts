@@ -4,14 +4,13 @@ import supabase from "@/lib/supabase";
 import { requireApiRole } from "@/lib/auth";
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const PHONE_REGEX = /^(\+?6?01)[0-9]-?\d{7,8}$/;
 
 export async function POST(req: Request) {
   try {
     const guard = await requireApiRole("admin");
     if ("response" in guard) return guard.response;
 
-    const { username, fullname, email, phone_number, role_name, role_names } =
+    const { username, fullname, email, role_name, role_names } =
       await req.json();
 
     const roleNames = Array.isArray(role_names)
@@ -30,13 +29,6 @@ export async function POST(req: Request) {
     if (email && !EMAIL_REGEX.test(String(email).trim())) {
       return NextResponse.json(
         { message: "Format e-mel tidak sah" },
-        { status: 400 }
-      );
-    }
-
-    if (phone_number && !PHONE_REGEX.test(String(phone_number).trim())) {
-      return NextResponse.json(
-        { message: "Format no. telefon tidak sah" },
         { status: 400 }
       );
     }
@@ -65,7 +57,6 @@ export async function POST(req: Request) {
         password: hashedPassword,
         fullname: String(fullname).trim(),
         email: email?.trim() || null,
-        phone_number: phone_number?.trim() || null,
       })
       .select("teacher_id")
       .single();

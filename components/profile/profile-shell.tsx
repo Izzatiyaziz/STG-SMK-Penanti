@@ -17,9 +17,10 @@ type ProfileShellProps = {
 	name: string;
 	email?: string;
 	roleLabel: string;
-	accentLabel: string;
-	accentValue: string;
+	accentLabel?: string;
+	accentValue?: string;
 	note?: string;
+	profileDetailsContent?: ReactNode;
 	securityTitle?: string;
 	securityDescription?: string;
 	securityContent?: ReactNode;
@@ -78,6 +79,7 @@ export function ProfileShell({
 	accentLabel,
 	accentValue,
 	note,
+	profileDetailsContent,
 	securityTitle,
 	securityDescription,
 	securityContent,
@@ -175,6 +177,11 @@ export function ProfileShell({
 												<BadgeCheck className="mr-1 h-3 w-3" />
 												{roleLabel}
 											</Badge>
+											{accentLabel && accentValue && (
+												<Badge variant="outline" className="max-w-full rounded-full">
+													{accentLabel}: {accentValue}
+												</Badge>
+											)}
 										</div>
 										<div className="mt-2 flex min-w-0 items-start gap-2 text-sm text-muted-foreground">
 											<Mail className="mt-0.5 h-4 w-4 shrink-0" />
@@ -184,18 +191,16 @@ export function ProfileShell({
 										</div>
 									</div>
 								</div>
-								<div className="w-full rounded-xl border border-border/60 bg-background/90 px-4 py-3 shadow-sm sm:w-auto sm:min-w-44">
-									<div className="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">
-										{accentLabel}
-									</div>
-									<div className="mt-1 break-words text-base font-semibold text-foreground">
-										{accentValue}
-									</div>
-								</div>
 							</div>
 						</div>
 
 						<CardContent className="p-4 sm:p-6">
+							{profileDetailsContent && (
+								<div className="mb-4 sm:mb-6">
+									{profileDetailsContent}
+								</div>
+							)}
+
 							{enableProfileColor && (
 								<div className="rounded-2xl border border-border/60 bg-muted/20 p-4 shadow-sm">
 									<div className="flex items-center gap-2 text-sm font-semibold text-foreground">

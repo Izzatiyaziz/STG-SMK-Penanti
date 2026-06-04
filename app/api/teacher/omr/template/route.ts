@@ -56,7 +56,8 @@ export async function GET(req: Request) {
       .select("grade")
       .eq("class_id", class_id)
       .maybeSingle();
-    const gradeGroup = Number(classMeta?.grade ?? 0) >= 4 ? "upper" : "lower";
+    const gradeNumber = Number(classMeta?.grade ?? 0);
+    const gradeGroup = Number.isFinite(gradeNumber) && gradeNumber > 0 ? `tingkatan-${gradeNumber}` : "lower";
 
     const { data: answerRows, error: answerErr } = await supabaseAdmin
       .from("stg_answer_schema")

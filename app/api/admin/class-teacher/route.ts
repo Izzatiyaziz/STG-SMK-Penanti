@@ -8,7 +8,7 @@ import { requireApiRole } from "@/lib/auth";
 ========================= */
 export async function GET(req: Request) {
   try {
-    const guard = await requireApiRole("admin");
+    const guard = await requireApiRole(["admin", "principal"]);
     if ("response" in guard) return guard.response;
 
     const { searchParams } = new URL(req.url);
@@ -62,7 +62,7 @@ export async function GET(req: Request) {
 ========================= */
 export async function POST(req: Request) {
   try {
-    const guard = await requireApiRole("admin");
+    const guard = await requireApiRole(["admin", "principal"]);
     if ("response" in guard) return guard.response;
 
     const body = await req.json();
@@ -164,7 +164,7 @@ export async function POST(req: Request) {
 ========================= */
 export async function DELETE(req: Request) {
   try {
-    const guard = await requireApiRole("admin");
+    const guard = await requireApiRole(["admin", "principal"]);
     if ("response" in guard) return guard.response;
 
     const { searchParams } = new URL(req.url);

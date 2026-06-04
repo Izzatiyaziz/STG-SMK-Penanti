@@ -52,6 +52,7 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
 import { EditTeacherDialog } from "./edit-teacher-dialog";
+import { formatMalaysiaTime } from "@/lib/date-utils";
 
 type User = {
     id: string;
@@ -59,15 +60,13 @@ type User = {
     identifier: string;
     roles: string[];
     email?: string;
-    phone_number?: string;
     subjects?: string[];
     lastActive?: string;
     status?: "active" | "inactive";
 };
 
 // Client-side only time component
-const getTimeLabel = () =>
-    new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+const getTimeLabel = () => formatMalaysiaTime();
 
 const LastUpdatedTime = () => {
     const [time, setTime] = useState<string>(() => getTimeLabel());
@@ -304,17 +303,12 @@ export default function UsersPage() {
                                 </p>
                             </div>
                         </div>
-                        <div className="flex items-center gap-3 text-sm text-muted-foreground">
-                            <div className="flex items-center gap-1">
-                                <Shield className="w-3.5 h-3.5" />
-                                <span>Akses Terkawal Selia</span>
-                            </div>
-                            <div className="w-1 h-1 rounded-full bg-muted" />
-                            <div className="flex items-center gap-1">
-                                <Clock className="w-3.5 h-3.5" />
-                                <span>Kemas kini: <LastUpdatedTime /></span>
-                            </div>
-                        </div>
+                              <div className="flex items-center gap-3 text-sm text-muted-foreground">
+                                                  <div className="flex items-center gap-1">
+                                                      <Clock className="w-3.5 h-3.5" />
+                                                      <span>Kemas kini: <LastUpdatedTime /></span>
+                                                  </div>
+                                              </div>
                     </div>
 
                     <div className="flex items-center gap-3">

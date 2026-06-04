@@ -1,8 +1,26 @@
 import { NextResponse } from "next/server";
 import supabase from "@/lib/supabase";
 import { requireApiRole } from "@/lib/auth";
+import { isAllowedClassForSubject } from "@/lib/subject-rules";
 
 export const runtime = "nodejs";
+
+type TeacherSubjectRow = {
+    teacher_subject_id: string;
+    subject_id: string;
+    class_id: string;
+};
+
+type SubjectRow = {
+    subject_id: string;
+    subject_name: string;
+};
+
+type ClassRow = {
+    class_id: string;
+    class_name: string;
+    grade: number | null;
+};
 
 export async function GET(req: Request) {
     try {
@@ -28,12 +46,9 @@ export async function GET(req: Request) {
             return NextResponse.json({ data: [] }, { status: 200 });
         }
 
-        const subjectIds = Array.from(
-            new Set((rows ?? []).map((r) => r.subject_id as string))
-        ).filter(Boolean);
-        const classIds = Array.from(
-            new Set((rows ?? []).map((r) => r.class_id as string))
-        ).filter(Boolean);
+        const assignments = (Array.isArray(rows) ? rows : []) as TeacherSubjectRow[];
+        const subjectIds = Array.from(new Set(assignments.map((r) => r.subject_id).filter(Boolean)));
+        const classIds = Array.from(new Set(assignments.map((r) => r.class_id).filter(Boolean)));
 
         const [{ data: subjects }, { data: classes }] = await Promise.all([
             subjectIds.length
@@ -41,25 +56,27 @@ export async function GET(req: Request) {
                       .from("stg_subjects")
                       .select("subject_id, subject_name")
                       .in("subject_id", subjectIds)
-                : { data: [] as any[] },
+                : { data: [] as SubjectRow[] },
             classIds.length
                 ? supabase
                       .from("stg_classes")
                       .select("class_id, class_name, grade")
                       .in("class_id", classIds)
-                : { data: [] as any[] },
+                : { data: [] as ClassRow[] },
         ]);
 
         const subjectById = new Map(
-            (subjects ?? []).map((s: any) => [s.subject_id, s])
+            ((subjects ?? []) as SubjectRow[]).map((s) => [s.subject_id, s])
         );
         const classById = new Map(
-            (classes ?? []).map((c: any) => [c.class_id, c])
+            ((classes ?? []) as ClassRow[]).map((c) => [c.class_id, c])
         );
 
-        const data = (rows ?? []).map((r) => {
-            const s = subjectById.get(r.subject_id as string);
-            const c = classById.get(r.class_id as string);
+        const data = assignments.map((r) => {
+            const s = subjectById.get(r.subject_id);
+            const c = classById.get(r.class_id);
+            if (!isAllowedClassForSubject(s?.subject_name ?? "", c?.grade)) return null;
+
             return {
                 id: r.teacher_subject_id,
                 subject_id: r.subject_id,
@@ -68,7 +85,7 @@ export async function GET(req: Request) {
                 class_name: c?.class_name ?? "",
                 grade: c?.grade ?? null,
             };
-        });
+        }).filter(Boolean);
 
         return NextResponse.json({ data });
     } catch (err) {

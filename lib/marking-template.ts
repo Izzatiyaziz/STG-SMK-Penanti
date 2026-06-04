@@ -87,8 +87,8 @@ function subjectPresetLower(subjectName: string): GradeTemplate {
       group: "lower",
       label: "Form 1-3",
       components: [
-        createComponent("pemahaman", "Pemahaman", "manual", 60),
-        createComponent("penulisan", "Penulisan", "manual", 40),
+        createComponent("k1", "Kertas 1 (Pemahaman)", "manual", 60),
+        createComponent("k2", "Kertas 2 (Penulisan)", "manual", 40),
       ],
       normalization_total: 100,
     };
@@ -223,11 +223,9 @@ function subjectPresetUpper(subjectName: string): GradeTemplate {
       components: [
         createComponent("k1", "Kertas 1", "omr", 40, { question_count: 40 }),
         createComponent("k2", "Kertas 2", "manual", 100),
-        createComponent("k3", "Kertas 3 / Amali", "manual", 15, {
-          included_in_total: false,
-        }),
+        createComponent("k3", "Kertas 3", "manual", 30),
       ],
-      normalization_total: 140,
+      normalization_total: 170,
     };
   }
 
@@ -248,7 +246,7 @@ function subjectPresetUpper(subjectName: string): GradeTemplate {
       group: "upper",
       label: "Form 4-5",
       components: [createComponent("k1", "Kertas 1", "manual", 80)],
-      normalization_total: 140,
+      normalization_total: 80,
     };
   }
 
@@ -287,8 +285,7 @@ export function sanitizeGradeTemplate(group: TemplateGroup, value: unknown, fall
         type,
         max_mark: maxMark,
         question_count: toNumber(item.question_count, 0) || undefined,
-        included_in_total:
-          typeof item.included_in_total === "boolean" ? item.included_in_total : true,
+        included_in_total: true,
       } satisfies MarkComponent;
     })
     .filter(Boolean) as MarkComponent[];
@@ -373,16 +370,14 @@ export function computeMarkSummary(
     return {
       ...component,
       mark,
-      effective_max_mark: component.included_in_total === false ? 0 : component.max_mark,
+      effective_max_mark: component.max_mark,
     };
   });
 
-  const rawTotal = components
-    .filter((component) => component.included_in_total !== false)
-    .reduce((sum, component) => sum + component.mark, 0);
+  const rawTotal = components.reduce((sum, component) => sum + component.mark, 0);
 
   const computedMax = components.reduce((sum, component) => sum + component.effective_max_mark, 0);
-  const totalMax = toNumber(template.normalization_total, 0) || computedMax;
+  const totalMax = computedMax;
   const percentage = totalMax > 0 ? Math.round((rawTotal / totalMax) * 100) : 0;
 
   return {
@@ -404,7 +399,7 @@ export function serializeTemplateForStorage(template: GradeTemplate) {
       type: component.type,
       max_mark: component.max_mark,
       question_count: component.question_count ?? null,
-      included_in_total: component.included_in_total !== false,
+      included_in_total: true,
     })),
   };
 }

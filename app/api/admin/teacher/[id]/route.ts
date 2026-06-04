@@ -3,7 +3,6 @@ import supabase from "@/lib/supabase";
 import { requireApiRole } from "@/lib/auth";
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const PHONE_REGEX = /^(\+?6?01)[0-9]-?\d{7,8}$/;
 
 export async function PUT(
     req: Request,
@@ -15,7 +14,7 @@ export async function PUT(
 
         const { id: teacherId } = await context.params;
         const body = await req.json();
-        const { fullname, email, phone_number, role, role_names } = body;
+        const { fullname, email, role, role_names } = body;
 
         const name = typeof fullname === "string" ? fullname.trim() : "";
         const roleNames = Array.isArray(role_names)
@@ -38,19 +37,11 @@ export async function PUT(
             );
         }
 
-        if (phone_number && !PHONE_REGEX.test(String(phone_number).trim())) {
-            return NextResponse.json(
-                { error: "Format no. telefon tidak sah" },
-                { status: 400 }
-            );
-        }
-
         const { error: updateErr } = await supabase
             .from("stg_teachers")
             .update({
                 fullname: name,
                 email: email?.trim() || null,
-                phone_number: phone_number?.trim() || null,
             })
             .eq("teacher_id", teacherId);
 

@@ -10,19 +10,35 @@ import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { Eye, EyeOff } from "lucide-react"; // 🔥 Tambah import ikon ini
 
+type LoginRole = "student" | "teacher" | "admin";
+type LoginPayload = {
+    role: LoginRole;
+    ic_number?: string;
+    username?: string;
+    password?: string;
+    selected_teacher_role?: string | null;
+    admin_id?: string;
+};
+type PasswordChangeSession = {
+    user_id: string;
+    role: string;
+    session_id?: string | null;
+    roles?: string[];
+};
+
 export function LoginForm({
     className,
     ...props
 }: React.ComponentProps<"form">) {
     const [loading, setLoading] = useState(false);
-    const [role, setRole] = useState<"student" | "teacher" | "admin">("student");
+    const [, setRole] = useState<LoginRole>("student");
     const [teacherRoles, setTeacherRoles] = useState<string[]>([]);
     const [selectedTeacherRole, setSelectedTeacherRole] = useState("");
     const router = useRouter();
 
     // ================= STATE TUKAR PASSWORD =================
     const [showPasswordDialog, setShowPasswordDialog] = useState(false);
-    const [tempData, setTempData] = useState<any>(null);
+    const [tempData] = useState<PasswordChangeSession | null>(null);
     const [newPassword, setNewPassword] = useState("");
     const [confirmPassword, setConfirmPassword] = useState("");
     
@@ -46,7 +62,7 @@ export function LoginForm({
 
     async function handleSubmit(
         e: React.FormEvent<HTMLFormElement>,
-        submitRole: "student" | "teacher" | "admin"
+        submitRole: LoginRole
     ) {
         e.preventDefault();
         if (loading) return;
@@ -56,7 +72,7 @@ export function LoginForm({
 
         try {
             const formData = new FormData(e.currentTarget);
-            let payload: any = { role: submitRole };
+            const payload: LoginPayload = { role: submitRole };
 
             if (submitRole === "student") {
                 payload.ic_number = String(formData.get("ic_number") ?? "");
@@ -152,7 +168,8 @@ export function LoginForm({
         if (userType === "admin") router.push("/admin/dashboard");
         else if (userType === "teacher") {
             const r = String(specificRole).toLowerCase().trim();
-            if (r === "subject coordinator") router.push("/coordinator/dashboard");
+            if (r === "principal") router.push("/principal/dashboard");
+            else if (r === "subject coordinator") router.push("/coordinator/dashboard");
             else router.push("/teacher/dashboard");
         }
         else router.push("/student/dashboard");
@@ -180,7 +197,7 @@ export function LoginForm({
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ 
                     userType: "teacher",
-                    user_id: tempData.user_id,
+                    user_id: tempData?.user_id,
                     current_password: "",
                     new_password: newPassword,
                     first_login: true,
@@ -191,15 +208,15 @@ export function LoginForm({
 
             setShowPasswordDialog(false);
             await proceedToDashboard(
-                tempData.user_id,
+                tempData?.user_id ?? "",
                 "teacher",
-                tempData.role,
-                tempData.session_id ?? null,
+                tempData?.role ?? "subject teacher",
+                tempData?.session_id ?? null,
                 toastId,
-                Array.isArray(tempData.roles) ? tempData.roles : undefined
+                Array.isArray(tempData?.roles) ? tempData.roles : undefined
             );
 
-        } catch (error) {
+        } catch {
             toast.error("Gagal menukar kata laluan. Sila cuba lagi.", { id: toastId });
         } finally {
             setLoading(false);
@@ -231,7 +248,7 @@ export function LoginForm({
             toast.success("Kata laluan sementara telah dihantar ke e-mel anda.", { id: toastId });
             setShowForgotDialog(false);
             setForgotIdentifier("");
-        } catch (error) {
+        } catch {
             toast.error("Ralat pelayan. Sila cuba lagi.", { id: toastId });
         } finally {
             setLoading(false);
@@ -244,7 +261,7 @@ export function LoginForm({
                 defaultValue="student"
                 className={cn("w-full", className)}
                 onValueChange={(v) => {
-                    setRole(v as any);
+                    setRole(v as LoginRole);
                     setTeacherRoles([]);
                     setSelectedTeacherRole("");
                 }}

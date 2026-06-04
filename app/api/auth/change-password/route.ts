@@ -39,14 +39,17 @@ export async function POST(req: Request) {
                 { status: 400 }
             );
         }
-
+        // Strong Password Policy asas:
+        // Sistem menolak kata laluan baharu yang kurang daripada 8 aksara.
         if (new_password.length < 8) {
             return NextResponse.json(
                 { message: "Kata laluan baharu mesti sekurang-kurangnya 8 aksara" },
                 { status: 400 }
             );
         }
-
+        // Password Encryption / Hashing:
+        // Kata laluan baharu tidak disimpan dalam bentuk asal.
+        // bcrypt akan hash password dengan salt rounds = 10 sebelum disimpan ke database.
         const hashed = await bcrypt.hash(new_password, 10);
 
         // ================= TEACHER =================

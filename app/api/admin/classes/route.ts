@@ -55,7 +55,7 @@ export async function POST(req: Request) {
 
         if (!class_name || !Number.isFinite(grade)) {
             return NextResponse.json(
-                { message: "Nama kelas dan tingkatan (grade) diperlukan" },
+                { message: "Nama kelas dan tingkatan diperlukan" },
                 { status: 400 }
             );
         }

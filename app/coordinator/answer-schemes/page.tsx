@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { type KeyboardEvent, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
@@ -15,7 +15,21 @@ import {
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { FileSignature, Plus, Save, Settings2, Trash2, Wand2 } from "lucide-react";
+import {
+  BookOpen,
+  CalendarDays,
+  ClipboardCheck,
+  FileSignature,
+  Filter,
+  ListChecks,
+  Pencil,
+  RotateCcw,
+  Save,
+  ScanLine,
+  Settings2,
+  Wand2,
+} from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import {
   buildSubjectTemplatePreset,
   getPrimaryOmrComponent,
@@ -25,6 +39,8 @@ import {
   type MarkComponent,
   type TemplateGroup,
 } from "@/lib/marking-template";
+import { getMalaysiaDateInputValue } from "@/lib/date-utils";
+import { isLowerFormOnlySubject, isUpperFormOnlySubject } from "@/lib/subject-rules";
 
 type Session = {
   user_id: string;
@@ -41,14 +57,54 @@ type Exam = {
 
 type Subject = { id: string; name: string };
 
-function createBlankComponent(index: number): MarkComponent {
+function isUpperOnlySubject(subjectName: string) {
+  return isUpperFormOnlySubject(subjectName);
+}
+
+function isLowerOnlySubject(subjectName: string) {
+  return isLowerFormOnlySubject(subjectName);
+}
+
+function normalizeSystemTemplate(template: GradeTemplate): GradeTemplate {
   return {
-    key: `component_${index + 1}`,
-    label: `Komponen ${index + 1}`,
-    type: "manual",
-    max_mark: 0,
-    included_in_total: true,
+    ...template,
+    components: template.components.map((component) => ({
+      ...component,
+      included_in_total: true,
+      question_count:
+        component.type === "omr"
+          ? component.question_count ?? component.max_mark
+          : undefined,
+    })),
   };
+}
+
+function componentTypeMeta(type: MarkComponent["type"]) {
+  return type === "omr"
+    ? {
+        label: "OMR",
+        icon: ScanLine,
+        badge: "border-sky-200 bg-sky-50 text-sky-700",
+      }
+    : {
+        label: "Manual",
+        icon: Pencil,
+        badge: "border-violet-200 bg-violet-50 text-violet-700",
+    };
+}
+
+function getAnswerGridColumns() {
+  if (typeof window === "undefined") return 2;
+  if (window.matchMedia("(min-width: 1280px)").matches) return 8;
+  if (window.matchMedia("(min-width: 1024px)").matches) return 5;
+  if (window.matchMedia("(min-width: 640px)").matches) return 4;
+  return 2;
+}
+
+function clampNumber(value: unknown, min: number, max: number) {
+  const num = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(num)) return min;
+  return Math.min(max, Math.max(min, num));
 }
 
 export default function AnswerSchemesPage() {
@@ -60,6 +116,7 @@ export default function AnswerSchemesPage() {
   const [subjectId, setSubjectId] = useState("");
   const [examId, setExamId] = useState("");
   const [gradeGroup, setGradeGroup] = useState<TemplateGroup>("lower");
+  const [omrGrade, setOmrGrade] = useState("1");
 
   const [deadlineInput, setDeadlineInput] = useState<string>("");
   const [templates, setTemplates] = useState<Record<TemplateGroup, GradeTemplate>>({
@@ -96,10 +153,40 @@ export default function AnswerSchemesPage() {
     () => subjects.find((subject) => subject.id === subjectId) ?? null,
     [subjectId, subjects],
   );
-  const activeTemplate = templates[gradeGroup];
+  const subjectIsUpperOnly = isUpperOnlySubject(selectedSubject?.name ?? "");
+  const subjectIsLowerOnly = isLowerOnlySubject(selectedSubject?.name ?? "");
+  const activeGradeGroup: TemplateGroup = subjectIsUpperOnly ? "upper" : subjectIsLowerOnly ? "lower" : gradeGroup;
+  const omrGradeOptions = useMemo(
+    () => (activeGradeGroup === "upper" ? [4, 5] : [1, 2, 3]),
+    [activeGradeGroup],
+  );
+  const activeOmrGrade = omrGradeOptions.includes(Number(omrGrade)) ? omrGrade : String(omrGradeOptions[0]);
+  const activeOmrGradeGroup = `tingkatan-${activeOmrGrade}`;
+  const activeTemplate = templates[activeGradeGroup];
+  const presetTemplate = buildSubjectTemplatePreset(selectedSubject?.name ?? "", activeGradeGroup);
   const primaryOmrComponent = getPrimaryOmrComponent(activeTemplate);
+  const primaryOmrIndex = activeTemplate.components.findIndex((component) => component.type === "omr");
+  const primaryOmrLabel =
+    primaryOmrComponent && primaryOmrIndex >= 0
+      ? primaryOmrComponent.label || `Komponen ${primaryOmrIndex + 1}`
+      : "";
   const answerQuestionCount = primaryOmrComponent?.question_count ?? primaryOmrComponent?.max_mark ?? 0;
-
+  const manualComponents = activeTemplate.components.filter((component) => component.type === "manual");
+  const omrComponents = activeTemplate.components.filter((component) => component.type === "omr");
+  const inputModeLabel =
+    omrComponents.length > 0
+      ? [
+          ...omrComponents.map(() => "OMR"),
+          ...manualComponents.map(() => "Manual"),
+        ].join(" + ")
+      : "Manual sahaja";
+  const answeredCount = useMemo(
+    () =>
+      Array.from({ length: answerQuestionCount }).filter((_, index) =>
+        ["A", "B", "C", "D"].includes(String(answers[index + 1] ?? "").trim().toUpperCase()),
+      ).length,
+    [answerQuestionCount, answers],
+  );
   async function loadOptions() {
     if (!session) return;
     setLoading(true);
@@ -145,14 +232,25 @@ export default function AnswerSchemesPage() {
       lower: settings.grade_templates?.lower ?? buildSubjectTemplatePreset(selectedSubject.name, "lower"),
       upper: settings.grade_templates?.upper ?? buildSubjectTemplatePreset(selectedSubject.name, "upper"),
     });
+    if (isUpperOnlySubject(selectedSubject.name)) {
+      setGradeGroup("upper");
+    } else if (isLowerOnlySubject(selectedSubject.name)) {
+      setGradeGroup("lower");
+    }
     setDeadlineInput(typeof settings.deadline === "string" ? settings.deadline : "");
   }, [selectedExam, selectedSubject]);
+
+  useEffect(() => {
+    if (!omrGradeOptions.includes(Number(omrGrade))) {
+      setOmrGrade(String(omrGradeOptions[0]));
+    }
+  }, [omrGrade, omrGradeOptions]);
 
   async function loadExistingSchema() {
     if (!examId || !subjectId) return;
     try {
       const res = await fetch(
-        `/api/coordinator/answer-schemes?exam_id=${examId}&subject_id=${subjectId}&grade_group=${gradeGroup}`,
+        `/api/coordinator/answer-schemes?exam_id=${examId}&subject_id=${subjectId}&grade_group=${activeOmrGradeGroup}`,
         { cache: "no-store" },
       );
       const json = await res.json();
@@ -168,12 +266,12 @@ export default function AnswerSchemesPage() {
 
   useEffect(() => {
     loadExistingSchema();
-  }, [examId, subjectId, gradeGroup]);
+  }, [examId, subjectId, activeOmrGradeGroup]);
 
   function updateActiveTemplate(updater: (template: GradeTemplate) => GradeTemplate) {
     setTemplates((current) => ({
       ...current,
-      [gradeGroup]: updater(current[gradeGroup]),
+      [activeGradeGroup]: updater(current[activeGradeGroup]),
     }));
   }
 
@@ -205,8 +303,8 @@ export default function AnswerSchemesPage() {
           subject_id: subjectId,
           deadline: deadlineInput.trim(),
           grade_templates: {
-            lower: serializeTemplateForStorage(templates.lower),
-            upper: serializeTemplateForStorage(templates.upper),
+            lower: serializeTemplateForStorage(normalizeSystemTemplate(templates.lower)),
+            upper: serializeTemplateForStorage(normalizeSystemTemplate(templates.upper)),
           },
         }),
       });
@@ -233,6 +331,15 @@ export default function AnswerSchemesPage() {
       return;
     }
 
+    const missingQuestions = Array.from({ length: answerQuestionCount })
+      .map((_, index) => index + 1)
+      .filter((questionNo) => !["A", "B", "C", "D"].includes(String(answers[questionNo] ?? "").trim().toUpperCase()));
+
+    if (missingQuestions.length > 0) {
+      toast.error(`Lengkapkan jawapan untuk ${missingQuestions.length} soalan OMR dahulu`);
+      return;
+    }
+
     const payload = Array.from({ length: answerQuestionCount }).map((_, index) => {
       const questionNo = index + 1;
       return {
@@ -249,7 +356,7 @@ export default function AnswerSchemesPage() {
         body: JSON.stringify({
           exam_id: examId,
           subject_id: subjectId,
-          grade_group: gradeGroup,
+          grade_group: activeOmrGradeGroup,
           answers: payload,
         }),
       });
@@ -273,25 +380,90 @@ export default function AnswerSchemesPage() {
       .reduce((sum, component) => sum + Number(component.max_mark || 0), 0);
   }
 
+  function focusAnswerInput(questionNo: number) {
+    const target = document.querySelector<HTMLInputElement>(
+      `[data-answer-question="${questionNo}"]`,
+    );
+    target?.focus();
+    target?.select();
+  }
+
+  function handleAnswerKeyDown(event: KeyboardEvent<HTMLInputElement>, questionNo: number) {
+    const columns = getAnswerGridColumns();
+    const moves: Record<string, number> = {
+      ArrowRight: 1,
+      ArrowLeft: -1,
+      ArrowDown: columns,
+      ArrowUp: -columns,
+    };
+    const move = moves[event.key];
+    if (!move) return;
+
+    const nextQuestion = Math.min(
+      answerQuestionCount,
+      Math.max(1, questionNo + move),
+    );
+    if (nextQuestion === questionNo) return;
+
+    event.preventDefault();
+    focusAnswerInput(nextQuestion);
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-background to-muted/20 p-4 md:p-6 overflow-x-hidden">
       <div className="mx-auto max-w-7xl space-y-6">
-        <div className="flex items-center gap-3">
-          <div className="rounded-xl bg-primary/10 p-2">
-            <FileSignature className="h-6 w-6 text-primary" />
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex items-center gap-3">
+            <div className="rounded-xl border border-primary/20 bg-primary/10 p-3">
+              <FileSignature className="h-6 w-6 text-primary" />
+            </div>
+            <div>
+              <h1 className="text-2xl font-bold tracking-tight">Skema Jawapan</h1>
+              <p className="text-muted-foreground">
+                Tetapkan struktur markah mengikut subjek, kertas, dan skema OMR bila diperlukan.
+              </p>
+            </div>
           </div>
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight">Template Pemarkahan</h1>
-            <p className="text-muted-foreground">
-              Urus template `Form 1-3` dan `Form 4-5` untuk setiap subjek dan peperiksaan.
-            </p>
+          <div className="flex flex-wrap gap-2">
+            <Badge variant="outline" className="border-violet-200 bg-violet-50 text-violet-700">
+              <Pencil className="mr-1 h-3.5 w-3.5" />
+              {manualComponents.length} manual
+            </Badge>
+            <Badge variant="outline" className="border-sky-200 bg-sky-50 text-sky-700">
+              <ScanLine className="mr-1 h-3.5 w-3.5" />
+              {omrComponents.length} OMR
+            </Badge>
           </div>
         </div>
 
-        <Card className="border border-border/50 shadow-lg">
-          <CardContent className="grid grid-cols-1 gap-4 p-4 md:grid-cols-4">
+        <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-3">
+          <SchemeStatCard
+            title="Jumlah markah"
+            value={totalIncludedMax(activeTemplate)}
+            icon={Settings2}
+            variant="primary"
+          />
+          <SchemeStatCard
+            title="Skema OMR"
+            value={primaryOmrComponent ? `${answeredCount}/${answerQuestionCount}` : "Tidak perlu"}
+            icon={ScanLine}
+            variant="chart2"
+          />
+          <SchemeStatCard
+            title="Mod input guru"
+            value={inputModeLabel}
+            icon={ClipboardCheck}
+            variant="chart3"
+          />
+        </div>
+
+                <Card className="border border-border/50 shadow-lg">
+          <CardContent className="grid grid-cols-1 gap-4 p-4 md:grid-cols-2 xl:grid-cols-4">
             <div className="space-y-2">
-              <div className="text-sm text-muted-foreground">Peperiksaan</div>
+              <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+                <CalendarDays className="h-4 w-4" />
+                Peperiksaan
+              </div>
               <Select value={examId} onValueChange={setExamId}>
                 <SelectTrigger>
                   <SelectValue placeholder="Pilih peperiksaan" />
@@ -307,190 +479,193 @@ export default function AnswerSchemesPage() {
             </div>
 
             <div className="space-y-2">
-              <div className="text-sm text-muted-foreground">Subjek</div>
-              <Select value={subjectId} onValueChange={setSubjectId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Pilih subjek" />
-                </SelectTrigger>
-                <SelectContent>
-                  {subjects.map((subject) => (
-                    <SelectItem key={subject.id} value={subject.id}>
-                      {subject.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+                <BookOpen className="h-4 w-4" />
+                Subjek
+              </div>
+              <div className="flex h-10 items-center rounded-md border border-border bg-background px-3 text-sm font-medium text-foreground shadow-xs">
+                {selectedSubject?.name ?? "Subjek"}
+              </div>
             </div>
 
             <div className="space-y-2">
-              <div className="text-sm text-muted-foreground">Template Aktif</div>
-              <Select value={gradeGroup} onValueChange={(value) => setGradeGroup(value as TemplateGroup)}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Pilih template" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="lower">Form 1-3</SelectItem>
-                  <SelectItem value="upper">Form 4-5</SelectItem>
-                </SelectContent>
-              </Select>
+              <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+                <ListChecks className="h-4 w-4" />
+                Tingkatan
+              </div>
+              {subjectIsUpperOnly ? (
+                <div className="flex h-10 items-center rounded-md border border-border bg-background px-3 text-sm font-medium text-foreground shadow-xs">
+                  Tingkatan 4-5
+                </div>
+              ) : subjectIsLowerOnly ? (
+                <div className="flex h-10 items-center rounded-md border border-border bg-background px-3 text-sm font-medium text-foreground shadow-xs">
+                  Tingkatan 1-3
+                </div>
+              ) : (
+                <Select value={gradeGroup} onValueChange={(value) => setGradeGroup(value as TemplateGroup)}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Pilih template" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="lower">Tingkatan 1-3</SelectItem>
+                    <SelectItem value="upper">Tingkatan 4-5</SelectItem>
+                  </SelectContent>
+                </Select>
+              )}
             </div>
 
-            <div className="space-y-2">
-              <div className="text-sm text-muted-foreground">Deadline</div>
-              <Input value={deadlineInput} onChange={(event) => setDeadlineInput(event.target.value)} placeholder="2026-05-31" />
-            </div>
+           <div className="space-y-2">
+  <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+    <CalendarDays className="h-4 w-4" />
+    Tarikh akhir hantar
+  </div>
+
+  <Input
+    type="date"
+    value={deadlineInput}
+    onChange={(event) => setDeadlineInput(event.target.value)}
+    min={getMalaysiaDateInputValue()}
+  />
+</div>
           </CardContent>
         </Card>
 
         <Card className="border border-border/50 shadow-lg">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Settings2 className="h-5 w-5 text-primary" />
-              Struktur Komponen {gradeGroup === "lower" ? "Form 1-3" : "Form 4-5"}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex flex-wrap gap-2">
-              <Button type="button" variant="outline" onClick={() => applyPreset(gradeGroup)}>
+            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                  <Settings2 className="h-5 w-5 text-primary" />
+                  Struktur Kertas {activeGradeGroup === "lower" ? "Tingkatan 1-3" : "Tingkatan 4-5"}
+                </CardTitle>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Markah setiap kertas telah dipreset mengikut subjek. Laraskan hanya jika peperiksaan ini menggunakan struktur berlainan.
+                </p>
+              </div>
+              <Button type="button" variant="outline" onClick={() => applyPreset(activeGradeGroup)}>
                 <Wand2 className="mr-2 h-4 w-4" />
-                Muat Preset
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() =>
-                  updateActiveTemplate((template) => ({
-                    ...template,
-                    components: [...template.components, createBlankComponent(template.components.length)],
-                  }))
-                }
-              >
-                <Plus className="mr-2 h-4 w-4" />
-                Tambah Komponen
+                Muat Preset Subjek
               </Button>
             </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+              {activeTemplate.components.map((component, index) => {
+                const paperLabel = component.label || `Komponen ${index + 1}`;
+                const presetComponent = presetTemplate.components[index];
+                const maxAllowedMark = presetComponent?.max_mark ?? component.max_mark;
+                return (
+                <Card key={`${component.key}-${index}`} className="border-border/60 bg-card shadow-sm">
+                  <CardContent className="space-y-4 p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-center gap-3">
+                      {(() => {
+                        const meta = componentTypeMeta(component.type);
+                        const Icon = meta.icon;
+                        return (
+                          <div className={`rounded-lg border p-2 ${meta.badge}`}>
+                            <Icon className="h-5 w-5" />
+                          </div>
+                        );
+                      })()}
+                      <div>
+                        <div className="text-lg font-bold text-foreground">{paperLabel}</div>
+                        <div className="text-sm text-muted-foreground">
+                          {component.max_mark} markah
+                          {component.type === "omr" && ` / ${component.question_count ?? component.max_mark} soalan`}
+                        </div>
+                      </div>
+                      </div>
+                      <Badge variant="outline" className={componentTypeMeta(component.type).badge}>
+                        {componentTypeMeta(component.type).label}
+                      </Badge>
+                    </div>
 
-            <div className="grid gap-3">
-              {activeTemplate.components.map((component, index) => (
-                <div key={`${component.key}-${index}`} className="grid gap-3 rounded-lg border border-border/60 p-4 lg:grid-cols-[1.1fr_1.2fr_0.8fr_0.8fr_0.9fr_0.9fr_auto]">
-                  <Input
-                    value={component.key}
-                    onChange={(event) =>
-                      updateActiveTemplate((template) => ({
-                        ...template,
-                        components: template.components.map((item, itemIndex) =>
-                          itemIndex === index ? { ...item, key: event.target.value } : item,
-                        ),
-                      }))
-                    }
-                    placeholder="key"
-                  />
-                  <Input
-                    value={component.label}
-                    onChange={(event) =>
-                      updateActiveTemplate((template) => ({
-                        ...template,
-                        components: template.components.map((item, itemIndex) =>
-                          itemIndex === index ? { ...item, label: event.target.value } : item,
-                        ),
-                      }))
-                    }
-                    placeholder="Label"
-                  />
-                  <Select
-                    value={component.type}
-                    onValueChange={(value) =>
-                      updateActiveTemplate((template) => ({
-                        ...template,
-                        components: template.components.map((item, itemIndex) =>
-                          itemIndex === index ? { ...item, type: value as "manual" | "omr" } : item,
-                        ),
-                      }))
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="manual">Manual</SelectItem>
-                      <SelectItem value="omr">OMR</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <Input
-                    type="number"
-                    min={0}
-                    value={component.max_mark}
-                    onChange={(event) =>
-                      updateActiveTemplate((template) => ({
-                        ...template,
-                        components: template.components.map((item, itemIndex) =>
-                          itemIndex === index ? { ...item, max_mark: Number(event.target.value) || 0 } : item,
-                        ),
-                      }))
-                    }
-                    placeholder="Markah"
-                  />
-                  <Input
-                    type="number"
-                    min={0}
-                    value={component.question_count ?? ""}
-                    onChange={(event) =>
-                      updateActiveTemplate((template) => ({
-                        ...template,
-                        components: template.components.map((item, itemIndex) =>
-                          itemIndex === index
-                            ? {
-                                ...item,
-                                question_count: event.target.value ? Number(event.target.value) || 0 : undefined,
-                              }
-                            : item,
-                        ),
-                      }))
-                    }
-                    placeholder="Bil. soalan"
-                  />
-                  <Select
-                    value={component.included_in_total === false ? "exclude" : "include"}
-                    onValueChange={(value) =>
-                      updateActiveTemplate((template) => ({
-                        ...template,
-                        components: template.components.map((item, itemIndex) =>
-                          itemIndex === index
-                            ? { ...item, included_in_total: value !== "exclude" }
-                            : item,
-                        ),
-                      }))
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="include">Masuk jumlah</SelectItem>
-                      <SelectItem value="exclude">Tak masuk jumlah</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    onClick={() =>
-                      updateActiveTemplate((template) => ({
-                        ...template,
-                        components: template.components.filter((_, itemIndex) => itemIndex !== index),
-                      }))
-                    }
-                  >
-                    <Trash2 className="h-4 w-4 text-rose-600" />
-                  </Button>
-                </div>
-              ))}
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div className="space-y-1.5">
+                        <div className="text-xs font-medium text-muted-foreground">Markah</div>
+                        <Input
+                          type="number"
+                          min={0}
+                          max={maxAllowedMark}
+                          value={component.max_mark}
+                          onChange={(event) =>
+                            updateActiveTemplate((template) => ({
+                              ...template,
+                              components: template.components.map((item, itemIndex) =>
+                                itemIndex === index
+                                  ? {
+                                      ...item,
+                                      max_mark: clampNumber(event.target.value, 0, maxAllowedMark),
+                                      question_count:
+                                        item.type === "omr"
+                                          ? clampNumber(event.target.value, 0, maxAllowedMark)
+                                          : item.question_count,
+                                    }
+                                  : item,
+                              ),
+                            }))
+                          }
+                          placeholder="40"
+                        />
+                      </div>
+                      {component.type === "omr" && (
+                        <div className="space-y-1.5">
+                          <div className="text-xs font-medium text-muted-foreground">Bil. soalan OMR</div>
+                          <Input
+                          type="number"
+                          min={0}
+                          max={maxAllowedMark}
+                          value={component.question_count ?? ""}
+                          onChange={(event) =>
+                            updateActiveTemplate((template) => ({
+                              ...template,
+                              components: template.components.map((item, itemIndex) =>
+                                itemIndex === index
+                                  ? {
+                                      ...item,
+                                      max_mark: clampNumber(event.target.value, 0, maxAllowedMark),
+                                      question_count: event.target.value
+                                        ? clampNumber(event.target.value, 0, maxAllowedMark)
+                                        : undefined,
+                                    }
+                                  : item,
+                              ),
+                              }))
+                            }
+                            placeholder="40"
+                          />
+                        </div>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+                );
+              })}
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
-              <Badge variant="outline">Komponen: {activeTemplate.components.length}</Badge>
-              <Badge variant="outline">Jumlah dikira: {totalIncludedMax(activeTemplate)}</Badge>
-              <Badge variant="outline">OMR aktif: {primaryOmrComponent ? primaryOmrComponent.label : "Tiada"}</Badge>
+              <Badge
+                variant="outline"
+                className="h-8 rounded-full border-blue-200 bg-blue-50 px-3 text-sm font-semibold text-blue-700 shadow-xs"
+              >
+                <Settings2 className="mr-1.5 h-3.5 w-3.5" />
+                Komponen: {activeTemplate.components.length}
+              </Badge>
+              <Badge
+                variant="outline"
+                className="h-8 rounded-full border-emerald-200 bg-emerald-50 px-3 text-sm font-semibold text-emerald-700 shadow-xs"
+              >
+                <ClipboardCheck className="mr-1.5 h-3.5 w-3.5" />
+                Jumlah: {totalIncludedMax(activeTemplate)}
+              </Badge>
+              <Badge
+                variant="outline"
+                className="h-8 rounded-full border-violet-200 bg-violet-50 px-3 text-sm font-semibold text-violet-700 shadow-xs"
+              >
+                <ScanLine className="mr-1.5 h-3.5 w-3.5" />
+                OMR: {primaryOmrComponent ? primaryOmrLabel : "Tiada"}
+              </Badge>
             </div>
 
             <div className="flex justify-end">
@@ -502,31 +677,58 @@ export default function AnswerSchemesPage() {
           </CardContent>
         </Card>
 
-        <Card className="border border-border/50 shadow-lg">
-          <CardHeader>
-            <CardTitle>Skema Jawapan OMR</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {!primaryOmrComponent && (
-              <div className="text-sm text-muted-foreground">
-                Template aktif tiada komponen OMR. Skema jawapan tidak diperlukan.
+        {primaryOmrComponent && (
+          <Card className="border border-border/50 shadow-lg">
+            <CardHeader>
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2">
+                    <ScanLine className="h-5 w-5 text-primary" />
+                    Skema Jawapan OMR
+                  </CardTitle>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Isi jawapan A, B, C atau D mengikut bilangan soalan objektif yang ditetapkan.
+                  </p>
+                </div>
+                <Badge variant="outline" className="border-sky-200 bg-sky-50 text-sky-700">
+                  <Filter className="mr-1 h-3 w-3" />
+                  {answeredCount}/{answerQuestionCount} lengkap
+                </Badge>
               </div>
-            )}
-
-            {primaryOmrComponent && (
+            </CardHeader>
+            <CardContent className="space-y-4">
               <>
-                <div className="flex flex-wrap items-center gap-2">
-                  <Badge variant="outline">{primaryOmrComponent.label}</Badge>
-                  <Badge variant="outline">{answerQuestionCount} soalan</Badge>
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge variant="outline">{primaryOmrLabel}</Badge>
+                    <Badge variant="outline">{answerQuestionCount} soalan</Badge>
+                    <Badge variant="outline">Tingkatan {activeOmrGrade}</Badge>
+                  </div>
+                  <div className="w-full sm:w-[190px]">
+                    <Select value={activeOmrGrade} onValueChange={setOmrGrade}>
+                      <SelectTrigger className="h-10">
+                        <SelectValue placeholder="Pilih tingkatan" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {omrGradeOptions.map((grade) => (
+                          <SelectItem key={grade} value={String(grade)}>
+                            Tingkatan {grade}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-5 xl:grid-cols-8">
                   {Array.from({ length: answerQuestionCount }).map((_, index) => {
                     const questionNo = index + 1;
                     return (
-                      <div key={questionNo} className="space-y-1">
-                        <div className="text-xs text-muted-foreground">Q{questionNo}</div>
+                      <div key={questionNo} className="rounded-md border border-border/60 bg-background p-2">
+                        <div className="mb-1 text-xs font-medium text-muted-foreground">Q{questionNo}</div>
                         <Input
+                          className="h-9 text-center font-semibold uppercase"
+                          data-answer-question={questionNo}
                           value={answers[questionNo] ?? ""}
                           onChange={(event) =>
                             setAnswers((current) => ({
@@ -534,25 +736,90 @@ export default function AnswerSchemesPage() {
                               [questionNo]: event.target.value.toUpperCase().replace(/[^ABCD]/g, "").slice(0, 1),
                             }))
                           }
+                          onKeyDown={(event) => handleAnswerKeyDown(event, questionNo)}
                           maxLength={1}
-                          placeholder="A"
                         />
                       </div>
                     );
                   })}
                 </div>
 
-                <div className="flex justify-end">
-                  <Button onClick={handleSaveAnswers} disabled={!examId || !subjectId}>
+                <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setAnswers({})}
+                    disabled={answeredCount === 0}
+                  >
+                    <RotateCcw className="mr-2 h-4 w-4" />
+                    Reset Jawapan
+                  </Button>
+                  <Button onClick={handleSaveAnswers} disabled={!examId || !subjectId || answeredCount !== answerQuestionCount}>
                     <Save className="mr-2 h-4 w-4" />
                     Simpan Skema OMR
                   </Button>
                 </div>
               </>
-            )}
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        )}
       </div>
     </div>
+  );
+}
+
+function SchemeStatCard({
+  title,
+  value,
+  icon: Icon,
+  variant,
+}: {
+  title: string;
+  value: string | number;
+  icon: LucideIcon;
+  variant: "primary" | "chart2" | "chart3";
+}) {
+  const styles = {
+    primary: {
+      border: "hover:border-emerald-300",
+      bg: "bg-emerald-100",
+      iconBorder: "border-emerald-200",
+      text: "text-emerald-600",
+      valText: "text-emerald-600",
+    },
+    chart2: {
+      border: "hover:border-blue-300",
+      bg: "bg-blue-100",
+      iconBorder: "border-blue-200",
+      text: "text-blue-600",
+      valText: "text-blue-600",
+    },
+    chart3: {
+      border: "hover:border-violet-300",
+      bg: "bg-violet-100",
+      iconBorder: "border-violet-200",
+      text: "text-violet-600",
+      valText: "text-violet-600",
+    },
+  }[variant];
+
+  return (
+    <Card className={`border-border bg-card shadow-sm transition-all duration-300 hover:shadow-md ${styles.border}`}>
+      <CardContent className="p-5">
+        <div className="flex items-start justify-between gap-4">
+          <div className="min-w-0">
+            <p className="mb-2 text-sm font-medium text-muted-foreground">
+              {title}
+            </p>
+            <h3 className={`break-words text-3xl font-bold leading-tight ${styles.valText}`}>
+              {value}
+            </h3>
+          </div>
+          <div className={`rounded-xl border p-3 ${styles.bg} ${styles.iconBorder}`}>
+            <Icon className={`h-5 w-5 ${styles.text}`} />
+          </div>
+        </div>
+      </CardContent>
+    </Card>
   );
 }

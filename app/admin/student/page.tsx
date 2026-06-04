@@ -27,7 +27,6 @@ import {
     Loader2,
     UserPlus,
     RefreshCw,
-    Shield,
     Pencil,
     Bus,
     Clock,
@@ -63,6 +62,11 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
+import {
+    formatMalaysiaDate,
+    formatMalaysiaTime,
+    getMalaysiaDateInputValue,
+} from "@/lib/date-utils";
 
 type ClassRow = { id: string; name: string; grade: number };
 
@@ -115,26 +119,16 @@ const getAgeFromIC = (ic: string): number | null => {
 
 // Format date to local string
 const formatDate = (dateString: string | null): string => {
-    if (!dateString) return "-";
-    try {
-        return new Date(dateString).toLocaleDateString('ms-MY', {
-            day: 'numeric',
-            month: 'long',
-            year: 'numeric'
-        });
-    } catch {
-        return "-";
-    }
+    return formatMalaysiaDate(dateString);
 };
 
 // Client-side only time component
 const LastUpdatedTime = () => {
-    const [time, setTime] = useState<string>("");
+    const [time, setTime] = useState<string>(() => formatMalaysiaTime());
 
     useEffect(() => {
-        setTime(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
         const interval = setInterval(() => {
-            setTime(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+            setTime(formatMalaysiaTime());
         }, 60000);
         return () => clearInterval(interval);
     }, []);
@@ -342,7 +336,9 @@ export default function AdminStudentsPage() {
         setEditIc(formatIcNumber(s.identifier));
         setEditLevel(s.level || "");
         setEditOriginalLevel(s.level || "");
-        setEditEnrollmentDate(s.enrollment_date ? s.enrollment_date.split('T')[0] : "");
+        setEditEnrollmentDate(
+            s.enrollment_date ? getMalaysiaDateInputValue(new Date(s.enrollment_date)) : "",
+        );
         
         const detected = detectLevelFromIC(s.identifier);
         setEditDetectedLevel(detected);
@@ -457,11 +453,6 @@ export default function AdminStudentsPage() {
                             </div>
                         </div>
                         <div className="flex items-center gap-3 text-sm text-muted-foreground">
-                            <div className="flex items-center gap-1">
-                                <Shield className="w-3.5 h-3.5" />
-                                <span>Data Pelajar Terkawal</span>
-                            </div>
-                            <div className="w-1 h-1 rounded-full bg-muted" />
                             <div className="flex items-center gap-1">
                                 <Clock className="w-3.5 h-3.5" />
                                 <span>Kemas kini: <LastUpdatedTime /></span>
@@ -725,7 +716,7 @@ export default function AdminStudentsPage() {
                                                 </div>
                                             </SelectItem>
                                             {rows.some((s) => !s.className) && (
-                                                <SelectItem value="__unassigned__">Tiada Kelas</SelectItem>
+                                                <SelectItem value="__unassigned__">Belum Tetap</SelectItem>
                                             )}
                                             {classNameOptions.map((name) => (
                                                 <SelectItem key={name} value={name}>
@@ -889,7 +880,7 @@ export default function AdminStudentsPage() {
                                 {filterLevel !== "all" && <Badge variant="secondary" className="ml-2">Tingkatan {filterLevel === "default-level-1" ? "1" : filterLevel}</Badge>}
                                 {filterClassName !== "all" && (
                                     <Badge variant="secondary" className="ml-2">
-                                        {filterClassName === "__unassigned__" ? "Tiada Kelas" : filterClassName}
+                                        {filterClassName === "__unassigned__" ? "Belum Tetap" : filterClassName}
                                     </Badge>
                                 )}
                             </div>
@@ -928,13 +919,6 @@ export default function AdminStudentsPage() {
                     </div>
                 </Card>
 
-                {/* FOOTER NOTES */}
-                <div className="text-center pt-6">
-                    <div className="inline-flex items-center gap-2 text-sm text-muted-foreground bg-card/50 backdrop-blur-sm px-4 py-2 rounded-full border border-border">
-                        <Shield className="w-4 h-4" />
-                        <span>Sistem Pemarkahan Pelajar v2.0 • Data pelajar terkawal sepenuhnya</span>
-                    </div>
-                </div>
             </div>
 
             {/* EDIT DIALOG */}

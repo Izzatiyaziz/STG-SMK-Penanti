@@ -4,6 +4,8 @@ import { requireApiRole } from "@/lib/auth";
 
 export const runtime = "nodejs";
 
+const MAX_CLASSES_PER_SUBJECT_TEACHER = 3;
+
 function normalize(value: unknown) {
     return String(value ?? "").toLowerCase().trim();
 }
@@ -12,25 +14,58 @@ function normalizeSubjectName(value: unknown) {
     return normalize(value).replace(/[^a-z0-9]+/g, " ").replace(/\s+/g, " ").trim();
 }
 
-function isUpperFormOnlySubject(subjectName: unknown) {
+function subjectClassStreams(subjectName: unknown) {
     const name = normalizeSubjectName(subjectName);
-    if (!name) return false;
 
-    return (
-        /\bbiologi\b/.test(name) ||
-        /\bkimia\b/.test(name) ||
-        /\bfizik\b/.test(name) ||
-        /\bperniagaan\b/.test(name) ||
-        /\bakaun\b/.test(name) ||
-        /\bperakaunan\b/.test(name) ||
-        name.includes("matematik tambahan") ||
-        name.includes("additional mathematics")
-    );
+    if (/\bakaun\b/.test(name) || /\bperakaunan\b/.test(name)) {
+        return ["ibnu khaldun"];
+    }
+
+    if (/\bbiologi\b/.test(name) || /\bkimia\b/.test(name) || /\bfizik\b/.test(name)) {
+        return ["ibnu bajjah"];
+    }
+
+    if (/\bperniagaan\b/.test(name)) {
+        return ["ibnu nafis"];
+    }
+
+    if (name.includes("pendidikan seni") || name.includes("seni visual")) {
+        return ["ibnu nafis", "ibnu qayyum"];
+    }
+
+    if (name.includes("matematik tambahan") || name.includes("additional mathematics")) {
+        return ["ibnu bajjah", "ibnu khaldun"];
+    }
+
+    return null;
 }
 
-function isAllowedClassForSubject(subjectName: unknown, grade: unknown) {
-    if (!isUpperFormOnlySubject(subjectName)) return true;
-    return Number(grade) === 4 || Number(grade) === 5;
+function isAllowedClassForSubject(subjectName: unknown, grade: unknown, className: unknown) {
+    const subject = normalizeSubjectName(subjectName);
+    const gradeNumber = Number(grade);
+    const normalizedClassName = normalizeSubjectName(className);
+
+    if ((subject === "sains" || subject === "science") && (gradeNumber === 4 || gradeNumber === 5)) {
+        return !normalizedClassName.includes("ibnu bajjah");
+    }
+
+    if (
+        (subject === "reka bentuk dan teknologi" ||
+            subject === "rbt" ||
+            subject === "design and technology" ||
+            subject === "geografi" ||
+            subject === "geography") &&
+        (gradeNumber === 4 || gradeNumber === 5)
+    ) {
+        return false;
+    }
+
+    const streams = subjectClassStreams(subjectName);
+    if (!streams) return true;
+
+    if (gradeNumber !== 4 && gradeNumber !== 5) return false;
+
+    return streams.some((stream) => normalizedClassName.includes(stream));
 }
 
 type TeacherRoleRow = {
@@ -59,6 +94,11 @@ type AssignmentRow = {
 type SubjectRow = {
     subject_id: unknown;
     subject_name?: unknown;
+};
+
+type ExistingAssignmentRow = {
+    teacher_subject_id?: unknown;
+    teacher_id?: unknown;
 };
 
 type TeacherSubjectLoad = {
@@ -170,7 +210,7 @@ export async function GET(req: Request) {
 
         const subjectName = subject?.subject_name ?? "";
         const visibleClasses = ((classes ?? []) as ClassRow[]).filter((c) =>
-            isAllowedClassForSubject(subjectName, c.grade)
+            isAllowedClassForSubject(subjectName, c.grade, c.class_name)
         );
         const visibleClassIds = new Set(
             visibleClasses.map((c) => String(c.class_id ?? ""))
@@ -364,7 +404,7 @@ export async function POST(req: Request) {
                     .single(),
                 supabase
                     .from("stg_classes")
-                    .select("class_id, grade")
+                    .select("class_id, class_name, grade")
                     .eq("class_id", class_id)
                     .single(),
             ]);
@@ -376,11 +416,11 @@ export async function POST(req: Request) {
             );
         }
 
-        if (!isAllowedClassForSubject(subject?.subject_name ?? "", classRow.grade)) {
+        if (!isAllowedClassForSubject(subject?.subject_name ?? "", classRow.grade, classRow.class_name)) {
             return NextResponse.json(
                 {
                     message:
-                        "Subjek ini hanya boleh dilantik untuk Tingkatan 4 dan 5",
+                        "Kelas ini tidak mengambil subjek tersebut.",
                 },
                 { status: 400 }
             );
@@ -424,6 +464,41 @@ export async function POST(req: Request) {
                 { message: "Guru yang dipilih bukan Guru Subjek" },
                 { status: 400 }
             );
+        }
+
+        const { data: existingRows } = await supabase
+            .from("stg_teacher_subject")
+            .select("teacher_subject_id, teacher_id")
+            .eq("subject_id", subject_id)
+            .eq("class_id", class_id)
+            .limit(1);
+
+        const existingAssignment = ((existingRows ?? []) as ExistingAssignmentRow[])[0] ?? null;
+        const isSameTeacherForCurrentClass =
+            String(existingAssignment?.teacher_id ?? "").trim() === teacher_id;
+
+        if (!isSameTeacherForCurrentClass) {
+            const { data: teacherAssignments, error: countErr } = await supabase
+                .from("stg_teacher_subject")
+                .select("teacher_subject_id")
+                .eq("teacher_id", teacher_id);
+
+            if (countErr) {
+                return NextResponse.json(
+                    { message: countErr.message },
+                    { status: 400 }
+                );
+            }
+
+            if ((teacherAssignments ?? []).length >= MAX_CLASSES_PER_SUBJECT_TEACHER) {
+                return NextResponse.json(
+                    {
+                        message:
+                            "Guru Subjek ini sudah mencapai had maksimum 3 kelas.",
+                    },
+                    { status: 400 }
+                );
+            }
         }
 
         // Replace any existing assignment for this subject+class (single-teacher-per-class-per-subject).

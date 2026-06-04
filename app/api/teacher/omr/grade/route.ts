@@ -104,7 +104,8 @@ export async function POST(req: Request) {
             .select("grade")
             .eq("class_id", class_id)
             .maybeSingle();
-        const gradeGroup = Number(classGradeRow?.grade ?? 0) >= 4 ? "upper" : "lower";
+        const gradeNumber = Number(classGradeRow?.grade ?? 0);
+        const gradeGroup = Number.isFinite(gradeNumber) && gradeNumber > 0 ? `tingkatan-${gradeNumber}` : "lower";
 
         const { data: answerRows, error: answerErr } = await supabaseAdmin
             .from("stg_answer_schema")
@@ -117,7 +118,7 @@ export async function POST(req: Request) {
         if (answerErr) return NextResponse.json({ message: answerErr.message }, { status: 500 });
         if (!Array.isArray(answerRows) || answerRows.length === 0) {
             return NextResponse.json(
-                { message: "Skema jawapan belum disediakan untuk exam + subject ini" },
+                { message: `Skema jawapan OMR Tingkatan ${gradeNumber || "-"} belum disediakan untuk exam + subject ini` },
                 { status: 400 }
             );
         }
@@ -161,8 +162,9 @@ export async function POST(req: Request) {
                 answer_region,
                 template: filteredTemplate,
                 answer_key,
-                min_mark_threshold: body?.min_mark_threshold ?? 0.55,
-                ambiguity_gap: body?.ambiguity_gap ?? 0.12,
+                min_mark_threshold: body?.min_mark_threshold ?? 0.32,
+                ambiguity_gap: body?.ambiguity_gap ?? 0.08,
+                search_radius: body?.search_radius ?? 8,
             }),
         });
 
@@ -278,7 +280,7 @@ export async function POST(req: Request) {
                             component_type: "omr",
                             mark: objective_total_mark,
                             max_mark: objectiveMax,
-                            included_in_total: primaryOmrComponent?.included_in_total !== false,
+                            included_in_total: true,
                             question_count: primaryOmrComponent?.question_count ?? null,
                             group_name: templateInfo.group,
                             input_date: new Date().toISOString(),

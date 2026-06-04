@@ -23,13 +23,11 @@ import {
     Loader2,
     UserPlus,
     User,
-    IdCard,
     GraduationCap,
-    Calendar,
-    Layers,
     RefreshCw,
     AlertCircle,
 } from "lucide-react";
+import { getMalaysiaDateInputValue } from "@/lib/date-utils";
 
 interface AddStudentDialogProps {
     onSuccess: () => void;
@@ -44,9 +42,7 @@ const normalizeSpaces = (value: string) => value.replace(/\s+/g, " ").trim();
 const isWordsOnlyName = (value: string) => {
     const normalized = normalizeSpaces(value);
     if (!normalized) return false;
-    // Allow Unicode letters + spaces, plus name separators like "/" and apostrophe.
-    // Examples: "PHIT SAMAI A/P VILAI", "O'CONNOR"
-    return /^[\p{L}]+(?:[/'’][\p{L}]+)*(?: [\p{L}]+(?:[/'’][\p{L}]+)*)*$/u.test(
+    return /^[\p{L}]+(?:[/'\u2019][\p{L}]+)*(?: [\p{L}]+(?:[/'\u2019][\p{L}]+)*)*$/u.test(
         normalized
     );
 };
@@ -100,7 +96,7 @@ export function AddStudentDialog({
     const [selectedLevel, setSelectedLevel] = useState<string>("");
     const [detectedLevel, setDetectedLevel] = useState<string | null>(null);
     const [userOverridden, setUserOverridden] = useState(false);
-    const today = new Date().toISOString().split('T')[0];
+    const today = getMalaysiaDateInputValue();
     
     const [formData, setFormData] = useState({
         fullname: "",

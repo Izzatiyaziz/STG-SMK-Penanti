@@ -257,7 +257,7 @@ export default function StudentDashboardPage() {
                       <XAxis dataKey="exam" />
                       <YAxis domain={[0, 100]} />
                       <Tooltip />
-                      <Line type="monotone" dataKey="average" strokeWidth={3} dot={{ r: 5 }} />
+                      <Line type="monotone" dataKey="average" name="Purata" strokeWidth={3} dot={{ r: 5 }} />
                     </LineChart>
                   </ResponsiveContainer>
                 ) : (

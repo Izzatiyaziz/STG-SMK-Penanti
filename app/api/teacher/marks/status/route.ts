@@ -145,10 +145,10 @@ export async function GET(req: Request) {
         const approvalStatus =
             total === 0
                 ? "none"
-                : pending > 0
-                  ? "pending"
-                  : rejected > 0
+                : rejected > 0
                     ? "rejected"
+                    : pending > 0
+                      ? "pending"
                     : approved === total
                       ? "approved"
                       : "mixed";

@@ -29,6 +29,7 @@ import {
   ToggleGroup,
   ToggleGroupItem,
 } from "@/components/ui/toggle-group"
+import { MALAYSIA_LOCALE, MALAYSIA_TIME_ZONE } from "@/lib/date-utils"
 
 export const description = "An interactive area chart"
 
@@ -249,9 +250,10 @@ export function ChartAreaInteractive() {
               minTickGap={32}
               tickFormatter={(value) => {
                 const date = new Date(value)
-                return date.toLocaleDateString("en-US", {
+                return date.toLocaleDateString(MALAYSIA_LOCALE, {
                   month: "short",
                   day: "numeric",
+                  timeZone: MALAYSIA_TIME_ZONE,
                 })
               }}
             />
@@ -260,9 +262,10 @@ export function ChartAreaInteractive() {
               content={
                 <ChartTooltipContent
                   labelFormatter={(value) => {
-                    return new Date(value).toLocaleDateString("en-US", {
+                    return new Date(value).toLocaleDateString(MALAYSIA_LOCALE, {
                       month: "short",
                       day: "numeric",
+                      timeZone: MALAYSIA_TIME_ZONE,
                     })
                   }}
                   indicator="dot"

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import supabase from "@/lib/supabase";
 import { requireApiRole } from "@/lib/auth";
+import { isAllowedClassForSubject } from "@/lib/subject-rules";
 
 export const runtime = "nodejs";
 
@@ -174,6 +175,7 @@ export async function GET(req: Request) {
 			.map((classId) => {
 				const classInfo = classById.get(classId);
 				if (!classInfo) return null;
+				if (!isAllowedClassForSubject(subjectName, classInfo.grade)) return null;
 				return { id: classId, name: classInfo.name, grade: classInfo.grade };
 			})
 			.filter((row): row is { id: string; name: string; grade: number } => Boolean(row))

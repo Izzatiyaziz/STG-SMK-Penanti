@@ -39,7 +39,8 @@ import {
     PaginationPrevious,
 } from "@/components/ui/pagination";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Trash2, Edit, UserPlus, UserMinus, Search, RefreshCw, School, Users, Clock, Shield, Filter, AlertCircle, GraduationCap } from "lucide-react";
+import { Plus, Trash2, Edit, UserPlus, UserMinus, Search, RefreshCw, School, Users, Clock, Filter, AlertCircle, GraduationCap } from "lucide-react";
+import { formatMalaysiaTime } from "@/lib/date-utils";
 
 type ClassRow = {
     id: string;
@@ -66,12 +67,11 @@ type TeacherOption = {
 
 // Client-side only time component
 const LastUpdatedTime = () => {
-    const [time, setTime] = useState<string>("");
+    const [time, setTime] = useState<string>(() => formatMalaysiaTime());
 
     useEffect(() => {
-        setTime(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
         const interval = setInterval(() => {
-            setTime(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+            setTime(formatMalaysiaTime());
         }, 60000);
         return () => clearInterval(interval);
     }, []);
@@ -223,6 +223,19 @@ export default function AdminClassesPage() {
         return Array.from(uniqueNames).sort((a, b) => a.localeCompare(b));
     }, [rows]);
 
+    const teacherNameById = useMemo(() => {
+        return new Map(teachers.map((teacher) => [teacher.id, teacher.name]));
+    }, [teachers]);
+
+    const classTeacherNameByClassId = useMemo(() => {
+        const map: Record<string, string> = {};
+        for (const [classId, teacherId] of Object.entries(classTeacherByClassId)) {
+            const teacherName = teacherNameById.get(teacherId);
+            if (teacherName) map[classId] = teacherName;
+        }
+        return map;
+    }, [classTeacherByClassId, teacherNameById]);
+
     // Filtered rows based on search and grade filter
     const filteredRows = useMemo(() => {
         let filtered = rows;
@@ -238,16 +251,19 @@ export default function AdminClassesPage() {
             filtered = filtered.filter((row) => row.name === filterClassName);
         }
 
-        // Filter by search query (class name)
+        // Filter by search query (class name or class teacher name)
         if (searchQuery.trim() !== "") {
             const query = searchQuery.toLowerCase().trim();
-            filtered = filtered.filter((row) =>
-                row.name.toLowerCase().includes(query)
-            );
+            filtered = filtered.filter((row) => {
+                const className = row.name.toLowerCase();
+                const teacherName = (classTeacherNameByClassId[row.id] ?? "").toLowerCase();
+
+                return className.includes(query) || teacherName.includes(query);
+            });
         }
 
         return filtered;
-    }, [rows, filterGrade, filterClassName, searchQuery]);
+    }, [rows, filterGrade, filterClassName, searchQuery, classTeacherNameByClassId]);
 
     // Reset to page 1 when filters change
     useEffect(() => {
@@ -514,11 +530,6 @@ export default function AdminClassesPage() {
                         </div>
                         <div className="flex items-center gap-3 text-sm text-muted-foreground">
                             <div className="flex items-center gap-1">
-                                <Shield className="w-3.5 h-3.5" />
-                                <span>Data Kelas Terkawal</span>
-                            </div>
-                            <div className="w-1 h-1 rounded-full bg-muted" />
-                            <div className="flex items-center gap-1">
                                 <Clock className="w-3.5 h-3.5" />
                                 <span>Kemas kini: <LastUpdatedTime /></span>
                             </div>
@@ -678,7 +689,7 @@ export default function AdminClassesPage() {
                             <div className="flex-1 relative">
                                 <Search className="absolute left-3.5 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                                 <Input
-                                    placeholder="Cari kelas..."
+                                    placeholder="Cari kelas atau guru kelas..."
                                     value={searchQuery}
                                     onChange={(e) => setSearchQuery(e.target.value)}
                                     className="pl-10 h-11 rounded-lg border-border bg-background focus:border-primary focus:ring-primary/20"
@@ -1108,13 +1119,6 @@ export default function AdminClassesPage() {
                     </div>
                 </Card>
 
-                {/* FOOTER NOTES */}
-                <div className="text-center pt-6">
-                    <div className="inline-flex items-center gap-2 text-sm text-muted-foreground bg-card/50 backdrop-blur-sm px-4 py-2 rounded-full border border-border">
-                        <Shield className="w-4 h-4" />
-                        <span>Sistem Pengurusan Kelas v2.0 • Data kelas terkawal sepenuhnya</span>
-                    </div>
-                </div>
             </div>
 
             {/* EDIT DIALOG */}

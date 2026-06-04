@@ -22,7 +22,6 @@ export default function AdminUsersPage() {
                         </p>
                     </div>
                 </div>
-
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <Card className="shadow-lg border border-border/50">
                         <CardHeader>
@@ -37,7 +36,6 @@ export default function AdminUsersPage() {
                             </Button>
                         </CardContent>
                     </Card>
-
                     <Card className="shadow-lg border border-border/50">
                         <CardHeader>
                             <CardTitle>Pelajar</CardTitle>

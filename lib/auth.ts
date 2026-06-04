@@ -5,9 +5,9 @@ import { NextResponse } from "next/server";
 
 export const SESSION_COOKIE_NAME = "stg_auth";
 
-const SESSION_TTL_SECONDS = 60 * 60 * 8;
+const SESSION_TTL_SECONDS = 60 * 60 * 4;
 
-export type AppRole = "admin" | "teacher" | "student";
+export type AppRole = "admin" | "teacher" | "student" | "principal";
 
 export type SessionUser = {
     userType: AppRole;
@@ -72,10 +72,11 @@ function normalizeSession(session: Omit<SessionUser, "expiresAt">): SessionUser 
         expiresAt: Date.now() + SESSION_TTL_SECONDS * 1000,
     };
 }
-
+// Session token dicipta selepas login berjaya.
 export function createSessionToken(session: Omit<SessionUser, "expiresAt">) {
     const normalized = normalizeSession(session);
     const payload = base64UrlEncode(JSON.stringify(normalized));
+    // Signature memastikan token tidak boleh diubah tanpa dikesan.
     return `${payload}.${sign(payload)}`;
 }
 
@@ -89,6 +90,9 @@ export function verifySessionToken(token: string | undefined | null) {
     const expectedBuffer = Buffer.from(expected);
     const signatureBuffer = Buffer.from(signature);
 
+    // Session Verification:
+    // Sistem semak sama ada signature token masih sah.
+    // timingSafeEqual digunakan untuk mengurangkan risiko timing attack.
     if (
         expectedBuffer.length !== signatureBuffer.length ||
         !timingSafeEqual(expectedBuffer, signatureBuffer)
@@ -99,6 +103,8 @@ export function verifySessionToken(token: string | undefined | null) {
     try {
         const parsed = JSON.parse(base64UrlDecode(payload)) as SessionUser;
         if (!parsed.userType || !parsed.user_id || !parsed.role) return null;
+    // Session Expiry:
+    // Token akan ditolak jika sudah tamat tempoh.
         if (!parsed.expiresAt || parsed.expiresAt <= Date.now()) return null;
         return {
             ...parsed,
@@ -121,11 +127,15 @@ export function setSessionCookie(
     response: NextResponse,
     session: Omit<SessionUser, "expiresAt">
 ) {
+    // Session Cookie:
+    // Token session disimpan dalam cookie bernama stg_auth.
     response.cookies.set({
         name: SESSION_COOKIE_NAME,
         value: createSessionToken(session),
+    // httpOnly menghalang JavaScript browser membaca cookie ini.
         httpOnly: true,
         sameSite: "lax",
+    // secure=true di production supaya cookie hanya dihantar melalui HTTPS.
         secure: process.env.NODE_ENV === "production",
         path: "/",
         maxAge: SESSION_TTL_SECONDS,

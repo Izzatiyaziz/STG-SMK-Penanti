@@ -78,7 +78,7 @@ export async function POST() {
         if (role === "teacher") {
             const { data: teacher, error } = await supabase
                 .from("stg_teachers")
-                .select("teacher_id, fullname, email, is_first_login")
+                .select("teacher_id, username, fullname, email, is_first_login")
                 .eq("teacher_id", user_id)
                 .single();
 
@@ -111,6 +111,8 @@ export async function POST() {
 
             return NextResponse.json({
                 role: "teacher",
+                teacher_id: teacher.teacher_id,
+                staff_id: teacher.username,
                 name: teacher.fullname,
                 email: teacher.email,
                 roles: roleNames,

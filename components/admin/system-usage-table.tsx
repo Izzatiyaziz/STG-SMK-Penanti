@@ -1,6 +1,7 @@
 "use client";
 
 import { cn } from "@/lib/utils";
+import { formatMalaysiaDateTime } from "@/lib/date-utils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Table,
@@ -53,17 +54,7 @@ function formatRoleLabel(role?: string | null) {
 }
 
 function formatDateTime(value?: string | null) {
-  if (!value) return "-";
-  const dt = new Date(value);
-  if (Number.isNaN(dt.getTime())) return "-";
-  return dt.toLocaleString("ms-MY", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  });
+  return formatMalaysiaDateTime(value);
 }
 
 export default function AdminSystemUsageTable({

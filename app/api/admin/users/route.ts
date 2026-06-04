@@ -1,8 +1,41 @@
 import { NextResponse } from "next/server";
 import supabase from "@/lib/supabase";
+import supabaseAdmin from "@/lib/supabase-admin";
 import { requireApiRole } from "@/lib/auth";
 
 export const runtime = "nodejs";
+
+type TeacherRow = {
+    teacher_id?: unknown;
+    username?: unknown;
+    fullname?: unknown;
+    email?: unknown;
+    status?: unknown;
+};
+
+type TeacherRoleRow = {
+    teacher_id?: unknown;
+    role_id?: unknown;
+};
+
+type RoleRow = {
+    role_id?: unknown;
+    role_name?: unknown;
+};
+
+type AdminRow = {
+    admin_id?: unknown;
+    fullname?: unknown;
+};
+
+type StudentRow = {
+    student_id?: unknown;
+    fullname?: unknown;
+    ic_number?: unknown;
+    status?: unknown;
+    class_id?: unknown;
+    stg_classes?: { class_name?: unknown } | null;
+};
 
 export async function GET(req: Request) {
     try {
@@ -25,7 +58,7 @@ export async function GET(req: Request) {
             }
 
             return NextResponse.json(
-                data.map((a: any) => ({
+                (data as AdminRow[]).map((a) => ({
                     id: a.admin_id,
                     name: a.fullname ?? "Admin",
                     identifier: a.admin_id,
@@ -40,6 +73,7 @@ export async function GET(req: Request) {
         student_id,
         fullname,
         ic_number,
+        status,
         class_id,
         stg_classes (
           class_name
@@ -52,7 +86,7 @@ export async function GET(req: Request) {
             }
 
             return NextResponse.json(
-                data.map((s: any) => ({
+                (data as StudentRow[]).map((s) => ({
                     id: s.student_id,
                     name: s.fullname,
                     identifier: s.ic_number,
@@ -71,39 +105,83 @@ export async function GET(req: Request) {
             role === "subject teacher" ||
             role === "subject coordinator"
         ) {
-            const { data, error } = await supabase.from("stg_teachers").select(
-                `
-          teacher_id,
-          username,
-          fullname,
-          email,
-          phone_number,
-          stg_teacher_roles (
-            stg_roles (
-              role_name
-            )
-          )
-        `
-            );
+            const { data, error } = await supabaseAdmin
+                .from("stg_teachers")
+                .select("teacher_id, username, fullname, email, status")
+                .order("fullname", { ascending: true });
 
             if (error || !data) {
                 console.error("TEACHER FETCH ERROR:", error);
                 return NextResponse.json([], { status: 200 });
             }
 
-            let teachers = data.map((t: any) => ({
+            const teacherRows = data as TeacherRow[];
+            const teacherIds = teacherRows
+                .map((teacher) => String(teacher.teacher_id ?? "").trim())
+                .filter(Boolean);
+
+            const { data: teacherRoleRows, error: teacherRoleError } =
+                teacherIds.length > 0
+                    ? await supabaseAdmin
+                          .from("stg_teacher_roles")
+                          .select("teacher_id, role_id")
+                          .in("teacher_id", teacherIds)
+                    : { data: [], error: null };
+
+            if (teacherRoleError) {
+                console.error("TEACHER ROLE FETCH ERROR:", teacherRoleError);
+            }
+
+            const teacherRoles = (teacherRoleRows ?? []) as TeacherRoleRow[];
+            const roleIds = Array.from(
+                new Set(
+                    teacherRoles
+                        .map((row) => String(row.role_id ?? "").trim())
+                        .filter(Boolean)
+                )
+            );
+
+            const { data: roleRows, error: roleError } =
+                roleIds.length > 0
+                    ? await supabaseAdmin
+                          .from("stg_roles")
+                          .select("role_id, role_name")
+                          .in("role_id", roleIds)
+                    : { data: [], error: null };
+
+            if (roleError) {
+                console.error("ROLE FETCH ERROR:", roleError);
+            }
+
+            const roleNameById = new Map(
+                ((roleRows ?? []) as RoleRow[]).map((row) => [
+                    String(row.role_id ?? "").trim(),
+                    String(row.role_name ?? "").trim(),
+                ])
+            );
+            const rolesByTeacherId = new Map<string, string[]>();
+
+            for (const row of teacherRoles) {
+                const teacherId = String(row.teacher_id ?? "").trim();
+                const roleName = roleNameById.get(String(row.role_id ?? "").trim());
+                if (!teacherId || !roleName) continue;
+                rolesByTeacherId.set(teacherId, [
+                    ...(rolesByTeacherId.get(teacherId) ?? []),
+                    roleName,
+                ]);
+            }
+
+            let teachers = teacherRows.map((t) => ({
                 id: t.teacher_id,
                 name: t.fullname,
                 identifier: t.username ?? t.teacher_id,
                 email: t.email,
-                phone_number: t.phone_number,
-                roles: (t.stg_teacher_roles || []).map(
-                    (tr: any) => tr?.stg_roles?.role_name
-                ),
+                status: t.status ?? "active",
+                roles: rolesByTeacherId.get(String(t.teacher_id)) ?? [],
             }));
 
             if (role !== "teacher") {
-                teachers = teachers.filter((t: any) => t.roles.includes(role));
+                teachers = teachers.filter((t) => t.roles.includes(role));
             }
 
             return NextResponse.json(teachers, { status: 200 });

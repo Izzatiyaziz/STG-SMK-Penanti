@@ -20,6 +20,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { formatMalaysiaTime } from "@/lib/date-utils";
 import {
 	Select,
 	SelectContent,
@@ -38,13 +39,14 @@ import {
 import {
 	BarChart3,
 	BookOpen,
+	ChartPie,
 	CheckCircle,
 	ClipboardList,
+	Clock,
 	Download,
 	GraduationCap,
 	RefreshCw,
 	School,
-	Shield,
 	TrendingDown,
 	TrendingUp,
 	Trophy,
@@ -104,6 +106,22 @@ type ReportResponse = {
 const gradeColors = ["#2563eb", "#22c55e", "#facc15", "#fb7185", "#ef4444"];
 const barColors = ["#2563eb", "#14b8a6", "#f59e0b", "#a855f7", "#ef4444", "#22c55e"];
 
+function getTimeLabel() {
+	return formatMalaysiaTime();
+}
+const LastUpdatedTime = () => {
+	const [time, setTime] = useState(() => getTimeLabel());
+
+	useEffect(() => {
+		const interval = setInterval(() => {
+			setTime(getTimeLabel());
+		}, 60000);
+		return () => clearInterval(interval);
+	}, []);
+
+	return <span className="font-medium text-primary">{time || "Memuatkan..."}</span>;
+};
+
 function getStoredSession() {
 	if (typeof window === "undefined") return null;
 	try {
@@ -115,6 +133,7 @@ function getStoredSession() {
 		return null;
 	}
 }
+
 
 function normalizeSubjectName(value: unknown) {
 	return String(value ?? "")
@@ -156,6 +175,10 @@ function getGradeDotColor(grade: number) {
 		default:
 			return "bg-gray-500";
 	}
+}
+
+function formatStudentClass(student: Pick<StudentPerformance, "className" | "gradeLevel">) {
+	return student.gradeLevel ? `${student.gradeLevel} ${student.className}` : student.className;
 }
 
 export default function SubjectCoordinatorReportsPage() {
@@ -220,9 +243,20 @@ export default function SubjectCoordinatorReportsPage() {
 		const effectiveGradeFilter = gradeFilter.startsWith("default-grade-")
 			? String(defaultGradeNumber)
 			: gradeFilter;
-		if (effectiveGradeFilter === "all") return options;
-		return options.filter((option) => option.grade === Number(effectiveGradeFilter));
+		const filtered =
+			effectiveGradeFilter === "all"
+				? options
+				: options.filter((option) => option.grade === Number(effectiveGradeFilter));
+
+		return Array.from(new Map(filtered.map((option) => [option.id, option])).values())
+			.sort((a, b) => a.grade - b.grade || a.name.localeCompare(b.name));
 	}, [data?.filterOptions.classes, defaultGradeNumber, gradeFilter]);
+
+	useEffect(() => {
+		if (classFilter === "all") return;
+		if (classOptions.some((option) => option.id === classFilter)) return;
+		setClassFilter("all");
+	}, [classFilter, classOptions]);
 
 	const gradeOptions = useMemo(() => {
 		const grades = data?.filterOptions.grades ?? [1, 2, 3, 4, 5];
@@ -244,6 +278,13 @@ export default function SubjectCoordinatorReportsPage() {
 		}));
 	}, [data?.classPerformance]);
 
+	const trendChartData = useMemo(() => {
+		return (data?.trend ?? []).map((row) => ({
+			...row,
+			examLabel: row.year ? `${row.exam} (${row.year})` : row.exam,
+		}));
+	}, [data?.trend]);
+
 	return (
 		<div className="min-h-screen bg-background p-4 md:p-6">
 			<div className="max-w-7xl mx-auto space-y-8">
@@ -256,27 +297,31 @@ export default function SubjectCoordinatorReportsPage() {
 							<div>
 								<h1 className="text-xl font-bold text-foreground">Laporan Prestasi Pelajar</h1>
 								<p className="text-muted-foreground font-medium mt-1">
-									Analisis pencapaian pelajar bagi subjek {subjectName}
+									Analisis pencapaian pelajar bagi subjek {subjectName}. 
 								</p>
 							</div>
 						</div>
-						<div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
+							<div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
+							<div className="w-1 h-1 rounded-full bg-muted" />
 							<div className="flex items-center gap-1">
-								<Shield className="w-3.5 h-3.5" />
-								<span>Hanya markah yang telah diluluskan oleh panitia subjek dipaparkan</span>
+								<Clock className="w-3.5 h-3.5" />
+								<span>Kemas kini: <LastUpdatedTime /></span>
 							</div>
 						</div>
 					</div>
 
 					<div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+							<Badge
+								variant="outline"
+								className="flex h-11 items-center justify-center rounded-lg border-emerald-200 bg-emerald-50 px-4 text-sm font-medium text-emerald-700"
+							>
+								<CheckCircle className="mr-2 h-4 w-4" />
+								Telah diluluskan
+							</Badge>
 						<div className="inline-flex h-10 w-full items-center gap-2 rounded-md border border-border bg-background px-4 text-sm font-medium text-foreground shadow-xs sm:w-auto sm:max-w-[260px]">
 							<BookOpen className="h-4 w-4 shrink-0 text-primary" />
 							<span className="truncate">{subjectName}</span>
 						</div>
-						<Badge variant="outline" className="h-10 border-emerald-200 bg-emerald-50 px-4 text-emerald-700">
-							<CheckCircle className="w-4 h-4 mr-2" />
-							Telah diluluskan
-						</Badge>
 						<Button
 							variant="outline"
 							onClick={fetchReport}
@@ -372,7 +417,7 @@ export default function SubjectCoordinatorReportsPage() {
 							</Select>
 						</div>
 
-						<div className="flex items-end">
+						<div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-end">
 							<Button
 								variant="outline"
 								onClick={() => {
@@ -407,7 +452,7 @@ export default function SubjectCoordinatorReportsPage() {
 				{hasReportShell && (
 					<>
 						<div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-							<ChartCard title="Analisis Gred" description="Taburan gred pelajar bagi subjek ini">
+							<ChartCard title="Analisis Gred" description="Taburan gred pelajar bagi subjek ini" icon={ChartPie}>
 								<ResponsiveContainer width="100%" height={300}>
 									<PieChart>
 										<Pie data={gradeData} dataKey="value" nameKey="grade" innerRadius={58} outerRadius={98} paddingAngle={4} label>
@@ -433,6 +478,7 @@ export default function SubjectCoordinatorReportsPage() {
 								title="Prestasi Mengikut Kelas"
 								description={`Perbandingan pencapaian ${subjectName} antara kelas`}
 								className="lg:col-span-2"
+								icon={BarChart3}
 							>
 								<ResponsiveContainer width="100%" height={300}>
 									<BarChart data={classPerformanceChartData}>
@@ -440,7 +486,7 @@ export default function SubjectCoordinatorReportsPage() {
 										<XAxis dataKey="classLabel" />
 										<YAxis domain={[0, 100]} />
 										<Tooltip />
-										<Bar dataKey="average" radius={7}>
+										<Bar dataKey="average" name="Purata" radius={7}>
 											{classPerformanceChartData.map((_, index) => (
 												<Cell key={index} fill={barColors[index % barColors.length]} />
 											))}
@@ -450,20 +496,24 @@ export default function SubjectCoordinatorReportsPage() {
 							</ChartCard>
 						</div>
 
-						<ChartCard title="Trend Prestasi" description="Perubahan purata markah mengikut ujian">
+						<ChartCard title="Trend Prestasi" description="Perubahan purata markah mengikut ujian" icon={TrendingUp}>
 							<ResponsiveContainer width="100%" height={280}>
-								<LineChart data={data?.trend ?? []}>
+								<LineChart data={trendChartData}>
 									<CartesianGrid strokeDasharray="3 3" />
-									<XAxis dataKey="exam" />
+									<XAxis dataKey="examLabel" />
 									<YAxis domain={[0, 100]} />
 									<Tooltip />
-									<Line type="monotone" dataKey="average" stroke="#2563eb" strokeWidth={3} dot={{ r: 5, fill: "#22c55e" }} />
+									<Line type="monotone" dataKey="average" name="Purata" stroke="#2563eb" strokeWidth={3} dot={{ r: 5, fill: "#22c55e" }} />
 								</LineChart>
 							</ResponsiveContainer>
 						</ChartCard>
 
 						<div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-							<ReportTable title="Senarai Pelajar Cemerlang" description="Top 10 / Top 20 terbaik bagi subjek ini">
+							<ReportTable
+								title="Senarai Pelajar Cemerlang"
+								description="Top 3 pelajar terbaik bagi subjek ini"
+								icon={Trophy}
+							>
 								<TableHeader className="bg-muted/30">
 									<TableRow className="hover:bg-transparent border-b border-border">
 										<TableHead className="font-semibold text-foreground py-4 w-16 text-center">#</TableHead>
@@ -474,7 +524,7 @@ export default function SubjectCoordinatorReportsPage() {
 									</TableRow>
 								</TableHeader>
 								<TableBody>
-									{(data?.topStudents ?? []).slice(0, 20).map((student, index) => (
+									{(data?.topStudents ?? []).slice(0, 3).map((student, index) => (
 										<TableRow key={student.result_id} className="hover:bg-muted/50 transition-colors border-b border-border last:border-0 group">
 											<TableCell className="py-4 text-center">
 												<div className="font-medium text-muted-foreground group-hover:text-primary transition-colors">
@@ -485,9 +535,8 @@ export default function SubjectCoordinatorReportsPage() {
 												<div className="font-semibold text-foreground group-hover:text-primary transition-colors">
 													{student.name}
 												</div>
-												<div className="text-xs text-muted-foreground">{student.student_id}</div>
 											</TableCell>
-											<TableCell className="py-4">{student.className}</TableCell>
+											<TableCell className="py-4">{formatStudentClass(student)}</TableCell>
 											<TableCell className="py-4 text-center font-semibold">{student.mark}</TableCell>
 											<TableCell className="py-4 text-center pr-6">
 												<Badge variant="secondary">{student.grade}</Badge>
@@ -504,34 +553,43 @@ export default function SubjectCoordinatorReportsPage() {
 								</TableBody>
 							</ReportTable>
 
-							<ReportTable title="Senarai Pelajar Perlu Perhatian" description="Pelajar yang markah rendah atau gagal">
+							<ReportTable
+								title="Senarai Pelajar Perlu Perhatian"
+								description="Top 3 pelajar yang markah rendah atau gagal"
+								icon={TrendingDown}
+							>
 								<TableHeader className="bg-muted/30">
 									<TableRow className="hover:bg-transparent border-b border-border">
+										<TableHead className="font-semibold text-foreground py-4 w-16 text-center">#</TableHead>
 										<TableHead className="font-semibold text-foreground py-4">Pelajar</TableHead>
 										<TableHead className="font-semibold text-foreground py-4">Kelas</TableHead>
 										<TableHead className="font-semibold text-foreground py-4 text-center">Markah</TableHead>
-										<TableHead className="font-semibold text-foreground py-4 text-center pr-6">Status</TableHead>
+										<TableHead className="font-semibold text-foreground py-4 text-center pr-6">Gred</TableHead>
 									</TableRow>
 								</TableHeader>
 								<TableBody>
-									{(data?.weakStudents ?? []).map((student) => (
+									{(data?.weakStudents ?? []).slice(0, 3).map((student, index) => (
 										<TableRow key={student.result_id} className="hover:bg-muted/50 transition-colors border-b border-border last:border-0 group">
+											<TableCell className="py-4 text-center">
+												<div className="font-medium text-muted-foreground group-hover:text-primary transition-colors">
+													{index + 1}
+												</div>
+											</TableCell>
 											<TableCell className="py-4">
 												<div className="font-semibold text-foreground group-hover:text-primary transition-colors">
 													{student.name}
 												</div>
-												<div className="text-xs text-muted-foreground">{student.student_id}</div>
 											</TableCell>
-											<TableCell className="py-4">{student.className}</TableCell>
+											<TableCell className="py-4">{formatStudentClass(student)}</TableCell>
 											<TableCell className="py-4 text-center font-semibold text-rose-600">{student.mark}</TableCell>
 											<TableCell className="py-4 text-center pr-6">
-												<Badge className="border border-rose-200 bg-rose-100 text-rose-700">Intervention</Badge>
+												<Badge variant="destructive">{student.grade}</Badge>
 											</TableCell>
 										</TableRow>
 									))}
 									{!loading && (data?.weakStudents.length ?? 0) === 0 && (
 										<TableRow>
-											<TableCell colSpan={4} className="py-16">
+											<TableCell colSpan={5} className="py-16">
 												<TableEmpty title="Tiada pelajar perlu perhatian" description="Tiada pelajar gagal untuk subjek dan filter semasa." />
 											</TableCell>
 										</TableRow>
@@ -546,45 +604,28 @@ export default function SubjectCoordinatorReportsPage() {
 	);
 }
 
-function MetricCard({
-	title,
-	value,
-	icon: Icon,
-}: {
-	title: string;
-	value: string | number;
-	icon: typeof Users;
-}) {
-	return (
-		<Card className="border-border bg-card shadow-md rounded-xl overflow-hidden">
-			<CardContent className="flex items-center justify-between p-5">
-				<div>
-					<p className="text-sm text-muted-foreground">{title}</p>
-					<h3 className="mt-2 text-2xl font-bold text-foreground">{value}</h3>
-				</div>
-				<div className="rounded-xl bg-primary/10 p-3">
-					<Icon className="h-5 w-5 text-primary" />
-				</div>
-			</CardContent>
-		</Card>
-	);
-}
-
 function ChartCard({
 	title,
 	description,
 	children,
 	className = "",
+	icon: Icon,
 }: {
 	title: string;
 	description: string;
 	children: ReactNode;
 	className?: string;
+	icon?: typeof Users;
 }) {
 	return (
 		<Card className={`border-border bg-card shadow-md rounded-xl overflow-hidden ${className}`}>
 			<CardHeader className="border-b border-border bg-gradient-to-r from-card to-card/80 px-6 py-5">
-				<CardTitle className="text-xl font-bold text-foreground">{title}</CardTitle>
+				<CardTitle className="flex items-center gap-2 text-xl font-bold text-foreground">
+					{Icon ? (
+						<Icon className="h-5 w-5 text-primary" />
+					) : null}
+					{title}
+				</CardTitle>
 				<p className="text-sm text-muted-foreground">{description}</p>
 			</CardHeader>
 			<CardContent className="p-6">{children}</CardContent>
@@ -595,16 +636,21 @@ function ChartCard({
 function ReportTable({
 	title,
 	description,
+	icon: Icon,
 	children,
 }: {
 	title: string;
 	description: string;
+	icon?: typeof Users;
 	children: ReactNode;
 }) {
 	return (
 		<Card className="border-border bg-card shadow-md rounded-xl overflow-hidden">
 			<CardHeader className="border-b border-border bg-gradient-to-r from-card to-card/80 px-6 py-5">
-				<CardTitle className="text-xl font-bold text-foreground">{title}</CardTitle>
+				<CardTitle className="flex items-center gap-2 text-xl font-bold text-foreground">
+					{Icon ? <Icon className="h-5 w-5 text-primary" /> : null}
+					{title}
+				</CardTitle>
 				<p className="text-sm text-muted-foreground">{description}</p>
 			</CardHeader>
 			<CardContent className="p-0">

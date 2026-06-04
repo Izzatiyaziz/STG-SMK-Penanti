@@ -1,13 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { Card, CardContent } from "@/components/ui/card";
 import { 
   Users, 
   GraduationCap, 
   UserCheck, 
   Activity,
-  ShieldCheck,
   Clock
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -17,13 +17,14 @@ import AdminSystemUsageTable, {
   type SystemUsageLogRow,
 } from "@/components/admin/system-usage-table";
 import SystemUsageChart from "../reports/system-usage-chart";
+import { formatMalaysiaTime } from "@/lib/date-utils";
 
 type SessionLog = SystemUsageLogRow;
 
 const LastUpdatedTime = () => {
   const [time, setTime] = useState<string>("");
   useEffect(() => {
-    const update = () => setTime(new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }));
+    const update = () => setTime(formatMalaysiaTime());
     update();
     const interval = setInterval(update, 60000);
     return () => clearInterval(interval);
@@ -83,14 +84,13 @@ export default function AdminDashboardPage() {
                 <p className="text-muted-foreground font-medium mt-1">Ringkasan statistik dan log aktiviti sistem terkini</p>
               </div>
             </div>
+
             <div className="flex items-center gap-3 text-sm text-muted-foreground">
-              <div className="flex items-center gap-1"><ShieldCheck className="w-3.5 h-3.5" /><span>Sistem Dilindungi</span></div>
-              <div className="w-1 h-1 rounded-full bg-muted" />
-              <div className="flex items-center gap-1">
-                <Clock className="w-3.5 h-3.5" />
-                <span>Kemas kini: <LastUpdatedTime /></span>
-              </div>
-            </div>
+                                       <div className="flex items-center gap-1">
+                                           <Clock className="w-3.5 h-3.5" />
+                                           <span>Kemas kini: <LastUpdatedTime /></span>
+                                       </div>
+                                   </div>
           </div>
         </div>
 
@@ -101,12 +101,14 @@ export default function AdminDashboardPage() {
             value={students.length} 
             icon={GraduationCap} 
             variant="primary"
+            href="/admin/student"
           />
           <StatCard 
             title="Jumlah Guru" 
             value={teachers.length} 
             icon={UserCheck} 
             variant="chart2"
+            href="/admin/teacher"
           />
           <StatCard 
             title="Warga Sekolah" 
@@ -126,13 +128,6 @@ export default function AdminDashboardPage() {
           description="Paparan ringkas aktiviti pengguna untuk pemantauan."
         />
 
-        {/* FOOTER NOTES */}
-        <div className="text-center pt-2">
-          <div className="inline-flex items-center gap-2 text-sm text-muted-foreground bg-card/50 backdrop-blur-sm px-4 py-2 rounded-full border border-border">
-            <ShieldCheck className="w-4 h-4" />
-            <span>Sistem Pengurusan Kelas v2.0 • Data kelas terkawal sepenuhnya</span>
-          </div>
-        </div>
       </div>
     </div>
   );
@@ -144,11 +139,13 @@ function StatCard({
   value,
   icon: Icon,
   variant,
+  href,
 }: {
   title: string;
   value: number;
   icon: LucideIcon;
   variant: "primary" | "chart2" | "chart3";
+  href?: string;
 }) {
   const styles = {
     primary: {
@@ -174,7 +171,7 @@ function StatCard({
     }
   }[variant];
 
-  return (
+  const card = (
     <Card className={`border-border bg-card shadow-sm hover:shadow-md transition-all duration-300 ${styles.border}`}>
       <CardContent className="p-5">
         <div className="flex items-start justify-between">
@@ -190,5 +187,13 @@ function StatCard({
         </div>
       </CardContent>
     </Card>
+  );
+
+  if (!href) return card;
+
+  return (
+    <Link href={href} className="block rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2">
+      {card}
+    </Link>
   );
 }

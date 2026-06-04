@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -19,10 +19,16 @@ import {
 } from "@/components/ui/select";
 import {
   Camera,
+  CameraOff,
   RotateCw,
   Upload,
   Scan,
   AlertCircle,
+  BookOpen,
+  ClipboardList,
+  ImageUp,
+  Smartphone,
+  UserRound,
 } from "lucide-react";
 
 type Assignment = {
@@ -32,6 +38,8 @@ type Assignment = {
   class_id: string;
   class_name: string;
   grade: number | null;
+  omr_component_label?: string;
+  omr_question_count?: number | null;
 };
 
 type Student = { id: string; name: string; identifier: string };
@@ -138,11 +146,15 @@ export default function OMRScanPage() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
 
-  const [stream, setStream] = useState<MediaStream | null>(null);
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [isCameraActive, setIsCameraActive] = useState(true);
+  const [isCameraActive, setIsCameraActive] = useState(false);
+  const [isStartingCamera, setIsStartingCamera] = useState(false);
+  const [cameraError, setCameraError] = useState<string>("");
+  const [imageSourceLabel, setImageSourceLabel] = useState<string>("");
 
   const [teacherId, setTeacherId] = useState<string>("");
   const [assignments, setAssignments] = useState<Assignment[]>([]);
@@ -158,8 +170,9 @@ export default function OMRScanPage() {
   const [templateMetaMessage, setTemplateMetaMessage] = useState<string>(
     "Pilih kelas, subjek, dan peperiksaan untuk jana template automatik."
   );
-  const [minMarkThreshold, setMinMarkThreshold] = useState<string>("0.55");
-  const [ambiguityGap, setAmbiguityGap] = useState<string>("0.12");
+  const [minMarkThreshold, setMinMarkThreshold] = useState<string>("0.32");
+  const [ambiguityGap, setAmbiguityGap] = useState<string>("0.08");
+  const [searchRadius, setSearchRadius] = useState<string>("8");
 
   /* ================= ROLE GUARD ================= */
   useEffect(() => {
@@ -191,29 +204,12 @@ export default function OMRScanPage() {
       if (!tid) return;
 
       try {
-        const [aRes, eRes] = await Promise.all([
-          fetch(`/api/teacher/assignments?teacher_id=${encodeURIComponent(tid)}`),
-          fetch(`/api/teacher/exams`),
-        ]);
-
-        const aJson = await aRes.json();
+        const eRes = await fetch(`/api/teacher/exams`);
         const eJson = await eRes.json();
-
-        const assignmentList: Assignment[] = Array.isArray(aJson?.data) ? aJson.data : [];
         const examList: Exam[] = Array.isArray(eJson?.data) ? eJson.data : [];
         const marksContext = readMarksContext();
 
-        setAssignments(assignmentList);
         setExams(examList);
-
-        if (marksContext?.class_id && marksContext?.subject_id) {
-          const matchedAssignment = assignmentList.find(
-            (a) =>
-              a.class_id === marksContext.class_id &&
-              a.subject_id === marksContext.subject_id
-          );
-          if (matchedAssignment) setSelectedAssignmentId(matchedAssignment.id);
-        }
 
         if (marksContext?.exam_id && examList.some((e) => e.id === marksContext.exam_id)) {
           setSelectedExamId(marksContext.exam_id);
@@ -226,6 +222,47 @@ export default function OMRScanPage() {
 
     loadLookups();
   }, [teacherId]);
+
+  useEffect(() => {
+    async function loadOmrAssignments() {
+      const tid = teacherId.trim();
+      const examId = selectedExamId.trim();
+
+      if (!tid || !examId) {
+        setAssignments([]);
+        setSelectedAssignmentId("");
+        return;
+      }
+
+      try {
+        const res = await fetch(
+          `/api/teacher/omr/assignments?teacher_id=${encodeURIComponent(tid)}&exam_id=${encodeURIComponent(examId)}`,
+          { cache: "no-store" }
+        );
+        const json = await res.json();
+        const assignmentList: Assignment[] = Array.isArray(json?.data) ? json.data : [];
+        const marksContext = readMarksContext();
+
+        setAssignments(assignmentList);
+
+        const contextAssignment = assignmentList.find(
+          (assignment) =>
+            assignment.class_id === marksContext?.class_id &&
+            assignment.subject_id === marksContext?.subject_id
+        );
+
+        setSelectedAssignmentId((current) => {
+          if (current && assignmentList.some((assignment) => assignment.id === current)) return current;
+          return contextAssignment?.id ?? "";
+        });
+      } catch {
+        setAssignments([]);
+        setSelectedAssignmentId("");
+      }
+    }
+
+    loadOmrAssignments();
+  }, [teacherId, selectedExamId]);
 
   useEffect(() => {
     async function loadStudents() {
@@ -318,53 +355,98 @@ export default function OMRScanPage() {
     setTemplateJson(JSON.stringify(buildSpmTemplateBundle(objectiveQuestionCount), null, 2));
   }, [objectiveQuestionCount, templateMode]);
 
-  /* ================= START CAMERA ================= */
-  useEffect(() => {
-    let activeStream: MediaStream | null = null;
+  const stopCamera = useCallback((mediaStream?: MediaStream | null) => {
+    const currentStream = mediaStream ?? streamRef.current;
+    currentStream?.getTracks().forEach((track) => track.stop());
+    streamRef.current = null;
 
-    async function startCamera() {
-      try {
-        const mediaStream = await navigator.mediaDevices.getUserMedia({
-          video: {
-            facingMode: "environment",
-            width: { ideal: 1920 },
-            height: { ideal: 1080 },
-          },
-        });
-        activeStream = mediaStream;
-        if (videoRef.current) {
-          videoRef.current.srcObject = mediaStream;
-        }
-        setStream(mediaStream);
-        setIsCameraActive(true);
-      } catch {
-        toast.error("Tidak dapat akses kamera");
-        setIsCameraActive(false);
-      }
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
     }
 
-    startCamera();
-    return () => activeStream?.getTracks().forEach((t) => t.stop());
+    setIsCameraActive(false);
   }, []);
+
+  const startCamera = useCallback(async () => {
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setCameraError("Browser ini tidak menyokong pratonton kamera. Guna butang Kamera Telefon.");
+      setIsCameraActive(false);
+      return;
+    }
+
+    stopCamera();
+    setIsStartingCamera(true);
+    setCameraError("");
+
+    try {
+      const mediaStream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: { ideal: "environment" },
+          width: { ideal: 1920 },
+          height: { ideal: 1080 },
+        },
+        audio: false,
+      });
+
+      if (videoRef.current) {
+        videoRef.current.srcObject = mediaStream;
+        await videoRef.current.play().catch(() => undefined);
+      }
+
+      streamRef.current = mediaStream;
+      setIsCameraActive(true);
+    } catch (error) {
+      console.error("OMR camera access failed:", error);
+      setCameraError(
+        "Kamera tidak dapat diakses. Benarkan permission kamera atau guna Kamera Telefon."
+      );
+      setIsCameraActive(false);
+      toast.error("Tidak dapat akses kamera");
+    } finally {
+      setIsStartingCamera(false);
+    }
+  }, [stopCamera]);
+
+  /* ================= START CAMERA ================= */
+  useEffect(() => {
+    startCamera();
+    return () => {
+      stopCamera();
+    };
+  }, [startCamera, stopCamera]);
 
   /* ================= CAPTURE ================= */
   function captureImage() {
-    if (!videoRef.current || !canvasRef.current) return;
+    if (!videoRef.current || !canvasRef.current) {
+      toast.error("Kamera belum bersedia");
+      return;
+    }
 
     const canvas = canvasRef.current;
     const video = videoRef.current;
     const ctx = canvas.getContext("2d");
+
+    if (!video.videoWidth || !video.videoHeight) {
+      toast.error("Tunggu pratonton kamera muncul dahulu");
+      return;
+    }
 
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
     ctx?.drawImage(video, 0, 0, canvas.width, canvas.height);
 
     setCapturedImage(canvas.toDataURL("image/png"));
+    setImageSourceLabel("Diambil melalui pratonton kamera");
+    stopCamera();
     toast.success("Gambar OMR berjaya diambil");
   }
 
   function handlePickImage() {
     fileInputRef.current?.click();
+  }
+
+  function handlePhoneCameraCapture() {
+    cameraInputRef.current?.click();
   }
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -385,10 +467,13 @@ export default function OMRScanPage() {
         return;
       }
 
-      stream?.getTracks().forEach((t) => t.stop());
-      setStream(null);
-      setIsCameraActive(false);
+      stopCamera();
       setCapturedImage(result);
+      setImageSourceLabel(
+        e.currentTarget === cameraInputRef.current
+          ? "Diambil melalui kamera telefon"
+          : "Dimuat naik daripada fail"
+      );
       toast.success("Imej OMR berjaya dimuat naik");
     };
     reader.onerror = () => {
@@ -459,8 +544,9 @@ export default function OMRScanPage() {
           template_height,
           answer_region,
           template,
-          min_mark_threshold: Number(minMarkThreshold) || 0.55,
-          ambiguity_gap: Number(ambiguityGap) || 0.12,
+          min_mark_threshold: Number(minMarkThreshold) || 0.32,
+          ambiguity_gap: Number(ambiguityGap) || 0.08,
+          search_radius: Number(searchRadius) || 8,
         }),
       });
 
@@ -486,12 +572,6 @@ export default function OMRScanPage() {
     } finally {
       setIsProcessing(false);
     }
-  }
-
-  /* ================= RESTART ================= */
-  function restartCamera() {
-    stream?.getTracks().forEach((t) => t.stop());
-    location.reload();
   }
 
   return (
@@ -583,16 +663,21 @@ export default function OMRScanPage() {
                   />
                 )}
 
-                {!isCameraActive && (
+                {!capturedImage && !isCameraActive && (
                   <div className="absolute inset-0 flex items-center justify-center bg-black/80">
-                    <div className="text-center space-y-3">
-                      <AlertCircle className="w-12 h-12 text-destructive mx-auto" />
-                      <p className="text-white">
-                        Kamera tidak dapat diakses
-                      </p>
-                      <Button variant="outline" onClick={restartCamera}>
+                    <div className="max-w-sm space-y-3 px-6 text-center">
+                      <AlertCircle className="mx-auto h-12 w-12 text-destructive" />
+                      <div className="space-y-1">
+                        <p className="font-medium text-white">
+                          Kamera langsung belum aktif
+                        </p>
+                        <p className="text-sm text-white/70">
+                          {cameraError || "Tekan Buka Kamera atau guna Kamera Telefon untuk ambil gambar terus."}
+                        </p>
+                      </div>
+                      <Button variant="outline" onClick={startCamera} disabled={isStartingCamera}>
                         <RotateCw className="w-4 h-4 mr-2" />
-                        Cuba Semula
+                        {isStartingCamera ? "Membuka..." : "Buka Kamera"}
                       </Button>
                     </div>
                   </div>
@@ -622,18 +707,24 @@ export default function OMRScanPage() {
           <div className="space-y-6">
 
             {/* DETAILS */}
-            <Card className="shadow-lg border border-border/50 bg-gradient-to-br from-background to-muted/10">
-              <CardHeader>
-                <CardTitle>Butiran</CardTitle>
+            <Card className="overflow-hidden rounded-xl border-border bg-card shadow-md">
+              <CardHeader className="border-b border-border px-6 py-5">
+                <CardTitle className="flex items-center gap-2 text-xl font-bold">
+                  <ClipboardList className="h-5 w-5 text-primary" />
+                  Butiran
+                </CardTitle>
               </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <Label>Kelas & Subjek</Label>
+              <CardContent className="space-y-5 p-6">
+                <div className={selectedExamId && assignments.length > 0 ? "space-y-2" : "hidden"}>
+                  <Label className="flex items-center gap-2 text-muted-foreground">
+                    <BookOpen className="h-4 w-4 text-primary" />
+                    Kelas & Subjek OMR
+                  </Label>
                   <Select value={selectedAssignmentId} onValueChange={setSelectedAssignmentId}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Pilih kelas & subjek" />
+                    <SelectTrigger className="h-11 rounded-lg border-border bg-background">
+                      <SelectValue placeholder="Pilih kelas & subjek OMR" />
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent className="max-h-72 rounded-lg border-border">
                       {assignments.map((a) => (
                         <SelectItem key={a.id} value={a.id}>
                          {a.grade ?? "-"} {a.class_name} • {a.subject_name}
@@ -644,12 +735,22 @@ export default function OMRScanPage() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label>Peperiksaan</Label>
-                  <Select value={selectedExamId} onValueChange={setSelectedExamId}>
-                    <SelectTrigger>
+                  <Label className="flex items-center gap-2 text-muted-foreground">
+                    <ClipboardList className="h-4 w-4 text-primary" />
+                    Peperiksaan
+                  </Label>
+                  <Select
+                    value={selectedExamId}
+                    onValueChange={(value) => {
+                      setSelectedExamId(value);
+                      setSelectedAssignmentId("");
+                      setSelectedStudentId("");
+                    }}
+                  >
+                    <SelectTrigger className="h-11 rounded-lg border-border bg-background">
                       <SelectValue placeholder="Pilih peperiksaan" />
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent className="rounded-lg border-border">
                       {exams.map((e) => (
                         <SelectItem key={e.id} value={e.id}>
                           {e.name} ({e.year})
@@ -660,12 +761,19 @@ export default function OMRScanPage() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label>Pelajar</Label>
-                  <Select value={selectedStudentId} onValueChange={setSelectedStudentId}>
-                    <SelectTrigger>
+                  <Label className="flex items-center gap-2 text-muted-foreground">
+                    <UserRound className="h-4 w-4 text-primary" />
+                    Pelajar
+                  </Label>
+                  <Select
+                    value={selectedStudentId}
+                    onValueChange={setSelectedStudentId}
+                    disabled={!selectedAssignmentId}
+                  >
+                    <SelectTrigger className="h-11 rounded-lg border-border bg-background">
                       <SelectValue placeholder="Pilih pelajar" />
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent className="max-h-72 rounded-lg border-border">
                       {students.map((s) => (
                         <SelectItem key={s.id} value={s.id}>
                           {s.name} ({s.identifier})
@@ -735,7 +843,7 @@ export default function OMRScanPage() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                   <div className="space-y-2">
                     <Label>Min Threshold</Label>
                     <Input value={minMarkThreshold} onChange={(e) => setMinMarkThreshold(e.target.value)} />
@@ -743,6 +851,10 @@ export default function OMRScanPage() {
                   <div className="space-y-2">
                     <Label>Ambiguity Gap</Label>
                     <Input value={ambiguityGap} onChange={(e) => setAmbiguityGap(e.target.value)} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Search Radius</Label>
+                    <Input value={searchRadius} onChange={(e) => setSearchRadius(e.target.value)} />
                   </div>
                 </div>
               </CardContent>
@@ -761,6 +873,14 @@ export default function OMRScanPage() {
                   className="hidden"
                   onChange={handleFileChange}
                 />
+                <input
+                  ref={cameraInputRef}
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  className="hidden"
+                  onChange={handleFileChange}
+                />
 
                 {!capturedImage ? (
                   <>
@@ -768,9 +888,39 @@ export default function OMRScanPage() {
                       onClick={captureImage}
                       size="lg"
                       className="w-full"
+                      disabled={!isCameraActive || isStartingCamera}
                     >
                       <Camera className="w-5 h-5 mr-2" />
                       Ambil Gambar
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      onClick={handlePhoneCameraCapture}
+                      size="lg"
+                      className="w-full"
+                    >
+                      <Smartphone className="w-5 h-5 mr-2" />
+                      Kamera Telefon
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={isCameraActive ? () => stopCamera() : startCamera}
+                      size="lg"
+                      className="w-full"
+                      disabled={isStartingCamera}
+                    >
+                      {isCameraActive ? (
+                        <CameraOff className="w-5 h-5 mr-2" />
+                      ) : (
+                        <Camera className="w-5 h-5 mr-2" />
+                      )}
+                      {isStartingCamera
+                        ? "Membuka Kamera..."
+                        : isCameraActive
+                          ? "Tutup Pratonton"
+                          : "Buka Pratonton"}
                     </Button>
                     <Button
                       type="button"
@@ -779,7 +929,7 @@ export default function OMRScanPage() {
                       size="lg"
                       className="w-full"
                     >
-                      <Upload className="w-5 h-5 mr-2" />
+                      <ImageUp className="w-5 h-5 mr-2" />
                       Muat Naik Imej
                     </Button>
                   </>
@@ -787,7 +937,10 @@ export default function OMRScanPage() {
                   <>
                     <Button
                       variant="outline"
-                      onClick={() => setCapturedImage(null)}
+                      onClick={() => {
+                        setCapturedImage(null);
+                        setImageSourceLabel("");
+                      }}
                       size="lg"
                       className="w-full"
                     >
@@ -819,7 +972,22 @@ export default function OMRScanPage() {
                   <b>Status Imbasan:</b>{" "}
                   {capturedImage
                     ? "Gambar sedia diproses"
-                    : "Sedia untuk mengambil gambar"}
+                    : isCameraActive
+                      ? "Pratonton kamera aktif"
+                      : "Sedia untuk kamera telefon atau muat naik"}
+                </p>
+                {imageSourceLabel && (
+                  <p>
+                    <b>Sumber Imej:</b> {imageSourceLabel}
+                  </p>
+                )}
+                <p>
+                  <b>Kamera:</b>{" "}
+                  {isStartingCamera
+                    ? "Membuka kamera..."
+                    : isCameraActive
+                      ? "Aktif"
+                      : "Tidak aktif"}
                 </p>
                 <p>
                   <b>Template Aktif:</b>{" "}
@@ -863,11 +1031,6 @@ export default function OMRScanPage() {
 
           </div>
         </div>
-
-        <p className="text-center text-sm text-muted-foreground">
-          Sistem Pengimbas OMR v1.0 • Khas untuk Guru Subjek
-        </p>
-
       </div>
 
       <canvas ref={canvasRef} className="hidden" />

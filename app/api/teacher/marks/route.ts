@@ -7,6 +7,7 @@ import {
   getPrimaryOmrComponent,
   type MarkComponent,
 } from "@/lib/marking-template";
+import { getMalaysiaDateInputValue } from "@/lib/date-utils";
 
 export const runtime = "nodejs";
 
@@ -71,6 +72,7 @@ export async function POST(req: Request) {
     const class_id = toId(body?.class_id);
     const subject_id = toId(body?.subject_id);
     const exam_id = toId(body?.exam_id);
+    const saveAsDraft = body?.save_as_draft === true;
     const marks = Array.isArray(body?.marks) ? (body.marks as InputMarkRow[]) : [];
 
     if (!teacher_id || !class_id || !subject_id || !exam_id) {
@@ -118,8 +120,8 @@ export async function POST(req: Request) {
 
     const deadline = templateInfo.deadline ? String(templateInfo.deadline).trim() : "";
     if (deadline && /^\d{4}-\d{2}-\d{2}$/.test(deadline)) {
-      const today = new Date().toISOString().slice(0, 10);
-      if (today > deadline) {
+      const today = getMalaysiaDateInputValue();
+      if (!saveAsDraft && today > deadline) {
         return NextResponse.json(
           {
             message: `Tarikh akhir penghantaran telah tamat (${deadline}). Sila hubungi Penyelaras Subjek.`,
@@ -143,6 +145,75 @@ export async function POST(req: Request) {
     const studentIds = (students ?? [])
       .map((student: { student_id?: unknown }) => toId(student.student_id))
       .filter(Boolean);
+    const studentIdSet = new Set(studentIds);
+
+    if (studentIds.length > 0) {
+      const { data: resultRows, error: resultStatusErr } = await supabase
+        .from("stg_results")
+        .select("status, subjective_id")
+        .eq("subject_id", subject_id)
+        .eq("exam_id", exam_id)
+        .not("subjective_id", "is", null)
+        .in("student_id", studentIds);
+
+      if (resultStatusErr) {
+        return NextResponse.json({ message: resultStatusErr.message }, { status: 500 });
+      }
+
+      const subjectiveIds = Array.from(
+        new Set(
+          (Array.isArray(resultRows) ? resultRows : [])
+            .map((row: unknown) => {
+              if (!row || typeof row !== "object") return "";
+              return toId((row as { subjective_id?: unknown }).subjective_id);
+            })
+            .filter(Boolean),
+        ),
+      );
+
+      const { data: linkedSubjectives, error: linkedSubjectivesErr } =
+        subjectiveIds.length > 0
+          ? await supabase
+              .from("stg_subjective_marks")
+              .select("subjective_id, teacher_id")
+              .in("subjective_id", subjectiveIds)
+          : { data: [] as unknown[], error: null };
+
+      if (linkedSubjectivesErr) {
+        return NextResponse.json({ message: linkedSubjectivesErr.message }, { status: 500 });
+      }
+
+      const mySubjectiveIds = new Set(
+        (Array.isArray(linkedSubjectives) ? linkedSubjectives : [])
+          .filter((row: unknown) => {
+            if (!row || typeof row !== "object") return false;
+            return toId((row as { teacher_id?: unknown }).teacher_id) === teacher_id;
+          })
+          .map((row: unknown) => toId((row as { subjective_id?: unknown }).subjective_id))
+          .filter(Boolean),
+      );
+
+      let hasApproved = false;
+      let hasRejected = false;
+      for (const row of Array.isArray(resultRows) ? resultRows : []) {
+        if (!row || typeof row !== "object") continue;
+        const subjectiveId = toId((row as { subjective_id?: unknown }).subjective_id);
+        if (!subjectiveId || !mySubjectiveIds.has(subjectiveId)) continue;
+        const status = toId((row as { status?: unknown }).status);
+        if (status === "approved") hasApproved = true;
+        if (status === "rejected") hasRejected = true;
+      }
+
+      if (hasApproved && !hasRejected) {
+        return NextResponse.json(
+          {
+            message:
+              "Markah untuk kelas ini telah diluluskan oleh Panitia Subjek dan tidak boleh dikemas kini.",
+          },
+          { status: 409 },
+        );
+      }
+    }
 
     const payloadByStudent = new Map<string, Record<string, number>>();
     for (const row of marks) {
@@ -167,6 +238,42 @@ export async function POST(req: Request) {
           );
         }
       }
+    }
+
+    if (saveAsDraft) {
+      const draftStudentIds = Array.from(payloadByStudent.keys()).filter((studentId) =>
+        studentIdSet.has(studentId),
+      );
+      for (const studentId of draftStudentIds) {
+        const marksByKey = payloadByStudent.get(studentId) ?? {};
+        const componentRows = templateInfo.template.components.map((component) => ({
+          student_id: studentId,
+          subject_id,
+          exam_id,
+          class_id,
+          teacher_id,
+          component_key: component.key,
+          component_label: component.label,
+          component_type: component.type,
+          mark: toNumber(marksByKey[component.key], 0),
+          max_mark: component.max_mark,
+          included_in_total: true,
+          question_count: component.question_count ?? null,
+          group_name: templateInfo.group,
+          input_date: new Date().toISOString(),
+        }));
+
+        const { error: componentsErr } = await supabase.from("stg_mark_components").upsert(componentRows, {
+          onConflict: "student_id,subject_id,exam_id,component_key",
+        });
+        if (componentsErr) {
+          throw new Error(
+            `${componentsErr.message}. Jalankan migration stg_mark_components dahulu sebelum guna template pemarkahan baharu.`,
+          );
+        }
+      }
+
+      return NextResponse.json({ success: true, draft: true });
     }
 
     for (const studentId of studentIds) {
@@ -263,7 +370,7 @@ export async function POST(req: Request) {
         component_type: component.type,
         mark: toNumber(marksByKey[component.key], 0),
         max_mark: component.max_mark,
-        included_in_total: component.included_in_total !== false,
+        included_in_total: true,
         question_count: component.question_count ?? null,
         group_name: templateInfo.group,
         input_date: new Date().toISOString(),
@@ -277,19 +384,40 @@ export async function POST(req: Request) {
           `${componentsErr.message}. Jalankan migration stg_mark_components dahulu sebelum guna template pemarkahan baharu.`,
         );
       }
-
       const total = summary.percentage;
       const grade = gradeFromPercentage(total);
 
-      const { data: existingResult } = await supabase
-        .from("stg_results")
-        .select("result_id")
-        .eq("student_id", studentId)
-        .eq("subject_id", subject_id)
-        .eq("exam_id", exam_id)
-        .maybeSingle();
+      const { data: exactExistingResult } = subjective_id
+        ? await supabase
+            .from("stg_results")
+            .select("result_id")
+            .eq("student_id", studentId)
+            .eq("subject_id", subject_id)
+            .eq("exam_id", exam_id)
+            .eq("subjective_id", subjective_id)
+            .limit(1)
+            .maybeSingle()
+        : { data: null };
 
-      if (existingResult?.result_id) {
+      const { data: fallbackExistingResults } = exactExistingResult?.result_id
+        ? { data: [] as Array<{ result_id?: unknown }> }
+        : await supabase
+            .from("stg_results")
+            .select("result_id")
+            .eq("student_id", studentId)
+            .eq("subject_id", subject_id)
+            .eq("exam_id", exam_id)
+            .limit(1);
+
+      const existingResultId =
+        toId(exactExistingResult?.result_id) ||
+        toId(
+          Array.isArray(fallbackExistingResults)
+            ? fallbackExistingResults[0]?.result_id
+            : "",
+        );
+
+      if (existingResultId) {
         const { error: updateResultErr } = await supabase
           .from("stg_results")
           .update({
@@ -299,7 +427,7 @@ export async function POST(req: Request) {
             grade,
             status: "pending",
           })
-          .eq("result_id", existingResult.result_id);
+          .eq("result_id", existingResultId);
         if (updateResultErr) throw updateResultErr;
       } else {
         const { error: insertResultErr } = await supabase.from("stg_results").insert({

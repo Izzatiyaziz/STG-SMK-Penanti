@@ -4,6 +4,8 @@ import { requireApiRole } from "@/lib/auth";
 
 export const runtime = "nodejs";
 
+type DbRow = Record<string, unknown>;
+
 function toId(v: unknown) {
     return typeof v === "string" ? v.trim() : v == null ? "" : String(v).trim();
 }
@@ -16,6 +18,54 @@ function toNumber(v: unknown) {
 function average(arr: number[]) {
     if (!arr.length) return 0;
     return arr.reduce((a, b) => a + b, 0) / arr.length;
+}
+
+function normalizeGrade(value: unknown, mark: number) {
+    const grade = toId(value).toUpperCase();
+    if (grade === "E") return "F";
+    if (["A", "B", "C", "D", "F"].includes(grade)) return grade;
+    if (mark >= 80) return "A";
+    if (mark >= 65) return "B";
+    if (mark >= 50) return "C";
+    if (mark >= 40) return "D";
+    return "F";
+}
+
+function gradePoint(grade: string) {
+    switch (grade.toUpperCase()) {
+        case "A":
+            return 1;
+        case "B":
+            return 2;
+        case "C":
+            return 3;
+        case "D":
+            return 4;
+        default:
+            return 5;
+    }
+}
+
+function gradeSummary(rows: Array<{ grade: string }>) {
+    const counts = new Map<string, number>();
+    for (const row of rows) {
+        const grade = normalizeGrade(row.grade, 0);
+        counts.set(grade, (counts.get(grade) ?? 0) + 1);
+    }
+    return ["A", "B", "C", "D", "F"]
+        .map((grade) => {
+            const count = counts.get(grade) ?? 0;
+            return count ? `${count}[${grade}]` : "";
+        })
+        .filter(Boolean)
+        .join(" ");
+}
+
+function isFailingCoreSubject(subjectName: string, grade: string, mark: number) {
+    const normalizedSubject = subjectName.toLowerCase();
+    const normalizedGrade = normalizeGrade(grade, mark);
+    const isCore = normalizedSubject.includes("bahasa melayu") || normalizedSubject.includes("sejarah");
+    return isCore && (normalizedGrade === "F" || mark < 40);
 }
 
 export async function GET(req: Request) {
@@ -56,7 +106,7 @@ export async function GET(req: Request) {
             );
         }
 
-        const [{ data: classInfo }, { data: exam }, { data: cards }] = await Promise.all([
+        const [{ data: classInfo }, { data: exam }, { data: cards }, { data: classStudents }, { data: teacherInfo }] = await Promise.all([
             supabase
                 .from("stg_classes")
                 .select("class_id, class_name, grade")
@@ -72,19 +122,22 @@ export async function GET(req: Request) {
                 .select("student_id, average_mark, class_position, ai_comment")
                 .eq("class_id", class_id)
                 .eq("exam_id", exam_id),
+            supabase
+                .from("stg_students")
+                .select("student_id, fullname, ic_number")
+                .eq("class_id", class_id),
+            supabase
+                .from("stg_teachers")
+                .select("teacher_id, fullname")
+                .eq("teacher_id", teacher_id)
+                .maybeSingle(),
         ]);
 
         const studentIds = Array.from(
-            new Set((cards ?? []).map((c: any) => toId(c?.student_id)).filter(Boolean))
+            new Set((classStudents ?? []).map((s: DbRow) => toId(s.student_id)).filter(Boolean))
         );
 
-        const [{ data: students }, { data: results }] = await Promise.all([
-            studentIds.length
-                ? supabase
-                      .from("stg_students")
-                      .select("student_id, fullname")
-                      .in("student_id", studentIds)
-                : { data: [] as unknown[] },
+        const [{ data: results }] = await Promise.all([
             studentIds.length
                 ? supabase
                       .from("stg_results")
@@ -96,8 +149,37 @@ export async function GET(req: Request) {
                 : { data: [] as unknown[] },
         ]);
 
+        const classGrade = toNumber(classInfo?.grade);
+        const { data: levelClasses } = classGrade
+            ? await supabase.from("stg_classes").select("class_id").eq("grade", classGrade)
+            : { data: [] as unknown[] };
+        const levelClassRows = Array.isArray(levelClasses) ? (levelClasses as DbRow[]) : [];
+        const levelClassIds = Array.from(
+            new Set(levelClassRows.map((row) => toId(row.class_id)).filter(Boolean))
+        );
+        const { data: levelStudents } = levelClassIds.length
+            ? await supabase
+                  .from("stg_students")
+                  .select("student_id, class_id")
+                  .in("class_id", levelClassIds)
+            : { data: [] as unknown[] };
+        const levelStudentRows = Array.isArray(levelStudents) ? (levelStudents as DbRow[]) : [];
+        const levelStudentIds = Array.from(
+            new Set(levelStudentRows.map((row) => toId(row.student_id)).filter(Boolean))
+        );
+        const { data: levelResults } = levelStudentIds.length
+            ? await supabase
+                  .from("stg_results")
+                  .select("student_id, total, grade, status, subjective_id")
+                  .eq("exam_id", exam_id)
+                  .eq("status", "approved")
+                  .not("subjective_id", "is", null)
+                  .in("student_id", levelStudentIds)
+            : { data: [] as unknown[] };
+
+        const resultRows = Array.isArray(results) ? (results as DbRow[]) : [];
         const subjectIds = Array.from(
-            new Set((results ?? []).map((r: any) => toId(r?.subject_id)).filter(Boolean))
+            new Set(resultRows.map((r) => toId(r.subject_id)).filter(Boolean))
         );
         const { data: subjects } = subjectIds.length
             ? await supabase
@@ -109,47 +191,112 @@ export async function GET(req: Request) {
         const subjectNameById = new Map<string, string>();
         for (const s of Array.isArray(subjects) ? subjects : []) {
             if (!s || typeof s !== "object") continue;
-            subjectNameById.set(toId((s as any).subject_id), String((s as any).subject_name ?? "").trim());
+            const row = s as DbRow;
+            subjectNameById.set(toId(row.subject_id), String(row.subject_name ?? "").trim());
         }
 
         const studentNameById = new Map<string, string>();
-        for (const s of Array.isArray(students) ? students : []) {
+        const studentIcById = new Map<string, string>();
+        for (const s of Array.isArray(classStudents) ? classStudents : []) {
             if (!s || typeof s !== "object") continue;
-            studentNameById.set(toId((s as any).student_id), String((s as any).fullname ?? "").trim());
+            const row = s as DbRow;
+            studentNameById.set(toId(row.student_id), String(row.fullname ?? "").trim());
+            studentIcById.set(toId(row.student_id), String(row.ic_number ?? "").trim());
         }
 
-        const resultsByStudent = new Map<string, any[]>();
-        for (const r of Array.isArray(results) ? results : []) {
+        const cardByStudentId = new Map<string, DbRow>();
+        for (const card of Array.isArray(cards) ? cards : []) {
+            if (!card || typeof card !== "object") continue;
+            const row = card as DbRow;
+            const sid = toId(row.student_id);
+            if (sid) cardByStudentId.set(sid, row);
+        }
+
+        const resultsByStudent = new Map<string, DbRow[]>();
+        for (const r of resultRows) {
             if (!r || typeof r !== "object") continue;
-            const sid = toId((r as any).student_id);
+            const row = r as DbRow;
+            const sid = toId(row.student_id);
             if (!sid) continue;
             if (!resultsByStudent.has(sid)) resultsByStudent.set(sid, []);
-            resultsByStudent.get(sid)!.push(r);
+            resultsByStudent.get(sid)!.push(row);
         }
 
-        const out = (cards ?? []).map((c: any) => {
-            const sid = toId(c?.student_id);
-            const rs = (resultsByStudent.get(sid) ?? []).map((r: any) => {
-                const subjectId = toId(r?.subject_id);
+        const averages = studentIds.map((sid) => {
+            const rs = resultsByStudent.get(sid) ?? [];
+            return {
+                sid,
+                average: average(rs.map((r) => toNumber(r.total))),
+                hasResults: rs.length > 0,
+            };
+        });
+        const positionByStudentId = new Map<string, number>();
+        averages
+            .filter((row) => row.hasResults)
+            .sort((a, b) => b.average - a.average)
+            .forEach((row, index) => positionByStudentId.set(row.sid, index + 1));
+
+        const levelResultsByStudent = new Map<string, DbRow[]>();
+        for (const r of Array.isArray(levelResults) ? (levelResults as DbRow[]) : []) {
+            if (!r || typeof r !== "object") continue;
+            const sid = toId(r.student_id);
+            if (!sid) continue;
+            if (!levelResultsByStudent.has(sid)) levelResultsByStudent.set(sid, []);
+            levelResultsByStudent.get(sid)!.push(r);
+        }
+
+        const levelPositionByStudentId = new Map<string, number>();
+        levelStudentIds
+            .map((sid) => {
+                const rs = levelResultsByStudent.get(sid) ?? [];
+                return {
+                    sid,
+                    average: average(rs.map((r) => toNumber(r.total))),
+                    hasResults: rs.length > 0,
+                };
+            })
+            .filter((row) => row.hasResults)
+            .sort((a, b) => b.average - a.average)
+            .forEach((row, index) => levelPositionByStudentId.set(row.sid, index + 1));
+
+        const out = studentIds.map((sid) => {
+            const c = cardByStudentId.get(sid);
+            const rs = (resultsByStudent.get(sid) ?? []).map((r) => {
+                const subjectId = toId(r.subject_id);
+                const mark = toNumber(r.total);
                 return {
                     subject_id: subjectId,
                     name: subjectNameById.get(subjectId) ?? "",
-                    mark: toNumber(r?.total),
-                    grade: String(r?.grade ?? "").trim(),
+                    mark,
+                    grade: normalizeGrade(r.grade, mark),
                 };
             }).sort((a, b) => a.name.localeCompare(b.name));
 
-            const avg = c?.average_mark == null ? average(rs.map((x) => x.mark)) : toNumber(c?.average_mark);
+            const avg = c?.average_mark == null ? average(rs.map((x) => x.mark)) : toNumber(c.average_mark);
+            const points = rs.map((x) => gradePoint(x.grade));
+            const averageGradePoint = average(points);
+            const decision = rs.some((subject) => isFailingCoreSubject(subject.name, subject.grade, subject.mark))
+                ? "GAGAL"
+                : "LULUS";
 
             return {
                 student_id: sid,
                 student_name: studentNameById.get(sid) ?? "",
+                ic_number: studentIcById.get(sid) ?? "",
                 subjects: rs,
                 average_mark: avg,
-                position: c?.class_position ?? null,
+                position: c?.class_position ?? positionByStudentId.get(sid) ?? null,
+                class_total_students: studentIds.length,
+                level_position: levelPositionByStudentId.get(sid) ?? null,
+                level_total_students: levelStudentIds.length,
+                grade_summary: gradeSummary(rs),
+                average_grade_point: Number.isFinite(averageGradePoint) ? Number(averageGradePoint.toFixed(2)) : 0,
+                decision,
+                class_teacher_name: String(teacherInfo?.fullname ?? "").trim(),
                 comment: String(c?.ai_comment ?? ""),
+                has_report_card: Boolean(c),
             };
-        }).sort((a, b) => (a.position ?? 9999) - (b.position ?? 9999));
+        }).sort((a, b) => a.student_name.localeCompare(b.student_name));
 
         return NextResponse.json({
             class: {

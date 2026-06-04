@@ -3,6 +3,15 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import {
+    BookOpen,
+    CalendarDays,
+    GraduationCap,
+    IdCard,
+    ShieldCheck,
+    Users,
+} from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
@@ -107,15 +116,96 @@ export default function AdminProfilePage() {
         }
     }
 
+    function handleCancelPassword() {
+        setCurrentPassword("");
+        setNewPassword("");
+        setConfirmPassword("");
+    }
+
     return (
         <ProfileShell
             accountLabel="Akaun Admin"
             name={me?.name ?? "Admin"}
             email={me?.email}
             roleLabel="Pentadbir Sistem"
-            accentLabel="Akses"
-            accentValue="Penuh"
             note="Akaun ini mengurus data pengguna, peperiksaan, subjek, dan tetapan sistem sekolah. Pastikan kata laluan sentiasa kukuh dan tidak dikongsi."
+            profileDetailsContent={
+                <div className="space-y-5">
+                    <section className="rounded-2xl border border-border/60 bg-muted/20 p-4 shadow-sm">
+                        <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                            <IdCard className="h-4 w-4 text-primary" />
+                            Butiran Pentadbir
+                        </div>
+                        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                            <div className="rounded-xl border border-border/60 bg-background px-4 py-3">
+                                <div className="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">
+                                    ID Admin
+                                </div>
+                                <div className="mt-1 break-words font-semibold text-foreground">
+                                    {session?.user_id ?? "-"}
+                                </div>
+                            </div>
+                            <div className="rounded-xl border border-border/60 bg-background px-4 py-3">
+                                <div className="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">
+                                    Status Akaun
+                                </div>
+                                <div className="mt-1">
+                                    <Badge className="border-emerald-200 bg-emerald-50 text-emerald-700">
+                                        Aktif
+                                    </Badge>
+                                </div>
+                            </div>
+                            <div className="rounded-xl border border-border/60 bg-background px-4 py-3">
+                                <div className="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">
+                                    Peranan
+                                </div>
+                                <div className="mt-1 font-semibold text-foreground">
+                                    Pentadbir Sistem
+                                </div>
+                            </div>
+                            <div className="rounded-xl border border-border/60 bg-background px-4 py-3">
+                                <div className="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">
+                                    Tahap Akses
+                                </div>
+                                <div className="mt-1 font-semibold text-foreground">
+                                    Penuh
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
+                    <section className="rounded-2xl border border-border/60 bg-muted/20 p-4 shadow-sm">
+                        <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                            <ShieldCheck className="h-4 w-4 text-primary" />
+                            Akses Sistem
+                        </div>
+                        <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-2">
+                            {[
+                                { label: "Pengguna", icon: Users },
+                                { label: "Kelas", icon: GraduationCap },
+                                { label: "Subjek", icon: BookOpen },
+                                { label: "Peperiksaan", icon: CalendarDays },
+                            ].map((item) => {
+                                const Icon = item.icon;
+
+                                return (
+                                    <div
+                                        key={item.label}
+                                        className="flex items-center gap-3 rounded-xl border border-border/60 bg-background px-3 py-3"
+                                    >
+                                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-primary/20 bg-primary/10 text-primary">
+                                            <Icon className="h-4 w-4" />
+                                        </div>
+                                        <span className="text-sm font-semibold text-foreground">
+                                            {item.label}
+                                        </span>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </section>
+                </div>
+            }
             securityTitle="Tukar Kata Laluan"
             securityDescription="Gunakan kata laluan baharu yang kuat untuk memastikan akaun pentadbir kekal selamat."
             securityContent={
@@ -153,7 +243,7 @@ export default function AdminProfilePage() {
                             <Button
                                 type="button"
                                 variant="outline"
-                                onClick={() => router.back()}
+                                onClick={handleCancelPassword}
                                 disabled={loading}
                             >
                                 Batal

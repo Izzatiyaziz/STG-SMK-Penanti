@@ -105,7 +105,7 @@ export function NavUser({
                             size="lg"
                             className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
                         >
-                            <Avatar className="h-8 w-8 rounded-lg grayscale">
+                            <Avatar className="h-8 w-8 rounded-lg border border-sidebar-border bg-sidebar-accent">
                                 <AvatarImage
                                     src={user.avatar}
                                     alt={user.name}
@@ -162,7 +162,7 @@ export function NavUser({
                             <Link href={getProfilePath()}>
                                 <DropdownMenuItem>
                                     <IconUserCircle />
-                                    Account
+                                    Profil
                                 </DropdownMenuItem>
                             </Link>
                         </DropdownMenuGroup>
@@ -171,10 +171,10 @@ export function NavUser({
 
                         <DropdownMenuItem
                             onClick={handleLogout}
-                            className="text-red-600 focus:text-red-600"
+                            className="text-destructive focus:text-destructive"
                         >
                             <IconLogout />
-                            Log out
+                            Log keluar
                         </DropdownMenuItem>
                     </DropdownMenuContent>
                 </DropdownMenu>

@@ -39,9 +39,7 @@ const normalizeSpaces = (value: string) => value.replace(/\s+/g, " ").trim();
 const isWordsOnlyName = (value: string) => {
   const normalized = normalizeSpaces(value);
   if (!normalized) return false;
-  // Allow Unicode letters + spaces, plus name separators like "/" and apostrophe.
-  // Examples: "PHIT SAMAI A/P VILAI", "O'CONNOR"
-  return /^[\p{L}]+(?:[/'’][\p{L}]+)*(?: [\p{L}]+(?:[/'’][\p{L}]+)*)*$/u.test(
+  return /^[\p{L}]+(?:[/'\u2019][\p{L}]+)*(?: [\p{L}]+(?:[/'\u2019][\p{L}]+)*)*$/u.test(
     normalized
   );
 };

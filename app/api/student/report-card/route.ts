@@ -4,6 +4,8 @@ import { requireApiRole } from "@/lib/auth";
 
 export const runtime = "nodejs";
 
+type DbRow = Record<string, unknown>;
+
 function toId(v: unknown) {
     return typeof v === "string" ? v.trim() : v == null ? "" : String(v).trim();
 }
@@ -13,18 +15,56 @@ function toNumber(v: unknown) {
     return Number.isFinite(n) ? n : 0;
 }
 
+function average(arr: number[]) {
+    if (!arr.length) return 0;
+    return arr.reduce((a, b) => a + b, 0) / arr.length;
+}
+
+function normalizeGrade(value: unknown, mark: number) {
+    const grade = toId(value).toUpperCase();
+    if (grade === "E") return "F";
+    if (["A", "B", "C", "D", "F"].includes(grade)) return grade;
+    if (mark >= 80) return "A";
+    if (mark >= 65) return "B";
+    if (mark >= 50) return "C";
+    if (mark >= 40) return "D";
+    return "F";
+}
+
+function gradePoint(grade: string) {
+    switch (grade.toUpperCase()) {
+        case "A":
+            return 1;
+        case "B":
+            return 2;
+        case "C":
+            return 3;
+        case "D":
+            return 4;
+        default:
+            return 5;
+    }
+}
+
 function gradeSummary(results: Array<{ grade: string }>) {
     const counts = new Map<string, number>();
     for (const row of results) {
-        const grade = String(row.grade ?? "").trim().toUpperCase();
+        const grade = normalizeGrade(row.grade, 0);
         if (!grade) continue;
         counts.set(grade, (counts.get(grade) ?? 0) + 1);
     }
 
-    return ["A", "B", "C", "D", "E", "F"]
+    return ["A", "B", "C", "D", "F"]
         .filter((grade) => (counts.get(grade) ?? 0) > 0)
         .map((grade) => `${counts.get(grade)}[${grade}]`)
         .join(" ");
+}
+
+function isFailingCoreSubject(subjectName: string, grade: string, mark: number) {
+    const normalizedSubject = subjectName.toLowerCase();
+    const normalizedGrade = normalizeGrade(grade, mark);
+    const isCore = normalizedSubject.includes("bahasa melayu") || normalizedSubject.includes("sejarah");
+    return isCore && (normalizedGrade === "F" || mark < 40);
 }
 
 function normalizeClassName(value: unknown) {
@@ -126,7 +166,36 @@ export async function GET(req: Request) {
                   .eq("status", "active")
             : { count: 0 };
 
-        const subjectIds = Array.from(new Set((results ?? []).map((row: any) => toId(row?.subject_id)).filter(Boolean)));
+        const classGrade = toNumber(classRow?.grade);
+        const { data: levelClasses } = classGrade
+            ? await supabase.from("stg_classes").select("class_id").eq("grade", classGrade)
+            : { data: [] as unknown[] };
+        const levelClassRows = Array.isArray(levelClasses) ? (levelClasses as DbRow[]) : [];
+        const levelClassIds = Array.from(
+            new Set(levelClassRows.map((row) => toId(row.class_id)).filter(Boolean))
+        );
+        const { data: levelStudents } = levelClassIds.length
+            ? await supabase
+                  .from("stg_students")
+                  .select("student_id, class_id")
+                  .in("class_id", levelClassIds)
+            : { data: [] as unknown[] };
+        const levelStudentRows = Array.isArray(levelStudents) ? (levelStudents as DbRow[]) : [];
+        const levelStudentIds = Array.from(
+            new Set(levelStudentRows.map((row) => toId(row.student_id)).filter(Boolean))
+        );
+        const { data: levelResults } = levelStudentIds.length
+            ? await supabase
+                  .from("stg_results")
+                  .select("student_id, total, grade, status, subjective_id")
+                  .eq("exam_id", toId(reportCard.exam_id))
+                  .eq("status", "approved")
+                  .not("subjective_id", "is", null)
+                  .in("student_id", levelStudentIds)
+            : { data: [] as unknown[] };
+
+        const resultRows = Array.isArray(results) ? (results as DbRow[]) : [];
+        const subjectIds = Array.from(new Set(resultRows.map((row) => toId(row.subject_id)).filter(Boolean)));
         const { data: subjects } = subjectIds.length
             ? await supabase.from("stg_subjects").select("subject_id, subject_name").in("subject_id", subjectIds)
             : { data: [] as unknown[] };
@@ -138,23 +207,50 @@ export async function GET(req: Request) {
             if (id) subjectNameById.set(id, name);
         }
 
-        const subjectResults = (results ?? [])
-            .map((row: any) => ({
-                subject: subjectNameById.get(toId(row?.subject_id)) ?? "",
-                mark: toNumber(row?.total),
-                grade: String(row?.grade ?? "").trim().toUpperCase(),
+        const subjectResults = resultRows
+            .map((row) => ({
+                subject: subjectNameById.get(toId(row.subject_id)) ?? "",
+                mark: toNumber(row.total),
+                grade: normalizeGrade(row.grade, toNumber(row.total)),
             }))
             .sort((a, b) => a.subject.localeCompare(b.subject));
 
         const totalMarks = subjectResults.reduce((sum, row) => sum + row.mark, 0);
         const position = toNumber(reportCard.class_position);
+        const levelResultsByStudent = new Map<string, Array<{ total?: unknown }>>();
+        for (const row of Array.isArray(levelResults) ? levelResults : []) {
+            const sid = toId((row as { student_id?: unknown }).student_id);
+            if (!sid) continue;
+            if (!levelResultsByStudent.has(sid)) levelResultsByStudent.set(sid, []);
+            levelResultsByStudent.get(sid)!.push(row as { total?: unknown });
+        }
+        const levelPositionByStudentId = new Map<string, number>();
+        levelStudentIds
+            .map((sid) => {
+                const rows = levelResultsByStudent.get(sid) ?? [];
+                return {
+                    sid,
+                    average: average(rows.map((row) => toNumber(row.total))),
+                    hasResults: rows.length > 0,
+                };
+            })
+            .filter((row) => row.hasResults)
+            .sort((a, b) => b.average - a.average)
+            .forEach((row, index) => levelPositionByStudentId.set(row.sid, index + 1));
+        const levelPosition = levelPositionByStudentId.get(student_id) ?? null;
+        const averageGradePoint = average(subjectResults.map((row) => gradePoint(row.grade)));
+        const decision = subjectResults.some((subject) =>
+            isFailingCoreSubject(subject.subject, subject.grade, subject.mark)
+        )
+            ? "GAGAL"
+            : "LULUS";
 
         return NextResponse.json({
             success: true,
             student: {
                 name: String(studentRow.fullname ?? ""),
                 ic: String(studentRow.ic_number ?? ""),
-                className: formatClassLabel(classRow as any),
+                className: formatClassLabel(classRow as { class_name?: unknown; grade?: unknown } | null),
                 exam: String(examRow?.exam_name ?? ""),
                 year: String(examRow?.academic_year ?? ""),
                 classTeacher: String(teacherRow?.fullname ?? ""),
@@ -169,13 +265,25 @@ export async function GET(req: Request) {
                         ? `${position} / ${totalStudents}`
                         : `${position}`
                     : "-",
+                levelRank: levelPosition
+                    ? levelStudentIds.length > 0
+                        ? `${levelPosition} / ${levelStudentIds.length}`
+                        : `${levelPosition}`
+                    : "-",
                 percentage: Number(toNumber(reportCard.average_mark).toFixed(1)),
                 gradeSummary: gradeSummary(subjectResults),
+                averageGradePoint: Number.isFinite(averageGradePoint)
+                    ? Number(averageGradePoint.toFixed(2))
+                    : 0,
+                decision,
                 comment: String(reportCard.ai_comment ?? "").trim(),
             },
         });
-    } catch (err: any) {
+    } catch (err: unknown) {
         console.error("GET student report-card FAILED:", err);
-        return NextResponse.json({ message: err.message || "Ralat pelayan" }, { status: 500 });
+        return NextResponse.json(
+            { message: err instanceof Error ? err.message : "Ralat pelayan" },
+            { status: 500 }
+        );
     }
 }

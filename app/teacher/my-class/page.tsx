@@ -49,6 +49,7 @@ import {
 	TableHeader,
 	TableRow,
 } from "@/components/ui/table";
+import { formatMalaysiaDate, formatMalaysiaTime } from "@/lib/date-utils";
 
 type Student = {
 	id: string;
@@ -74,12 +75,7 @@ function LastUpdatedTime() {
 
 	useEffect(() => {
 		const update = () => {
-			setTime(
-				new Date().toLocaleTimeString([], {
-					hour: "2-digit",
-					minute: "2-digit",
-				}),
-			);
+			setTime(formatMalaysiaTime());
 		};
 
 		update();
@@ -91,16 +87,7 @@ function LastUpdatedTime() {
 }
 
 function formatDate(dateString?: string | null) {
-	if (!dateString) return "-";
-	try {
-		return new Date(dateString).toLocaleDateString("ms-MY", {
-			day: "numeric",
-			month: "long",
-			year: "numeric",
-		});
-	} catch {
-		return "-";
-	}
+	return formatMalaysiaDate(dateString);
 }
 
 export default function MyClassPage() {
@@ -406,11 +393,6 @@ export default function MyClassPage() {
 							</div>
 						</div>
 						<div className="flex items-center gap-3 text-sm text-muted-foreground">
-							<div className="flex items-center gap-1">
-								<Shield className="w-3.5 h-3.5" />
-								<span>Data Kelas Terkawal</span>
-							</div>
-							<div className="w-1 h-1 rounded-full bg-muted" />
 							<div className="flex items-center gap-1">
 								<Clock className="w-3.5 h-3.5" />
 								<span>

@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { formatMalaysiaDateTime, formatMalaysiaTime } from "@/lib/date-utils";
 import {
 	Dialog,
 	DialogContent,
@@ -44,12 +45,15 @@ import {
 	CheckCircle,
 	Clock,
 	ClipboardCheck,
+	ClipboardList,
 	Download,
 	Eye,
 	Filter,
+	GraduationCap,
 	RefreshCw,
 	Search,
-	Shield,
+	School,
+	UserRound,
 	XCircle,
 } from "lucide-react";
 
@@ -101,8 +105,17 @@ type SubjectResponse = {
 	data?: Array<{ id?: unknown; name?: unknown }>;
 };
 
+type ApprovalDeepLink = {
+	subjectId: string;
+	classId: string;
+	teacherId: string;
+	examId: string;
+	grade: string;
+	open: boolean;
+};
+
 function getTimeLabel() {
-	return new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+	return formatMalaysiaTime();
 }
 
 const LastUpdatedTime = () => {
@@ -119,14 +132,22 @@ const LastUpdatedTime = () => {
 };
 
 function formatDate(value: string | null) {
-	if (!value) return "-";
-	return new Date(value).toLocaleString("ms-MY");
+	return formatMalaysiaDateTime(value);
+}
+
+function formatClassLabel(submission: Pick<Submission, "class_id" | "classGrade" | "className">) {
+	if (!submission.class_id) return "-";
+	return `${submission.classGrade || ""} ${submission.className || ""}`.trim() || "-";
+}
+
+function formatComponentMark(component: Submission["marks"][number]["components"][number]) {
+	return component.max_mark > 0 ? `${component.mark}/${component.max_mark}` : String(component.mark);
 }
 
 function getStatusBadge(status: SubmissionStatus) {
 	if (status === "pending") {
 		return (
-			<Badge variant="outline" className="border-amber-200 bg-amber-50 text-amber-700">
+			<Badge variant="outline" className="border-violet-200 bg-violet-100 text-violet-700">
 				Menunggu
 			</Badge>
 		);
@@ -147,6 +168,23 @@ function getStatusBadge(status: SubmissionStatus) {
 	);
 }
 
+function getGradeDotColor(grade: number) {
+	switch (grade) {
+		case 1:
+			return "bg-emerald-500";
+		case 2:
+			return "bg-blue-500";
+		case 3:
+			return "bg-amber-500";
+		case 4:
+			return "bg-purple-500";
+		case 5:
+			return "bg-rose-500";
+		default:
+			return "bg-gray-500";
+	}
+}
+
 export default function SubjectCoordinatorApprovalPage() {
 	const PAGE_SIZE = 10;
 	const router = useRouter();
@@ -156,9 +194,16 @@ export default function SubjectCoordinatorApprovalPage() {
 	const [session, setSession] = useState<Session | null>(null);
 	const [sessionReady, setSessionReady] = useState(false);
 	const [searchQuery, setSearchQuery] = useState("");
+	const [gradeFilter, setGradeFilter] = useState("default-grade-1");
 	const [statusFilter, setStatusFilter] = useState<"all" | SubmissionStatus>("all");
+	const [subjectFilter, setSubjectFilter] = useState("all");
+	const [classFilter, setClassFilter] = useState("all");
+	const [examFilter, setExamFilter] = useState("all");
+	const [teacherFilter, setTeacherFilter] = useState("all");
 	const [currentPage, setCurrentPage] = useState(1);
 	const [subjectName, setSubjectName] = useState("");
+	const [deepLink, setDeepLink] = useState<ApprovalDeepLink | null>(null);
+	const [deepLinkHandled, setDeepLinkHandled] = useState(false);
 
 	useEffect(() => {
 		try {
@@ -171,6 +216,28 @@ export default function SubjectCoordinatorApprovalPage() {
 			// ignore
 		} finally {
 			setSessionReady(true);
+		}
+	}, []);
+
+	useEffect(() => {
+		const params = new URLSearchParams(window.location.search);
+		const nextDeepLink = {
+			subjectId: String(params.get("subject_id") ?? "").trim(),
+			classId: String(params.get("class_id") ?? "").trim(),
+			teacherId: String(params.get("teacher_id") ?? "").trim(),
+			examId: String(params.get("exam_id") ?? "").trim(),
+			grade: String(params.get("grade") ?? "").trim(),
+			open: params.get("open") === "1",
+		};
+
+		if (
+			nextDeepLink.subjectId ||
+			nextDeepLink.classId ||
+			nextDeepLink.teacherId ||
+			nextDeepLink.examId ||
+			nextDeepLink.grade
+		) {
+			setDeepLink(nextDeepLink);
 		}
 	}, []);
 
@@ -225,17 +292,35 @@ export default function SubjectCoordinatorApprovalPage() {
 
 	const filteredRows = useMemo(() => {
 		let filtered = data;
+		const effectiveGradeFilter = gradeFilter === "default-grade-1" ? "1" : gradeFilter;
+
+		if (subjectFilter !== "all") {
+			filtered = filtered.filter((row) => row.subject_id === subjectFilter);
+		}
 
 		if (statusFilter !== "all") {
 			filtered = filtered.filter((row) => row.status === statusFilter);
+		}
+
+		filtered = filtered.filter((row) => String(row.classGrade) === effectiveGradeFilter);
+
+		if (classFilter !== "all") {
+			filtered = filtered.filter((row) => (row.class_id || formatClassLabel(row)) === classFilter);
+		}
+
+		if (examFilter !== "all") {
+			filtered = filtered.filter((row) => row.exam_id === examFilter);
+		}
+
+		if (teacherFilter !== "all") {
+			filtered = filtered.filter((row) => (row.teacher_id || row.teacher) === teacherFilter);
 		}
 
 		if (searchQuery.trim()) {
 			const query = searchQuery.toLowerCase().trim();
 			filtered = filtered.filter((row) =>
 				[
-					row.subject,
-					row.className,
+					formatClassLabel(row),
 					row.examName,
 					row.academic_year,
 					row.teacher,
@@ -247,11 +332,86 @@ export default function SubjectCoordinatorApprovalPage() {
 		}
 
 		return filtered;
-	}, [data, searchQuery, statusFilter]);
+	}, [classFilter, data, examFilter, gradeFilter, searchQuery, statusFilter, subjectFilter, teacherFilter]);
+
+	const gradeOptions = useMemo(() => {
+		return Array.from(
+			new Set(
+				["1", ...data
+					.map((row) => String(row.classGrade || "").trim())
+					.filter(Boolean)],
+			),
+		).sort((a, b) => Number(a) - Number(b));
+	}, [data]);
+
+	const classOptions = useMemo(() => {
+		const options = new Map<string, string>();
+		const effectiveGradeFilter = gradeFilter === "default-grade-1" ? "1" : gradeFilter;
+		for (const row of data.filter((item) => {
+			if (subjectFilter !== "all" && item.subject_id !== subjectFilter) return false;
+			return String(item.classGrade) === effectiveGradeFilter;
+		})) {
+			const label = formatClassLabel(row);
+			if (label !== "-") options.set(row.class_id || label, label);
+		}
+		return Array.from(options.entries()).sort((a, b) => a[1].localeCompare(b[1]));
+	}, [data, gradeFilter, subjectFilter]);
+
+	useEffect(() => {
+		if (data.length === 0) return;
+		if (classFilter === "all") return;
+		if (classOptions.some(([value]) => value === classFilter)) return;
+		setClassFilter("all");
+	}, [classFilter, classOptions, data.length]);
+
+	const examOptions = useMemo(() => {
+		const options = new Map<string, string>();
+		for (const row of data) {
+			if (row.exam_id && row.examName) {
+				options.set(row.exam_id, `${row.examName} (${row.academic_year})`);
+			}
+		}
+		return Array.from(options.entries()).sort((a, b) => a[1].localeCompare(b[1]));
+	}, [data]);
+
+	const teacherOptions = useMemo(() => {
+		const options = new Map<string, string>();
+		for (const row of data) {
+			if (row.teacher) options.set(row.teacher_id || row.teacher, row.teacher);
+		}
+		return Array.from(options.entries()).sort((a, b) => a[1].localeCompare(b[1]));
+	}, [data]);
 
 	useEffect(() => {
 		setCurrentPage(1);
-	}, [searchQuery, statusFilter]);
+	}, [classFilter, examFilter, gradeFilter, searchQuery, statusFilter, subjectFilter, teacherFilter]);
+
+	useEffect(() => {
+		if (!deepLink || deepLinkHandled || data.length === 0) return;
+
+		if (deepLink.subjectId) setSubjectFilter(deepLink.subjectId);
+		if (deepLink.grade) setGradeFilter(deepLink.grade);
+		if (deepLink.classId) setClassFilter(deepLink.classId);
+		if (deepLink.examId) setExamFilter(deepLink.examId);
+		if (deepLink.teacherId) setTeacherFilter(deepLink.teacherId);
+
+		const matched = data.find((row) => {
+			if (deepLink.subjectId && row.subject_id !== deepLink.subjectId) return false;
+			if (deepLink.classId && row.class_id !== deepLink.classId) return false;
+			if (deepLink.examId && row.exam_id !== deepLink.examId) return false;
+			if (deepLink.teacherId && row.teacher_id !== deepLink.teacherId) return false;
+			return true;
+		});
+
+		if (matched) {
+			setSubjectName(matched.subject || subjectName);
+			if (deepLink.open) setSelected(matched);
+		} else if (deepLink.open) {
+			toast.error("Tiada hantaran markah dijumpai untuk kelas dan guru subjek ini");
+		}
+
+		setDeepLinkHandled(true);
+	}, [data, deepLink, deepLinkHandled, subjectName]);
 
 	useEffect(() => {
 		const totalPages = Math.max(1, Math.ceil(filteredRows.length / PAGE_SIZE));
@@ -300,6 +460,7 @@ export default function SubjectCoordinatorApprovalPage() {
 					subject_id: submission.subject_id,
 					class_id: submission.class_id,
 					exam_id: submission.exam_id,
+					teacher_id: submission.teacher_id,
 				}),
 			});
 
@@ -352,11 +513,6 @@ export default function SubjectCoordinatorApprovalPage() {
 						</div>
 						<div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
 							<div className="flex items-center gap-1">
-								<Shield className="w-3.5 h-3.5" />
-								<span>Data Kelulusan Terkawal</span>
-							</div>
-							<div className="w-1 h-1 rounded-full bg-muted" />
-							<div className="flex items-center gap-1">
 								<Clock className="w-3.5 h-3.5" />
 								<span>Kemas kini: <LastUpdatedTime /></span>
 							</div>
@@ -406,37 +562,124 @@ export default function SubjectCoordinatorApprovalPage() {
 								</p>
 							</div>
 							<div className="flex flex-wrap items-center gap-3">
-								<Badge variant="outline" className="border-amber-200 bg-amber-50 text-amber-700 font-medium">
+								<Badge variant="outline" className="border-violet-200 bg-violet-100 text-violet-700 font-medium">
 									<Clock className="w-3 h-3 mr-1" />
 									{pendingCount} menunggu
 								</Badge>
 								<Badge variant="outline" className="border-primary/30 bg-primary/5 text-primary font-medium">
 									<Filter className="w-3 h-3 mr-1" />
-									{filteredRows.length} hantaran ditemui
+									{filteredRows.length} hantaran
 								</Badge>
 							</div>
 						</div>
 					</CardHeader>
 
 					<CardContent className="p-6">
-						<div className="flex flex-col lg:flex-row gap-4 mb-6">
+						<div className="flex flex-col gap-4 mb-6">
 							<div className="flex-1 relative">
 								<Search className="absolute left-3.5 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
 								<Input
-									placeholder="Cari subjek, kelas, peperiksaan atau guru..."
+									placeholder="Cari kelas, peperiksaan atau guru..."
 									value={searchQuery}
 									onChange={(e) => setSearchQuery(e.target.value)}
 									className="pl-10 h-11 rounded-lg border-border bg-background focus:border-primary focus:ring-primary/20"
 								/>
 							</div>
 
-							<div className="flex flex-col sm:flex-row gap-3">
-								<div className="w-full sm:w-[220px]">
+							<div className="flex flex-wrap gap-3">
+								<div>
+									<Select value={gradeFilter} onValueChange={setGradeFilter}>
+										<SelectTrigger className="h-11 w-full rounded-lg border-border bg-background sm:w-[150px]">
+											<SelectValue placeholder="Pilih tingkatan" />
+										</SelectTrigger>
+										<SelectContent className="rounded-lg border-border">
+											<SelectItem value="default-grade-1">
+												<div className="flex items-center gap-2">
+													<GraduationCap className="h-4 w-4" />
+													Tingkatan
+												</div>
+											</SelectItem>
+											{gradeOptions.map((grade) => (
+												<SelectItem key={grade} value={grade}>
+													<div className="flex items-center gap-2">
+														<div className={`h-2 w-2 rounded-full ${getGradeDotColor(Number(grade))}`} />
+														Tingkatan {grade}
+													</div>
+												</SelectItem>
+											))}
+										</SelectContent>
+									</Select>
+								</div>
+
+								<div>
+									<Select value={classFilter} onValueChange={setClassFilter}>
+										<SelectTrigger className="h-11 w-full rounded-lg border-border bg-background sm:w-[170px]">
+											<SelectValue placeholder="Pilih kelas" />
+										</SelectTrigger>
+										<SelectContent className="rounded-lg border-border">
+											<SelectItem value="all">
+												<div className="flex items-center gap-2">
+													<School className="h-4 w-4" />
+													Semua Kelas
+												</div>
+											</SelectItem>
+											{classOptions.map(([value, label]) => (
+												<SelectItem key={value} value={value}>
+													{label}
+												</SelectItem>
+											))}
+										</SelectContent>
+									</Select>
+								</div>
+
+								<div>
+									<Select value={examFilter} onValueChange={setExamFilter}>
+										<SelectTrigger className="h-11 w-full rounded-lg border-border bg-background sm:w-[230px]">
+											<SelectValue placeholder="Pilih peperiksaan" />
+										</SelectTrigger>
+										<SelectContent className="rounded-lg border-border">
+											<SelectItem value="all">
+												<div className="flex items-center gap-2">
+													<ClipboardList className="h-4 w-4" />
+													 Jenis Peperiksaan
+												</div>
+											</SelectItem>
+											{examOptions.map(([value, label]) => (
+												<SelectItem key={value} value={value}>
+													{label}
+												</SelectItem>
+											))}
+										</SelectContent>
+									</Select>
+								</div>
+
+								<div>
+									<Select value={teacherFilter} onValueChange={setTeacherFilter}>
+										<SelectTrigger className="h-11 w-full rounded-lg border-border bg-background sm:w-[190px]">
+											<SelectValue placeholder="Pilih guru" />
+										</SelectTrigger>
+										<SelectContent className="rounded-lg border-border">
+											<SelectItem value="all">
+												<div className="flex items-center gap-2">
+													<UserRound className="h-4 w-4" />
+													Semua Guru
+												</div>
+											</SelectItem>
+											{teacherOptions.map(([value, label]) => (
+												<SelectItem key={value} value={value}>
+													{label}
+												</SelectItem>
+											))}
+										</SelectContent>
+									</Select>
+								</div>
+
+								<div>
 									<Select
 										value={statusFilter}
 										onValueChange={(value) => setStatusFilter(value as "all" | SubmissionStatus)}
 									>
-										<SelectTrigger className="h-11 rounded-lg border-border bg-background">
+										<SelectTrigger className="h-11 w-full rounded-lg border-border bg-background sm:w-[180px]">
 											<SelectValue placeholder="Pilih status" />
 										</SelectTrigger>
 										<SelectContent className="rounded-lg border-border">
@@ -448,7 +691,7 @@ export default function SubjectCoordinatorApprovalPage() {
 											</SelectItem>
 											<SelectItem value="pending">
 												<div className="flex items-center gap-2">
-													<div className="w-2 h-2 rounded-full bg-amber-500" />
+													<div className="w-2 h-2 rounded-full bg-violet-500" />
 													Menunggu
 												</div>
 											</SelectItem>
@@ -468,16 +711,23 @@ export default function SubjectCoordinatorApprovalPage() {
 									</Select>
 								</div>
 
-								<Button
-									variant="outline"
-									onClick={() => {
-										setSearchQuery("");
-										setStatusFilter("all");
-									}}
-									className="h-11 rounded-lg border-border hover:bg-accent hover:text-accent-foreground"
-								>
-									Reset
-								</Button>
+								<div className="flex items-end">
+									<Button
+										variant="outline"
+										onClick={() => {
+											setSearchQuery("");
+											setGradeFilter("default-grade-1");
+											setStatusFilter("all");
+											setSubjectFilter("all");
+											setClassFilter("all");
+											setExamFilter("all");
+											setTeacherFilter("all");
+										}}
+										className="h-11 rounded-lg border-border hover:bg-accent hover:text-accent-foreground"
+									>
+										Reset
+									</Button>
+								</div>
 							</div>
 						</div>
 
@@ -490,16 +740,13 @@ export default function SubjectCoordinatorApprovalPage() {
 												#
 											</TableHead>
 											<TableHead className="font-semibold text-foreground py-4">
-												Subjek
-											</TableHead>
-											<TableHead className="font-semibold text-foreground py-4">
 												Kelas
 											</TableHead>
 											<TableHead className="font-semibold text-foreground py-4">
 												Peperiksaan
 											</TableHead>
 											<TableHead className="font-semibold text-foreground py-4">
-												Guru
+												Guru Subjek
 											</TableHead>
 											<TableHead className="font-semibold text-foreground py-4">
 												Tarikh
@@ -516,7 +763,7 @@ export default function SubjectCoordinatorApprovalPage() {
 									<TableBody>
 										{loading ? (
 											<TableRow>
-												<TableCell colSpan={8} className="py-16">
+												<TableCell colSpan={7} className="py-16">
 													<div className="flex flex-col items-center justify-center gap-4">
 														<RefreshCw className="w-10 h-10 animate-spin text-primary" />
 														<div className="text-center">
@@ -528,7 +775,7 @@ export default function SubjectCoordinatorApprovalPage() {
 											</TableRow>
 										) : filteredRows.length === 0 ? (
 											<TableRow>
-												<TableCell colSpan={8} className="py-16">
+												<TableCell colSpan={7} className="py-16">
 													<div className="flex flex-col items-center justify-center gap-4">
 														<div className="p-4 rounded-full bg-muted/50">
 															<ClipboardCheck className="w-12 h-12 text-muted-foreground/50" />
@@ -536,7 +783,7 @@ export default function SubjectCoordinatorApprovalPage() {
 														<div className="text-center">
 															<p className="font-semibold text-foreground">Tiada hantaran dijumpai</p>
 															<p className="text-sm text-muted-foreground mt-1 max-w-md">
-																{searchQuery || statusFilter !== "all"
+																{searchQuery || gradeFilter !== "default-grade-1" || statusFilter !== "all" || classFilter !== "all" || examFilter !== "all" || teacherFilter !== "all"
 																	? "Tiada hantaran yang sepadan dengan carian anda"
 																	: "Belum ada markah dihantar untuk semakan"}
 															</p>
@@ -558,14 +805,7 @@ export default function SubjectCoordinatorApprovalPage() {
 															</div>
 														</TableCell>
 														<TableCell className="py-4">
-															<div className="font-semibold text-foreground group-hover:text-primary transition-colors">
-																{submission.subject || "-"}
-															</div>
-										</TableCell>
-														<TableCell className="py-4">
-															{submission.class_id
-																? `${submission.classGrade || ""} ${submission.className || ""}`.trim() || "-"
-																: "-"}
+															{formatClassLabel(submission)}
 														</TableCell>
 														<TableCell className="py-4">
 															{submission.examName
@@ -707,12 +947,6 @@ export default function SubjectCoordinatorApprovalPage() {
 					</div>
 				</Card>
 
-				<div className="text-center pt-6">
-					<div className="inline-flex items-center gap-2 text-sm text-muted-foreground bg-card/50 backdrop-blur-sm px-4 py-2 rounded-full border border-border">
-						<Shield className="w-4 h-4" />
-						<span>Sistem Kelulusan Markah v2.0 - Data kelulusan terkawal sepenuhnya</span>
-					</div>
-				</div>
 			</div>
 
 			<Dialog open={Boolean(selected)} onOpenChange={(open) => !open && setSelected(null)}>
@@ -720,7 +954,7 @@ export default function SubjectCoordinatorApprovalPage() {
 					<DialogHeader>
 						<DialogTitle className="flex items-center gap-2 font-bold">
 							<Eye className="w-5 h-5 text-primary" />
-							Semakan Markah {selected?.className ? `- ${selected.className}` : ""}
+							Semakan Markah {selected ? `- ${formatClassLabel(selected)}` : ""}
 						</DialogTitle>
 					</DialogHeader>
 
@@ -738,7 +972,7 @@ export default function SubjectCoordinatorApprovalPage() {
 									</p>
 								</div>
 								<div className="rounded-md border border-border bg-muted/30 px-3 py-2">
-									<p className="text-xs text-muted-foreground">Guru</p>
+									<p className="text-xs text-muted-foreground">Guru Subjek</p>
 									<p className="font-semibold text-foreground">{selected.teacher || "-"}</p>
 								</div>
 							</div>
@@ -748,28 +982,34 @@ export default function SubjectCoordinatorApprovalPage() {
 									<Table>
 										<TableHeader className="bg-muted/30">
 											<TableRow className="hover:bg-transparent border-b border-border">
+												<TableHead className="w-16 py-4 text-center font-semibold text-foreground">
+													#
+												</TableHead>
 												<TableHead className="font-semibold text-foreground py-4">
 													Pelajar
 												</TableHead>
-										<TableHead className="font-semibold text-foreground py-4 text-center">
-											Komponen
-										</TableHead>
-										<TableHead className="font-semibold text-foreground py-4 text-center">
-											Jumlah
-										</TableHead>
+												<TableHead className="font-semibold text-foreground py-4 text-center">
+													Komponen
+												</TableHead>
+												<TableHead className="font-semibold text-foreground py-4 text-center">
+													Jumlah
+												</TableHead>
 												<TableHead className="font-semibold text-foreground py-4 text-center">
 													Gred
 												</TableHead>
 											</TableRow>
 										</TableHeader>
 										<TableBody>
-											{selected.marks.map((mark) => {
+											{selected.marks.map((mark, index) => {
 												const invalid = Number(mark.total) > 100;
 												return (
 													<TableRow
 														key={mark.result_id}
 														className={`border-b border-border last:border-0 ${invalid ? "bg-rose-50" : "hover:bg-muted/50"}`}
 													>
+														<TableCell className="py-4 text-center text-muted-foreground">
+															{index + 1}
+														</TableCell>
 														<TableCell className="py-4 font-medium">
 															{mark.student}
 														</TableCell>
@@ -779,7 +1019,7 @@ export default function SubjectCoordinatorApprovalPage() {
 																	<div key={component.key} className="flex justify-between gap-3 text-sm">
 																		<span>{component.label}</span>
 																		<span className="font-medium">
-																			{component.mark}/{component.max_mark || "-"}
+																			{formatComponentMark(component)}
 																		</span>
 																	</div>
 																))}

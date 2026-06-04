@@ -41,8 +41,9 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { 
     Plus, Trash2, Edit, UserPlus, UserMinus, Search, RefreshCw, 
-    BookOpen, Users, Clock, Shield, Filter, X, Loader2, SortAsc, SortDesc, AlertCircle
+    BookOpen, Users, Clock, Filter, X, Loader2, SortAsc, SortDesc, AlertCircle
 } from "lucide-react";
+import { formatMalaysiaTime } from "@/lib/date-utils";
 
 type SubjectRow = {
     id: string;
@@ -68,12 +69,11 @@ const isWordsOnlyName = (value: string) => {
 
 // Client-side only time component
 const LastUpdatedTime = () => {
-    const [time, setTime] = useState<string>("");
+    const [time, setTime] = useState<string>(() => formatMalaysiaTime());
 
     useEffect(() => {
-        setTime(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
         const interval = setInterval(() => {
-            setTime(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+            setTime(formatMalaysiaTime());
         }, 60000);
         return () => clearInterval(interval);
     }, []);
@@ -173,9 +173,12 @@ export default function AdminSubjectsPage() {
         let filtered = rows;
         if (searchQuery.trim() !== "") {
             const query = searchQuery.toLowerCase().trim();
-            filtered = filtered.filter((row) =>
-                row.name.toLowerCase().includes(query)
-            );
+            filtered = filtered.filter((row) => {
+                const subjectName = row.name.toLowerCase();
+                const coordinatorName = (row.coordinator?.name ?? "").toLowerCase();
+
+                return subjectName.includes(query) || coordinatorName.includes(query);
+            });
         }
         return [...filtered].sort((a, b) =>
             sortOrder === "asc"
@@ -422,11 +425,6 @@ async function handleAdd(e: React.FormEvent<HTMLFormElement>) {
                         </div>
                         <div className="flex items-center gap-3 text-sm text-muted-foreground">
                             <div className="flex items-center gap-1">
-                                <Shield className="w-3.5 h-3.5" />
-                                <span>Data Subjek Terkawal</span>
-                            </div>
-                            <div className="w-1 h-1 rounded-full bg-muted" />
-                            <div className="flex items-center gap-1">
                                 <Clock className="w-3.5 h-3.5" />
                                 <span>Kemas kini: <LastUpdatedTime /></span>
                             </div>
@@ -561,7 +559,7 @@ async function handleAdd(e: React.FormEvent<HTMLFormElement>) {
                             <div className="flex-1 relative">
                                 <Search className="absolute left-3.5 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                                 <Input
-                                    placeholder="Cari subjek..."
+                                    placeholder="Cari subjek atau panitia subjek..."
                                     value={searchQuery}
                                     onChange={(e) => setSearchQuery(e.target.value)}
                                     className="pl-10 h-11 rounded-lg border-border bg-background focus:border-primary focus:ring-primary/20"
@@ -858,13 +856,6 @@ async function handleAdd(e: React.FormEvent<HTMLFormElement>) {
                     </div>
                 </Card>
 
-                {/* FOOTER NOTES */}
-                <div className="text-center pt-6">
-                    <div className="inline-flex items-center gap-2 text-sm text-muted-foreground bg-card/50 backdrop-blur-sm px-4 py-2 rounded-full border border-border">
-                        <Shield className="w-4 h-4" />
-                        <span>Sistem Pengurusan Subjek v2.0 • Data subjek terkawal sepenuhnya</span>
-                    </div>
-                </div>
             </div>
 
             {/* EDIT DIALOG */}

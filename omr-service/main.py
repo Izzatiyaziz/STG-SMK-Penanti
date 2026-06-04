@@ -68,8 +68,9 @@ class OMRGradeRequest(BaseModel):
     answer_region: AnswerRegion | None = None
     template: dict[str, QuestionTemplate]
     answer_key: dict[str, str]
-    min_mark_threshold: float = Field(default=0.55, ge=0.05, le=0.95)
-    ambiguity_gap: float = Field(default=0.12, ge=0.01, le=0.95)
+    min_mark_threshold: float = Field(default=0.32, ge=0.05, le=0.95)
+    ambiguity_gap: float = Field(default=0.08, ge=0.01, le=0.95)
+    search_radius: int = Field(default=8, ge=0, le=40)
 
 
 class ReportCommentRequest(BaseModel):
@@ -302,6 +303,17 @@ def _find_sheet_corners(image: np.ndarray) -> OrderedCorners:
     enhanced = clahe.apply(gray)
     blur = cv2.GaussianBlur(enhanced, (5, 5), 0)
 
+    try:
+        bright = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1]
+        bright = cv2.morphologyEx(bright, cv2.MORPH_CLOSE, np.ones((13, 13), np.uint8), iterations=2)
+        bright = cv2.morphologyEx(bright, cv2.MORPH_OPEN, np.ones((5, 5), np.uint8), iterations=1)
+        contours, _ = cv2.findContours(bright, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        page = _largest_quad_from_contours(contours, gray.shape)
+        if page is not None and _validate_quad(page, gray.shape):
+            return _order_points(page)
+    except Exception:
+        pass
+
     # 1) Otsu inverse on CLAHE image — best for thick black borders.
     try:
         thr = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)[1]
@@ -428,6 +440,39 @@ def _fill_ratio(gray: np.ndarray, center: BubblePoint) -> float:
     return float(max(0.0, min(1.0, score)))
 
 
+def _best_fill_ratio_near(gray: np.ndarray, center: BubblePoint, search_radius: int) -> float:
+    """
+    Phone photos often warp close enough for the sheet border to align, but leave
+    individual bubbles shifted by a few pixels. Probe a small grid around the
+    expected bubble center and keep the strongest fill score.
+    """
+    radius = max(0, int(search_radius))
+    if radius == 0:
+        return _fill_ratio(gray, center)
+
+    step = max(2, min(6, int(round(center.r * 0.45))))
+    offsets = [(0, 0)]
+    for distance in range(step, radius + 1, step):
+        offsets.extend(
+            [
+                (-distance, 0),
+                (distance, 0),
+                (0, -distance),
+                (0, distance),
+                (-distance, -distance),
+                (distance, -distance),
+                (-distance, distance),
+                (distance, distance),
+            ]
+        )
+
+    best = 0.0
+    for dx, dy in offsets:
+        shifted = BubblePoint(x=center.x + dx, y=center.y + dy, r=center.r)
+        best = max(best, _fill_ratio(gray, shifted))
+    return best
+
+
 def _apply_answer_region_mask(gray: np.ndarray, region: AnswerRegion | None) -> np.ndarray:
     if region is None:
         return gray
@@ -443,6 +488,37 @@ def _apply_answer_region_mask(gray: np.ndarray, region: AnswerRegion | None) -> 
     masked = np.full_like(gray, 255)
     masked[y0:y1, x0:x1] = gray[y0:y1, x0:x1]
     return masked
+
+
+def _write_debug_images(
+    warped: np.ndarray,
+    template: dict[str, QuestionTemplate],
+    answer_region: AnswerRegion | None,
+) -> None:
+    if os.getenv("OMR_DEBUG", "").strip() not in {"1", "true", "TRUE", "yes", "YES"}:
+        return
+
+    try:
+        debug_dir = Path(__file__).parent / "debug"
+        debug_dir.mkdir(parents=True, exist_ok=True)
+        cv2.imwrite(str(debug_dir / "warped.png"), warped)
+
+        overlay = warped.copy()
+        if answer_region is not None:
+            x0 = int(answer_region.x)
+            y0 = int(answer_region.y)
+            x1 = x0 + int(answer_region.width)
+            y1 = y0 + int(answer_region.height)
+            cv2.rectangle(overlay, (x0, y0), (x1, y1), (255, 128, 0), 2)
+
+        for question in template.values():
+            for option in [question.A, question.B, question.C, question.D]:
+                cv2.circle(overlay, (int(option.x), int(option.y)), int(option.r), (0, 0, 255), 1)
+                cv2.circle(overlay, (int(option.x), int(option.y)), 2, (0, 255, 255), -1)
+
+        cv2.imwrite(str(debug_dir / "template-overlay.png"), overlay)
+    except Exception as exc:
+        print(f"Failed to write OMR debug images: {exc}")
 
 
 def _normalize_option(value: str | None) -> str | None:
@@ -596,10 +672,13 @@ def demo() -> str:
       <textarea name="template_json" placeholder='{"template_width":1400,"template_height":2000,"template":{...},"answer_key":{...}}'></textarea>
 
       <label>Min Mark Threshold</label>
-      <input type="number" name="min_mark_threshold" value="0.55" step="0.01" min="0.05" max="0.95" />
+      <input type="number" name="min_mark_threshold" value="0.32" step="0.01" min="0.05" max="0.95" />
 
       <label>Ambiguity Gap</label>
-      <input type="number" name="ambiguity_gap" value="0.12" step="0.01" min="0.01" max="0.95" />
+      <input type="number" name="ambiguity_gap" value="0.08" step="0.01" min="0.01" max="0.95" />
+
+      <label>Search Radius</label>
+      <input type="number" name="search_radius" value="8" step="1" min="0" max="40" />
 
       <button type="submit">Grade</button>
     </form>
@@ -613,8 +692,9 @@ def demo() -> str:
 async def grade_file(
     image: UploadFile = File(...),
     template_json: str | None = Form(default=None),
-    min_mark_threshold: float = Form(default=0.55),
-    ambiguity_gap: float = Form(default=0.12),
+    min_mark_threshold: float = Form(default=0.32),
+    ambiguity_gap: float = Form(default=0.08),
+    search_radius: int = Form(default=8),
 ) -> Any:
     binary = await image.read()
     # Validate early that the uploaded payload is actually an image OpenCV can decode.
@@ -638,6 +718,7 @@ async def grade_file(
             answer_key=bundle["answer_key"],
             min_mark_threshold=float(min_mark_threshold),
             ambiguity_gap=float(ambiguity_gap),
+            search_radius=int(search_radius),
         )
     except KeyError as exc:
         raise HTTPException(
@@ -675,6 +756,7 @@ def grade(req: OMRGradeRequest) -> Any:
                 "the sheet is not heavily folded or glare-affected."
             ),
         )
+    _write_debug_images(warped, req.template, req.answer_region)
     gray = cv2.cvtColor(warped, cv2.COLOR_BGR2GRAY)
     gray = _apply_answer_region_mask(gray, req.answer_region)
 
@@ -690,10 +772,10 @@ def grade(req: OMRGradeRequest) -> Any:
         total += 1
         q_template = req.template[qid]
         ratios = {
-            "A": _fill_ratio(gray, q_template.A),
-            "B": _fill_ratio(gray, q_template.B),
-            "C": _fill_ratio(gray, q_template.C),
-            "D": _fill_ratio(gray, q_template.D),
+            "A": _best_fill_ratio_near(gray, q_template.A, req.search_radius),
+            "B": _best_fill_ratio_near(gray, q_template.B, req.search_radius),
+            "C": _best_fill_ratio_near(gray, q_template.C, req.search_radius),
+            "D": _best_fill_ratio_near(gray, q_template.D, req.search_radius),
         }
         ranked = sorted(ratios.items(), key=lambda item: item[1], reverse=True)
         best_opt, best_val = ranked[0]

@@ -1,7 +1,6 @@
 import {
     LayoutDashboard,
     FileText,
-    BarChart3,
     Users,
     Folder,
     Database,
@@ -10,6 +9,7 @@ import {
     FileSignature,
     Camera,
     FileCheck2,
+    BarChart3,
 } from "lucide-react";
 import { LiaChalkboardTeacherSolid } from "react-icons/lia";
 
@@ -42,9 +42,14 @@ export const teacherRoleConfig = {
                 icon: Users,
             },
             {
-                title: "Laporan",
+                title: "Kad Laporan",
                 url: "/teacher/report",
                 icon: FileText,
+            },
+            {
+                title: "Laporan",
+                url: "/teacher/analytics",
+                icon: BarChart3,
             },
         ],
         documents: [],
@@ -91,7 +96,7 @@ export const teacherRoleConfig = {
                 icon: LiaChalkboardTeacherSolid,
             },
             {
-                title: "Kelulusan",
+                title: "Kelulusan Markah",
                 url: "/coordinator/approvals",
                 icon: ListChecks,
             },
@@ -207,14 +212,9 @@ export const sidebarConfig = {
                 icon: LayoutDashboard,
             },
             {
-                title: "Analitik Sekolah",
-                url: "/principal/analytics",
-                icon: BarChart3,
-            },
-            {
-                title: "Laporan",
-                url: "/principal/reports",
-                icon: FileText,
+                title: "Lantikan Guru Kelas",
+                url: "/principal/class-teachers",
+                icon: Database,
             },
         ],
         documents: [],

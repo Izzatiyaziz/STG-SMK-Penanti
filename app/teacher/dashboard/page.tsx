@@ -16,6 +16,13 @@ import {
 	SelectValue,
 } from "@/components/ui/select";
 import {
+	Dialog,
+	DialogContent,
+	DialogDescription,
+	DialogHeader,
+	DialogTitle,
+} from "@/components/ui/dialog";
+import {
 	Table,
 	TableBody,
 	TableCell,
@@ -23,20 +30,27 @@ import {
 	TableHeader,
 	TableRow,
 } from "@/components/ui/table";
+import { Textarea } from "@/components/ui/textarea";
 import {
 	LayoutDashboard,
 	AlertTriangle,
+	BarChart3,
 	BookOpen,
+	ChartPie,
 	Users,
 	ClipboardList,
-	Camera,
 	FileText,
-	Shield,
+	FileSpreadsheet,
+	Filter,
 	Clock,
 	Mail as MailIcon,
 	Lightbulb,
 	Loader2,
+	MessageSquareText,
+	Pencil,
 	RefreshCw,
+	School,
+	Sparkles,
 	TrendingUp,
 	Trophy,
 } from "lucide-react";
@@ -52,6 +66,7 @@ import {
 	XAxis,
 	YAxis,
 } from "recharts";
+import { formatMalaysiaDate, formatMalaysiaTime } from "@/lib/date-utils";
 
 type TeacherRole = "class teacher" | "subject teacher" | "subject coordinator";
 
@@ -119,6 +134,18 @@ type ClassDashboardData = {
 	examSummaries: Record<string, ClassDashboardSummary>;
 };
 
+type ClassStudentReport = {
+	student_id: string;
+	student_name: string;
+	subjects: Array<{ subject_id: string; name: string; mark: number; grade: string }>;
+	average_mark: number;
+	position: number | null;
+	comment: string;
+	has_report_card?: boolean;
+};
+
+const STUDENT_PAGE_SIZE = 10;
+
 function normalize(value: string) {
 	return String(value ?? "")
 		.toLowerCase()
@@ -154,12 +181,7 @@ function LastUpdatedTime() {
 
 	useEffect(() => {
 		const update = () => {
-			setTime(
-				new Date().toLocaleTimeString([], {
-					hour: "2-digit",
-					minute: "2-digit",
-				}),
-			);
+			setTime(formatMalaysiaTime());
 		};
 
 		update();
@@ -168,6 +190,10 @@ function LastUpdatedTime() {
 	}, []);
 
 	return <span className="font-medium text-primary">{time || "Memuatkan..."}</span>;
+}
+
+function formatDeadline(value: string) {
+	return value ? formatMalaysiaDate(value) : "-";
 }
 
 const PIE_COLORS = ["#16a34a", "#2563eb", "#f59e0b", "#e11d48"];
@@ -188,6 +214,21 @@ function statusLabel(status?: string) {
 	if (status === "Weak") return "Lemah";
 	if (!status) return "-";
 	return status;
+}
+
+function gradeColor(grade: string) {
+	switch (String(grade ?? "").toUpperCase()) {
+		case "A":
+			return "border-emerald-200 bg-emerald-100 text-emerald-700";
+		case "B":
+			return "border-sky-200 bg-sky-100 text-sky-700";
+		case "C":
+			return "border-amber-200 bg-amber-100 text-amber-700";
+		case "D":
+			return "border-orange-200 bg-orange-100 text-orange-700";
+		default:
+			return "border-rose-200 bg-rose-100 text-rose-700";
+	}
 }
 
 function categoryLabel(name?: string) {
@@ -219,14 +260,14 @@ function EmptyText({ text }: { text: string }) {
 }
 
 function getAssignmentStatusBadge(status?: AssignmentStatus) {
-	if (!status || status.submittedCount === 0 || !status.isComplete) {
+	if (!status) {
 		return {
 			label: "Draf",
 			className: "border-yellow-200 bg-yellow-100 text-yellow-700",
 		};
 	}
 
-	if (status.approval.status === "approved") {
+	if (status.approval.status === "approved" && status.isComplete) {
 		return {
 			label: "Selesai",
 			className: "border-emerald-200 bg-emerald-100 text-emerald-700",
@@ -235,21 +276,28 @@ function getAssignmentStatusBadge(status?: AssignmentStatus) {
 
 	if (status.approval.status === "rejected") {
 		return {
-			label: "Perlu Pembetulan",
+			label: "Ditolak",
 			className: "border-rose-200 bg-rose-100 text-rose-700",
 		};
 	}
 
 	if (status.approval.status === "pending" || status.approval.status === "mixed") {
 		return {
-			label: "Dalam Semakan",
-			className: "border-blue-200 bg-blue-100 text-blue-700",
+			label: "Menunggu",
+			className: "border-violet-200 bg-violet-100 text-violet-700",
+		};
+	}
+
+	if (!status || status.submittedCount === 0 || !status.isComplete) {
+		return {
+			label: "Draf",
+			className: "border-yellow-200 bg-yellow-100 text-yellow-700",
 		};
 	}
 
 	return {
-		label: "Dihantar",
-		className: "border-sky-200 bg-sky-100 text-sky-700",
+		label: "Menunggu",
+		className: "border-violet-200 bg-violet-100 text-violet-700",
 	};
 }
 
@@ -282,7 +330,7 @@ export default function TeacherDashboardPage() {
 	return <SubjectTeacherDashboard teacherId={session.user_id} />;
 }
 
-function SubjectTeacherDashboard({ teacherId }: { teacherId: string }) {
+export function SubjectTeacherDashboard({ teacherId }: { teacherId: string }) {
 	const router = useRouter();
 	const [assignments, setAssignments] = useState<Assignment[]>([]);
 	const [assignmentStatuses, setAssignmentStatuses] = useState<Record<string, AssignmentStatus>>({});
@@ -479,6 +527,10 @@ function SubjectTeacherDashboard({ teacherId }: { teacherId: string }) {
 		if (names.length <= 2) return names.join(", ");
 		return `${names.slice(0, 2).join(", ")} +${names.length - 2} lagi`;
 	}, [assignments]);
+	const subjectWelcomeTitle =
+		subjectSummary === "Belum ada subjek"
+			? "Selamat Datang, Guru Subjek"
+			: `Selamat Datang, Guru Subjek ${subjectSummary}`;
 
 	const subjectOptions = useMemo(() => {
 		const byId = new Map<string, string>();
@@ -561,7 +613,7 @@ function SubjectTeacherDashboard({ teacherId }: { teacherId: string }) {
 							</div>
 							<div>
 								<h1 className="text-2xl font-bold text-foreground tracking-tight">
-									Dashboard Guru Subjek
+									{subjectWelcomeTitle}
 								</h1>
 								<p className="text-muted-foreground font-medium mt-1">
 									Ringkasan tugasan pemarkahan, kelas diajar dan tarikh akhir hantar markah
@@ -569,10 +621,6 @@ function SubjectTeacherDashboard({ teacherId }: { teacherId: string }) {
 							</div>
 						</div>
 						<div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
-							<div className="flex items-center gap-1">
-								<Shield className="w-3.5 h-3.5" />
-								<span>Data Tugasan Terkawal</span>
-							</div>
 							<div className="w-1 h-1 rounded-full bg-muted" />
 							<div className="flex items-center gap-1">
 								<Clock className="w-3.5 h-3.5" />
@@ -677,6 +725,7 @@ function SubjectTeacherDashboard({ teacherId }: { teacherId: string }) {
 									</p>
 								</div>
 								<Badge variant="outline" className="border-primary/30 bg-primary/5 text-primary font-medium">
+								<Filter className="w-5 h-5 text-primary" />
 									{filteredAssignments.length} tugasan
 								</Badge>
 							</div>
@@ -793,7 +842,7 @@ function SubjectTeacherDashboard({ teacherId }: { teacherId: string }) {
 														</TableCell>
 														<TableCell className="py-4">
 															<Badge variant="outline" className="border-border bg-muted/30 text-foreground">
-																{deadlineBySubjectId.get(a.subject_id) || "-"}
+																{formatDeadline(deadlineBySubjectId.get(a.subject_id) || "")}
 															</Badge>
 														</TableCell>
 														<TableCell className="py-4">
@@ -840,11 +889,11 @@ function SubjectTeacherDashboard({ teacherId }: { teacherId: string }) {
 										</span>
 									</div>
 									<Button
-										variant="ghost"
+										variant="outline"
 										size="sm"
 										onClick={refreshAssignments}
 										disabled={loading}
-										className="h-8"
+										className="border-border shadow-xs hover:bg-accent hover:text-accent-foreground"
 									>
 										{loading && <Loader2 className="w-3 h-3 mr-2 animate-spin" />}
 										Muat Semula Data
@@ -921,7 +970,7 @@ function SubjectTeacherDashboard({ teacherId }: { teacherId: string }) {
 														</div>
 														<div className="mt-3 flex items-center gap-2">
 															<Badge variant="outline" className={urgencyClass}>
-																{item.deadline}
+																{formatDeadline(item.deadline)}
 															</Badge>
 															<span className="text-xs text-muted-foreground">{daysText}</span>
 														</div>
@@ -952,7 +1001,527 @@ function SubjectTeacherDashboard({ teacherId }: { teacherId: string }) {
 
 }
 
-function ClassTeacherDashboard({ teacherId }: { teacherId: string }) {
+export function ClassTeacherDashboard({ teacherId }: { teacherId: string }) {
+	const router = useRouter();
+	const [data, setData] = useState<ClassDashboardData | null>(null);
+	const [students, setStudents] = useState<ClassStudentReport[]>([]);
+	const [loading, setLoading] = useState(true);
+	const [selectedExamId, setSelectedExamId] = useState("");
+	const [currentPage, setCurrentPage] = useState(1);
+	const [selectedStudent, setSelectedStudent] = useState<ClassStudentReport | null>(null);
+	const [selectedStudentComment, setSelectedStudentComment] = useState("");
+	const [commentLoading, setCommentLoading] = useState(false);
+	const [refreshKey, setRefreshKey] = useState(0);
+
+	useEffect(() => {
+		let cancelled = false;
+
+		async function load() {
+			setLoading(true);
+			try {
+				const res = await fetch(`/api/teacher/class-dashboard?teacher_id=${teacherId}`, { cache: "no-store" });
+				const json = await res.json();
+				const payload = (json?.data ?? null) as ClassDashboardData | null;
+				if (!cancelled) {
+					setData(payload);
+					setSelectedExamId((current) => current || payload?.exams?.[0]?.id || "");
+				}
+			} catch {
+				if (!cancelled) setData(null);
+			} finally {
+				if (!cancelled) setLoading(false);
+			}
+		}
+
+		load();
+		return () => {
+			cancelled = true;
+		};
+	}, [teacherId, refreshKey]);
+
+	useEffect(() => {
+		if (!selectedExamId) {
+			setStudents([]);
+			return;
+		}
+
+		let cancelled = false;
+		async function loadStudents() {
+			try {
+				const res = await fetch(
+					`/api/teacher/report-cards/class?teacher_id=${encodeURIComponent(teacherId)}&exam_id=${encodeURIComponent(selectedExamId)}`,
+					{ cache: "no-store" },
+				);
+				const json = await res.json();
+				if (!cancelled) {
+					setStudents(Array.isArray(json?.students) ? json.students : []);
+					setCurrentPage(1);
+				}
+			} catch {
+				if (!cancelled) setStudents([]);
+			}
+		}
+
+		loadStudents();
+		return () => {
+			cancelled = true;
+		};
+	}, [selectedExamId, teacherId, refreshKey]);
+
+	useEffect(() => {
+		if (loading) return;
+		if (data === null) {
+			toast.error("Tiada kelas ditetapkan untuk Guru Kelas");
+			router.replace("/teacher/my-class");
+		}
+	}, [data, loading, router]);
+
+	const selectedExam = data?.exams.find((exam) => exam.id === selectedExamId) ?? null;
+	const summary = selectedExamId ? data?.examSummaries?.[selectedExamId] : null;
+	const className = data?.class?.name ?? "";
+	const grade = data?.class?.grade ? String(data.class.grade) : "";
+	const paginatedStudents = students.slice((currentPage - 1) * STUDENT_PAGE_SIZE, currentPage * STUDENT_PAGE_SIZE);
+	const classLabel = grade ? `${grade} ${className}` : className || "Belum tersedia";
+	const quickAccess = [
+		{
+			title: "Pengurusan Pelajar",
+			description: "Tambah atau kemas kini maklumat pelajar kelas",
+			href: "/teacher/my-class",
+			icon: Users,
+			accent: "bg-blue-100 text-blue-700 border-blue-200",
+		},
+		{
+			title: "Kad Laporan",
+			description: "Jana dan kemas kini kad laporan pelajar",
+			href: "/teacher/report",
+			icon: FileText,
+			accent: "bg-emerald-100 text-emerald-700 border-emerald-200",
+		},
+		{
+			title: "Laporan",
+			description: "Lihat laporan prestasi kelas",
+			href: "/teacher/analytics",
+			icon: BarChart3,
+			accent: "bg-amber-100 text-amber-700 border-amber-200",
+		},
+	];
+
+	function openStudentMarks(student: ClassStudentReport) {
+		setSelectedStudent(student);
+		setSelectedStudentComment(student.comment ?? "");
+	}
+
+	function updateSelectedStudent(next: Partial<ClassStudentReport>) {
+		if (!selectedStudent) return;
+		const updated = { ...selectedStudent, ...next };
+		setSelectedStudent(updated);
+		setStudents((prev) =>
+			prev.map((student) => (student.student_id === updated.student_id ? { ...student, ...next } : student)),
+		);
+	}
+
+	async function generateAiComment() {
+		if (!selectedStudent || !selectedExamId || !data?.class.id) return;
+		setCommentLoading(true);
+		try {
+			const res = await fetch("/api/teacher/report-cards/comment", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({
+					student_id: selectedStudent.student_id,
+					class_id: data.class.id,
+					teacher_id: teacherId,
+					exam_id: selectedExamId,
+					mode: "ai",
+				}),
+			});
+			const json = await res.json();
+			if (!res.ok) {
+				toast.error(json?.message || "Gagal jana ulasan AI");
+				return;
+			}
+			const comment = String(json?.comment ?? "").trim();
+			setSelectedStudentComment(comment);
+			updateSelectedStudent({
+				comment,
+				average_mark: Number(json?.average_mark ?? selectedStudent.average_mark),
+				position: json?.class_position ?? selectedStudent.position,
+				has_report_card: true,
+			});
+			toast.success(`Ulasan AI dijana untuk ${selectedStudent.student_name}`);
+		} catch {
+			toast.error("Gagal jana ulasan AI");
+		} finally {
+			setCommentLoading(false);
+		}
+	}
+
+	async function saveManualComment() {
+		if (!selectedStudent || !selectedExamId || !data?.class.id) return;
+		const trimmed = selectedStudentComment.trim();
+		if (!trimmed) {
+			toast.error("Ulasan manual tidak boleh kosong");
+			return;
+		}
+		setCommentLoading(true);
+		try {
+			const res = await fetch("/api/teacher/report-cards/comment", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({
+					student_id: selectedStudent.student_id,
+					class_id: data.class.id,
+					teacher_id: teacherId,
+					exam_id: selectedExamId,
+					mode: "manual",
+					comment: trimmed,
+				}),
+			});
+			const json = await res.json();
+			if (!res.ok) {
+				toast.error(json?.message || "Gagal simpan ulasan manual");
+				return;
+			}
+			updateSelectedStudent({
+				comment: trimmed,
+				average_mark: Number(json?.average_mark ?? selectedStudent.average_mark),
+				position: json?.class_position ?? selectedStudent.position,
+				has_report_card: true,
+			});
+			toast.success(`Ulasan manual disimpan untuk ${selectedStudent.student_name}`);
+		} catch {
+			toast.error("Gagal simpan ulasan manual");
+		} finally {
+			setCommentLoading(false);
+		}
+	}
+
+	return (
+		<div className="min-h-screen bg-background p-4 md:p-6">
+			<div className="w-full max-w-none space-y-8">
+				<div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
+					<div className="space-y-3">
+						<div className="flex items-center gap-4">
+							<div className="p-3 rounded-2xl bg-gradient-to-br from-primary/10 to-primary/5 border border-primary/20 shadow-sm">
+								<LayoutDashboard className="w-7 h-7 text-primary" />
+							</div>
+							<div>
+								<h1 className="text-2xl font-bold text-foreground tracking-tight">
+									Selamat Datang, Guru Kelas {classLabel}
+								</h1>
+								<p className="text-muted-foreground font-medium mt-1">
+									Ringkasan kelas, pelajar terbaik, dan senarai pelajar untuk semakan markah.
+								</p>
+							</div>
+						</div>
+						<div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
+							<div className="w-1 h-1 rounded-full bg-muted" />
+							<div className="flex items-center gap-1">
+								<Clock className="w-3.5 h-3.5" />
+								<span>
+									Kemas kini: <LastUpdatedTime />
+								</span>
+							</div>
+						</div>
+					</div>
+					<div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+						<div className="inline-flex h-10 w-full items-center gap-2 rounded-md border border-border bg-background px-4 text-sm font-medium text-foreground shadow-xs sm:w-auto sm:max-w-[260px]">
+							<School className="h-4 w-4 shrink-0 text-primary" />
+							<span className="truncate">{classLabel}</span>
+						</div>
+						<Button
+							variant="outline"
+							onClick={() => setRefreshKey((value) => value + 1)}
+							disabled={loading}
+							className="border-border shadow-xs hover:bg-accent hover:text-accent-foreground"
+						>
+							{loading ? (
+								<Loader2 className="mr-2 h-4 w-4 animate-spin" />
+							) : (
+								<RefreshCw className="mr-2 h-4 w-4" />
+							)}
+							Muat Semula
+						</Button>
+					</div>
+				</div>
+
+				<div className="grid grid-cols-1 gap-6 md:grid-cols-3">
+					{quickAccess.map((item) => (
+						<Link key={item.title} href={item.href} className="group">
+							<Card className="h-full border-border bg-card shadow-md rounded-xl overflow-hidden transition-all hover:-translate-y-0.5 hover:shadow-lg">
+								<CardContent className="flex items-start gap-4 p-6">
+									<div className={`rounded-xl border p-3 ${item.accent}`}>
+										<item.icon className="h-6 w-6" />
+									</div>
+									<div className="min-w-0">
+										<h3 className="text-lg font-bold text-foreground group-hover:text-primary">
+											{item.title}
+										</h3>
+										<p className="mt-1 text-sm text-muted-foreground">
+											{item.description}
+										</p>
+									</div>
+								</CardContent>
+							</Card>
+						</Link>
+					))}
+				</div>
+
+				<div className="grid grid-cols-1 gap-6 lg:grid-cols-3 lg:items-start">
+					<div className="space-y-6 lg:col-span-2">
+						<Card className="border-border bg-card shadow-md rounded-xl overflow-hidden">
+							<CardHeader className="border-b border-border bg-gradient-to-r from-card to-card/80 px-6 py-5">
+								<div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+									<div>
+										<CardTitle className="flex items-center gap-2 text-xl font-bold">
+											<Users className="h-5 w-5 text-primary" />
+											Senarai Pelajar
+										</CardTitle>
+										<p className="text-sm text-muted-foreground mt-1">Markah pelajar yang sudah diluluskan.</p>
+									</div>
+									<Badge variant="outline" className="border-primary/30 bg-primary/5 text-primary">
+									<Filter className="mr-1.5 h-3.5 w-3.5" />
+										{students.length} pelajar
+									</Badge>
+								</div>
+							</CardHeader>
+							<CardContent className="p-6">
+								<div className="rounded-lg border border-border overflow-hidden">
+									<div className="overflow-x-auto">
+										<Table>
+											<TableHeader className="bg-muted/30">
+												<TableRow className="border-b border-border hover:bg-transparent">
+													<TableHead className="w-12 py-4 text-center font-semibold text-foreground">#</TableHead>
+													<TableHead className="py-4 font-semibold text-foreground">Pelajar</TableHead>
+													<TableHead className="py-4 pr-6 text-right font-semibold text-foreground">Tindakan</TableHead>
+												</TableRow>
+											</TableHeader>
+											<TableBody>
+												{loading ? (
+													<TableRow>
+														<TableCell colSpan={5} className="py-16">
+															<div className="flex flex-col items-center justify-center gap-4">
+																<Loader2 className="h-10 w-10 animate-spin text-primary" />
+																<p className="font-semibold text-foreground">Memuatkan senarai pelajar...</p>
+															</div>
+														</TableCell>
+													</TableRow>
+												) : paginatedStudents.length === 0 ? (
+													<TableRow>
+														<TableCell colSpan={5} className="py-16">
+															<div className="flex flex-col items-center justify-center gap-3">
+																<div className="rounded-full bg-muted/50 p-4">
+																	<Users className="h-10 w-10 text-muted-foreground/60" />
+																</div>
+																<p className="font-semibold text-foreground">Tiada pelajar untuk dipaparkan.</p>
+															</div>
+														</TableCell>
+													</TableRow>
+												) : (
+													paginatedStudents.map((student, index) => (
+														<TableRow
+															key={student.student_id}
+															className="border-b border-border transition-colors last:border-0 hover:bg-muted/50"
+														>
+															<TableCell className="py-4 text-center text-muted-foreground">
+																{(currentPage - 1) * STUDENT_PAGE_SIZE + index + 1}
+															</TableCell>
+															<TableCell className="py-4">
+																<div className="flex items-center gap-3">
+																	<div className="flex h-10 w-10 items-center justify-center rounded-full border border-primary/20 bg-primary/10">
+																		<span className="text-sm font-bold text-primary">
+																			{student.student_name.charAt(0)}
+																		</span>
+																	</div>
+																	<div>
+																		<div className="font-semibold text-foreground">{student.student_name}</div>
+																	</div>
+																</div>
+															</TableCell>
+															<TableCell className="py-4 pr-6 text-right">
+																<Button size="sm" variant="outline" onClick={() => openStudentMarks(student)}>
+																	<FileText className="mr-2 h-4 w-4" />
+																	Lihat Markah
+																</Button>
+															</TableCell>
+														</TableRow>
+													))
+												)}
+											</TableBody>
+										</Table>
+									</div>
+								</div>
+							</CardContent>
+							<div className="border-t border-border bg-muted/20 px-6 py-4">
+								<div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+									<p className="text-sm text-muted-foreground">
+										Menunjukkan{" "}
+										<span className="font-semibold text-foreground">
+											{students.length === 0 ? 0 : (currentPage - 1) * STUDENT_PAGE_SIZE + 1}-
+											{students.length === 0 ? 0 : Math.min(currentPage * STUDENT_PAGE_SIZE, students.length)}
+										</span>{" "}
+										daripada <span className="font-semibold text-foreground">{students.length}</span> pelajar
+									</p>
+								</div>
+							</div>
+						</Card>
+					</div>
+
+					<div className="space-y-6">
+						<Card className="border-border bg-card shadow-md rounded-xl overflow-hidden">
+							<CardHeader className="border-b border-border bg-gradient-to-r from-card to-card/80 px-6 py-5">
+								<CardTitle className="text-xl font-bold">Maklumat Guru Kelas</CardTitle>
+							</CardHeader>
+							<CardContent className="space-y-4 p-6">
+								<ProfileRow label="Nama" value={data?.teacher?.name || "Belum tersedia"} />
+								<ProfileRow label="E-mel" value={data?.teacher?.email || "Belum tersedia"} icon={MailIcon} />
+								<ProfileRow label="Kelas" value={classLabel} />
+								<ProfileRow label="Peperiksaan" value={selectedExam ? `${selectedExam.name} (${selectedExam.academic_year})` : "Belum dipilih"} />
+							</CardContent>
+						</Card>
+
+						<Card className="border-border bg-card shadow-md rounded-xl overflow-hidden">
+							<CardHeader className="border-b border-border bg-gradient-to-r from-card to-card/80 px-6 py-5">
+								<CardTitle className="flex items-center gap-2 text-xl font-bold">
+									<Trophy className="h-5 w-5 text-primary" />
+									Top 3 Pelajar Terbaik
+								</CardTitle>
+								<p className="text-sm text-muted-foreground">
+									{selectedExam ? `${selectedExam.name} (${selectedExam.academic_year})` : "Pilih peperiksaan"}
+								</p>
+							</CardHeader>
+							<CardContent className="space-y-3 p-6">
+								{loading ? (
+									<div className="py-8 text-center text-sm text-muted-foreground">Memuatkan data...</div>
+								) : (summary?.topStudents ?? []).length === 0 ? (
+									<div className="py-8 text-center text-sm text-muted-foreground">Tiada data pelajar.</div>
+								) : (
+									(summary?.topStudents ?? []).map((student, index) => (
+										<div
+											key={student.student_id}
+											className="rounded-lg border border-border bg-muted/20 p-4 transition-colors hover:bg-muted/40"
+										>
+											<div className="flex items-center justify-between gap-3">
+												<div className="min-w-0">
+													<Badge variant="secondary">#{index + 1}</Badge>
+													<p className="mt-2 truncate font-semibold text-foreground">{student.name}</p>
+													<p className="text-xs text-muted-foreground">Purata keseluruhan</p>
+												</div>
+												<p className="shrink-0 text-xl font-bold text-primary">{student.average}%</p>
+											</div>
+										</div>
+									))
+								)}
+							</CardContent>
+						</Card>
+					</div>
+				</div>
+			</div>
+
+			<Dialog
+				open={Boolean(selectedStudent)}
+				onOpenChange={(open) => {
+					if (!open) {
+						setSelectedStudent(null);
+						setSelectedStudentComment("");
+					}
+				}}
+			>
+				<DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
+					<DialogHeader>
+						<DialogTitle>{selectedStudent?.student_name ?? "Markah Pelajar"}</DialogTitle>
+						<DialogDescription>
+							{selectedStudent?.position ? `Kedudukan #${selectedStudent.position}` : "Kedudukan: -"} ·{" "}
+							{classLabel ? `Kelas: ${classLabel}` : ""}
+						</DialogDescription>
+					</DialogHeader>
+
+					<div className="space-y-4 px-1 pb-2">
+						<Card className="overflow-hidden rounded-xl border-border bg-card shadow-md">
+							<CardHeader className="border-b border-border px-6 py-5">
+								<CardTitle className="flex items-center gap-2 text-base font-bold">
+									<FileSpreadsheet className="h-5 w-5 text-primary" />
+									Keputusan Subjek
+								</CardTitle>
+								<DialogDescription>Markah dan gred setiap subjek</DialogDescription>
+							</CardHeader>
+							<CardContent className="p-0">
+								<div className="overflow-x-auto">
+									<Table>
+										<TableHeader className="bg-muted/30">
+											<TableRow className="border-b border-border hover:bg-transparent">
+												<TableHead className="w-16 py-4 text-center font-semibold text-foreground">Bil.</TableHead>
+												<TableHead className="py-4 font-semibold text-foreground">Subjek</TableHead>
+												<TableHead className="w-28 py-4 text-center font-semibold text-foreground">Markah</TableHead>
+												<TableHead className="w-28 py-4 text-center font-semibold text-foreground">Gred</TableHead>
+											</TableRow>
+										</TableHeader>
+										<TableBody>
+											{(selectedStudent?.subjects ?? []).map((subject, index) => (
+												<TableRow
+													key={`${selectedStudent?.student_id ?? "s"}-${subject.subject_id}`}
+													className="border-b border-border transition-colors last:border-0 hover:bg-muted/50"
+												>
+													<TableCell className="py-4 text-center font-medium text-muted-foreground">{index + 1}</TableCell>
+													<TableCell className="py-4 font-semibold text-foreground">{subject.name}</TableCell>
+													<TableCell className="py-4 text-center font-semibold">{subject.mark}</TableCell>
+													<TableCell className="py-4 text-center">
+														<Badge variant="outline" className={gradeColor(subject.grade)}>
+															{subject.grade}
+														</Badge>
+													</TableCell>
+												</TableRow>
+											))}
+										</TableBody>
+									</Table>
+								</div>
+							</CardContent>
+						</Card>
+
+						<Card className="overflow-hidden rounded-xl border-border bg-card shadow-md">
+							<CardHeader className="border-b border-border px-6 py-5">
+								<CardTitle className="flex items-center gap-2 text-base font-bold">
+									<MessageSquareText className="h-5 w-5 text-primary" />
+									Ulasan Guru Kelas
+								</CardTitle>
+								<DialogDescription>Ulasan guru kelas untuk slip keputusan</DialogDescription>
+							</CardHeader>
+							<CardContent className="space-y-3 p-6">
+								<Textarea
+									value={selectedStudentComment}
+									onChange={(event) => setSelectedStudentComment(event.target.value)}
+									placeholder="Tulis ulasan ringkas..."
+									className="min-h-28"
+								/>
+								<div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+									<Button
+										variant="outline"
+										onClick={generateAiComment}
+										disabled={!selectedStudent || commentLoading}
+										className="border-border shadow-xs hover:bg-accent hover:text-accent-foreground"
+									>
+										<Sparkles className="mr-2 h-4 w-4" />
+										{commentLoading ? "Menjana..." : "Jana Ulasan AI"}
+									</Button>
+									<Button
+										onClick={saveManualComment}
+										disabled={!selectedStudent || !selectedStudentComment.trim() || commentLoading}
+										className="shadow-sm"
+									>
+										<Pencil className="mr-2 h-4 w-4" />
+										{commentLoading ? "Menyimpan..." : "Submit Ulasan"}
+									</Button>
+								</div>
+							</CardContent>
+						</Card>
+					</div>
+				</DialogContent>
+			</Dialog>
+		</div>
+	);
+}
+
+export function ClassTeacherAnalyticsDashboard({ teacherId }: { teacherId: string }) {
 	const router = useRouter();
 	const [data, setData] = useState<ClassDashboardData | null>(null);
 	const [loading, setLoading] = useState(true);
@@ -997,8 +1566,6 @@ function ClassTeacherDashboard({ teacherId }: { teacherId: string }) {
 
 	const className = data?.class?.name ?? "";
 	const grade = data?.class?.grade ? String(data.class.grade) : "";
-	const teacherName = data?.teacher?.name || "Belum tersedia";
-	const teacherEmail = data?.teacher?.email || "Belum tersedia";
 	const selectedExam = data?.exams.find((exam) => exam.id === selectedExamId) ?? null;
 	const summary = selectedExamId ? data?.examSummaries?.[selectedExamId] : null;
 	const classAverage = summary?.classAverage ?? 0;
@@ -1016,12 +1583,10 @@ function ClassTeacherDashboard({ teacherId }: { teacherId: string }) {
 				<div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
 					<div className="space-y-3">
 						<div className="flex items-center gap-4">
-							<div className="p-3 rounded-2xl bg-gradient-to-br from-primary/10 to-primary/5 border border-primary/20 shadow-sm">
-								<LayoutDashboard className="w-7 h-7 text-primary" />
-							</div>
+							<BarChart3 className="h-7 w-7 shrink-0 text-primary" />
 							<div>
 								<h1 className="text-2xl font-bold text-foreground tracking-tight">
-									Dashboard Guru Kelas
+									Laporan Kelas
 								</h1>
 								<p className="text-muted-foreground font-medium mt-1">
 									Tingkatan {grade || "-"} | Guru Kelas:{" "}
@@ -1037,10 +1602,6 @@ function ClassTeacherDashboard({ teacherId }: { teacherId: string }) {
 							</div>
 						</div>
 						<div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
-							<div className="flex items-center gap-1">
-								<Shield className="w-3.5 h-3.5" />
-								<span>Data Kelas Terkawal</span>
-							</div>
 							<div className="w-1 h-1 rounded-full bg-muted" />
 							<div className="flex items-center gap-1">
 								<Clock className="w-3.5 h-3.5" />
@@ -1064,32 +1625,7 @@ function ClassTeacherDashboard({ teacherId }: { teacherId: string }) {
 								))}
 							</SelectContent>
 						</Select>
-						<Button onClick={() => router.push("/teacher/my-class")}>
-							<Users className="w-4 h-4 mr-2" />
-							Pengurusan Kelas
-						</Button>
 					</div>
-				</div>
-
-				<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-					<DashboardStatCard
-						label="Jumlah Pelajar"
-						value={data?.totalStudents ?? 0}
-						icon={Users}
-						tone="primary"
-					/>
-					<DashboardStatCard
-						label="Purata Kelas"
-						value={`${classAverage}%`}
-						icon={TrendingUp}
-						tone="emerald"
-					/>
-					<DashboardStatCard
-						label="Perlu Perhatian"
-						value={attentionCount}
-						icon={AlertTriangle}
-						tone="blue"
-					/>
 				</div>
 
 				<div className="grid grid-cols-1 gap-6">
@@ -1108,16 +1644,40 @@ function ClassTeacherDashboard({ teacherId }: { teacherId: string }) {
 								<CardContent className="py-16 text-center">
 									<p className="font-semibold">Tiada data keputusan diluluskan lagi.</p>
 									<p className="text-sm text-muted-foreground mt-1">
-										Dashboard akan dipaparkan selepas markah subjek diluluskan.
+										Laporan akan dipaparkan selepas markah subjek diluluskan.
 									</p>
 								</CardContent>
 							</Card>
 						) : (
 							<>
+								<div className="grid grid-cols-1 gap-6 md:grid-cols-3">
+									<DashboardStatCard
+										label="Purata Kelas"
+										value={`${classAverage}%`}
+										icon={BarChart3}
+										tone="primary"
+									/>
+									<DashboardStatCard
+										label="Pelajar Perlu Perhatian"
+										value={attentionCount}
+										icon={AlertTriangle}
+										tone="blue"
+									/>
+									<DashboardStatCard
+										label="Jumlah Pelajar"
+										value={data?.totalStudents ?? 0}
+										icon={Users}
+										tone="emerald"
+									/>
+								</div>
+
 								<div className="grid grid-cols-1 gap-6 lg:grid-cols-[320px_1fr]">
 									<Card className="border-border bg-card shadow-md rounded-xl overflow-hidden">
 										<CardHeader className="border-b border-border bg-gradient-to-r from-card to-card/80 px-6 py-5">
-											<CardTitle>Analisis Gred</CardTitle>
+											<CardTitle className="flex items-center gap-2 text-xl font-bold text-foreground">
+												<ChartPie className="h-5 w-5 text-primary" />
+												Analisis Gred
+											</CardTitle>
 											<p className="text-sm text-muted-foreground">
 												Taburan gred pelajar bagi kelas ini
 											</p>
@@ -1161,7 +1721,10 @@ function ClassTeacherDashboard({ teacherId }: { teacherId: string }) {
 
 									<Card className="border-border bg-card shadow-md rounded-xl overflow-hidden">
 										<CardHeader className="border-b border-border bg-gradient-to-r from-card to-card/80 px-6 py-5">
-											<CardTitle>Trend Prestasi</CardTitle>
+											<CardTitle className="flex items-center gap-2 text-xl font-bold text-foreground">
+												<TrendingUp className="h-5 w-5 text-primary" />
+												Trend Prestasi
+											</CardTitle>
 											<p className="text-sm text-muted-foreground">
 												Perubahan purata markah mengikut ujian
 											</p>
@@ -1176,6 +1739,7 @@ function ClassTeacherDashboard({ teacherId }: { teacherId: string }) {
 													<Line
 														type="monotone"
 														dataKey="average"
+														name="Purata"
 														stroke="#2563eb"
 														strokeWidth={3}
 														dot={{ r: 5, fill: "#22c55e" }}
@@ -1223,7 +1787,10 @@ function ClassTeacherDashboard({ teacherId }: { teacherId: string }) {
 
 							<Card className="border-border bg-card shadow-md rounded-xl overflow-hidden xl:col-span-2">
 								<CardHeader className="border-b border-border bg-gradient-to-r from-card to-card/80 px-6 py-5">
-									<CardTitle>Perbandingan Prestasi Subjek</CardTitle>
+									<CardTitle className="flex items-center gap-2 text-xl font-bold text-foreground">
+										<BarChart3 className="h-5 w-5 text-primary" />
+										Perbandingan Prestasi Subjek
+									</CardTitle>
 								</CardHeader>
 								<CardContent className="space-y-4 p-6">
 									{summary.subjectPerformance.length === 0 ? (
@@ -1305,7 +1872,10 @@ function ClassTeacherDashboard({ teacherId }: { teacherId: string }) {
 							</Card>
 							<Card className="border-border bg-card shadow-md rounded-xl overflow-hidden">
 								<CardHeader className="border-b border-border bg-gradient-to-r from-card to-card/80 px-6 py-5">
-									<CardTitle>Pecahan Kategori Prestasi</CardTitle>
+									<CardTitle className="flex items-center gap-2 text-xl font-bold text-foreground">
+										<ChartPie className="h-5 w-5 text-primary" />
+										Pecahan Kategori Prestasi
+									</CardTitle>
 								</CardHeader>
 								<CardContent className="grid gap-4 md:grid-cols-[240px_1fr] md:items-center">
 									<div className="h-60">
@@ -1422,30 +1992,3 @@ function ProfileRow({
 	);
 }
 
-function QuickLink({
-	href,
-	icon: Icon,
-	title,
-	desc,
-}: {
-	href: string;
-	icon: React.ComponentType<React.SVGProps<SVGSVGElement>>;
-	title: string;
-	desc: string;
-}) {
-	return (
-		<Link href={href} className="block">
-			<div className="rounded-lg border border-border/60 p-3 hover:bg-muted/30 transition-colors">
-				<div className="flex items-start gap-3">
-					<div className="mt-0.5 p-2 rounded-md bg-primary/10">
-						<Icon className="w-4 h-4 text-primary" />
-					</div>
-					<div className="min-w-0">
-						<div className="font-semibold leading-tight">{title}</div>
-						<div className="text-xs text-muted-foreground mt-1">{desc}</div>
-					</div>
-				</div>
-			</div>
-		</Link>
-	);
-}

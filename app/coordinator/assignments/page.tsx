@@ -6,6 +6,7 @@ import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { formatMalaysiaTime } from "@/lib/date-utils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
 	Dialog,
@@ -50,7 +51,6 @@ import {
 	RefreshCw,
 	School,
 	Search,
-	Shield,
 	UserMinus,
 	UserPlus,
 } from "lucide-react";
@@ -88,8 +88,10 @@ type ApiMessage = {
 	message?: string;
 };
 
+const MAX_CLASSES_PER_SUBJECT_TEACHER = 3;
+
 function getTimeLabel() {
-	return new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+	return formatMalaysiaTime();
 }
 
 function normalizeSubjectName(value: unknown) {
@@ -281,10 +283,14 @@ export default function SubjectCoordinatorAssignmentsPage() {
 	}
 
 	const dropdownTeachers = useMemo(() => {
-		return (data?.teachers ?? []).filter(
-			(teacher) => getTeacherTotalClassCount(teacher.subject_load) <= 4
-		);
-	}, [data?.teachers]);
+		const currentTeacherId = assigning?.id
+			? assignmentTeacherByClassId.get(assigning.id)
+			: "";
+		return (data?.teachers ?? []).filter((teacher) => {
+			if (teacher.id === currentTeacherId) return true;
+			return getTeacherTotalClassCount(teacher.subject_load) < MAX_CLASSES_PER_SUBJECT_TEACHER;
+		});
+	}, [assignmentTeacherByClassId, assigning?.id, data?.teachers]);
 
 	const filteredRows = useMemo(() => {
 		let filtered = data?.classes ?? [];
@@ -298,11 +304,25 @@ export default function SubjectCoordinatorAssignmentsPage() {
 
 		if (searchQuery.trim()) {
 			const query = searchQuery.toLowerCase().trim();
-			filtered = filtered.filter((row) => row.name.toLowerCase().includes(query));
+			filtered = filtered.filter((row) => {
+				const assignedTeacherId = assignmentTeacherByClassId.get(row.id) ?? "";
+				const assignedTeacherName = teacherNameById.get(assignedTeacherId) ?? "";
+				return [row.name, assignedTeacherName]
+					.join(" ")
+					.toLowerCase()
+					.includes(query);
+			});
 		}
 
 		return filtered;
-	}, [data?.classes, defaultGradeNumber, filterGrade, searchQuery]);
+	}, [
+		assignmentTeacherByClassId,
+		data?.classes,
+		defaultGradeNumber,
+		filterGrade,
+		searchQuery,
+		teacherNameById,
+	]);
 
 	const gradeOptions = useMemo(() => {
 		return Array.from(new Set([defaultGradeNumber, ...(data?.classes ?? []).map((row) => row.grade)]))
@@ -479,11 +499,6 @@ export default function SubjectCoordinatorAssignmentsPage() {
 						</div>
 						<div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
 							<div className="flex items-center gap-1">
-								<Shield className="w-3.5 h-3.5" />
-								<span>Data Guru Terkawal</span>
-							</div>
-							<div className="w-1 h-1 rounded-full bg-muted" />
-							<div className="flex items-center gap-1">
 								<Clock className="w-3.5 h-3.5" />
 								<span>Kemas kini: <LastUpdatedTime /></span>
 							</div>
@@ -537,7 +552,7 @@ export default function SubjectCoordinatorAssignmentsPage() {
 							<div className="flex flex-wrap items-center gap-3">
 								<Badge variant="outline" className="border-primary/30 bg-primary/5 text-primary font-medium">
 									<Filter className="w-3 h-3 mr-1" />
-									{filteredRows.length} kelas ditemui
+									{filteredRows.length} kelas
 								</Badge>
 							</div>
 						</div>
@@ -548,7 +563,7 @@ export default function SubjectCoordinatorAssignmentsPage() {
 							<div className="flex-1 relative">
 								<Search className="absolute left-3.5 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
 								<Input
-									placeholder="Cari kelas..."
+									placeholder="Cari kelas atau guru subjek..."
 									value={searchQuery}
 									onChange={(e) => setSearchQuery(e.target.value)}
 									className="pl-10 h-11 rounded-lg border-border bg-background focus:border-primary focus:ring-primary/20"
@@ -640,7 +655,7 @@ export default function SubjectCoordinatorAssignmentsPage() {
 															<p className="font-semibold text-foreground">Tiada kelas dijumpai</p>
 															<p className="text-sm text-muted-foreground mt-1 max-w-md">
 																{searchQuery || filterGrade !== "all"
-																	? "Tiada kelas yang sepadan dengan carian anda"
+																	? "Tiada kelas atau guru subjek yang sepadan dengan carian anda"
 																	: "Tiada kelas tersedia untuk subjek ini"}
 															</p>
 														</div>
@@ -830,12 +845,6 @@ export default function SubjectCoordinatorAssignmentsPage() {
 					</div>
 				</Card>
 
-				<div className="text-center pt-6">
-					<div className="inline-flex items-center gap-2 text-sm text-muted-foreground bg-card/50 backdrop-blur-sm px-4 py-2 rounded-full border border-border">
-						<Shield className="w-4 h-4" />
-						<span>Sistem Pengurusan Guru Subjek v2.0 - Data guru terkawal sepenuhnya</span>
-					</div>
-				</div>
 			</div>
 
 			<Dialog

@@ -49,6 +49,14 @@ function toNumber(val: unknown) {
     return Number.isFinite(n) ? n : 0;
 }
 
+function gradeFromPercentage(total: number) {
+    if (total >= 80) return "A";
+    if (total >= 65) return "B";
+    if (total >= 50) return "C";
+    if (total >= 40) return "D";
+    return "E";
+}
+
 function normalizeStatus(raw: string | null): ApprovalStatus | "all" {
     if (raw === "pending" || raw === "approved" || raw === "rejected")
         return raw;
@@ -165,20 +173,56 @@ export async function GET(req: Request) {
 
         const canonicalResults = Array.from(canonicalResultsMap.values());
 
+        const resultSubjectiveIds = new Set(
+            canonicalResults.map((r) => toId(r.subjective_id)).filter(Boolean)
+        );
+
+        const { data: standaloneSubjectiveMarks } =
+            status === "all" || status === "pending"
+                ? await supabase
+                      .from("stg_subjective_marks")
+                      .select("subjective_id, subjective_mark, teacher_id, student_id, subject_id, exam_id, input_date")
+                      .in("subject_id", subjectIds)
+                : { data: [] as unknown[] };
+
+        const orphanSubjectiveMarks = (Array.isArray(standaloneSubjectiveMarks)
+            ? standaloneSubjectiveMarks
+            : []
+        ).filter((row: unknown) => {
+            if (!row || typeof row !== "object") return false;
+            const subjectiveId = toId((row as { subjective_id?: unknown }).subjective_id);
+            return subjectiveId && !resultSubjectiveIds.has(subjectiveId);
+        });
+
         const studentIds = Array.from(
-            new Set(canonicalResults.map((r) => toId(r.student_id)))
+            new Set([
+                ...canonicalResults.map((r) => toId(r.student_id)),
+                ...orphanSubjectiveMarks.map((r: unknown) =>
+                    toId((r as { student_id?: unknown }).student_id)
+                ),
+            ])
         ).filter(Boolean);
         const examIds = Array.from(
-            new Set(canonicalResults.map((r) => toId(r.exam_id)))
+            new Set([
+                ...canonicalResults.map((r) => toId(r.exam_id)),
+                ...orphanSubjectiveMarks.map((r: unknown) =>
+                    toId((r as { exam_id?: unknown }).exam_id)
+                ),
+            ])
         ).filter(Boolean);
         const omrIds = Array.from(
             new Set(canonicalResults.map((r) => toId(r.omr_scan_id)))
         ).filter(Boolean);
         const subjectiveIds = Array.from(
-            new Set(canonicalResults.map((r) => toId(r.subjective_id)))
+            new Set([
+                ...Array.from(resultSubjectiveIds),
+                ...orphanSubjectiveMarks.map((r: unknown) =>
+                    toId((r as { subjective_id?: unknown }).subjective_id)
+                ),
+            ])
         ).filter(Boolean);
 
-        const [{ data: students }, { data: classes }, { data: subjects }, { data: exams }, { data: omrScans }, { data: subjectiveMarks }, { data: componentRows }] =
+        const [{ data: students }, { data: classes }, { data: subjects }, { data: exams }, { data: omrScans }, { data: linkedSubjectiveMarks }, { data: componentRows }] =
             await Promise.all([
                 supabase
                     .from("stg_students")
@@ -202,7 +246,7 @@ export async function GET(req: Request) {
                     .in("omr_scan_id", omrIds),
                 supabase
                     .from("stg_subjective_marks")
-                    .select("subjective_id, subjective_mark, teacher_id, input_date")
+                    .select("subjective_id, subjective_mark, teacher_id, student_id, subject_id, exam_id, input_date")
                     .in("subjective_id", subjectiveIds),
                 supabase
                     .from("stg_mark_components")
@@ -265,10 +309,17 @@ export async function GET(req: Request) {
 
         const subjectiveInfoById = new Map<
             string,
-            { mark: number; teacherId: string | null; inputDate: string | null }
+            {
+                mark: number;
+                teacherId: string | null;
+                studentId: string;
+                subjectId: string;
+                examId: string;
+                inputDate: string | null;
+            }
         >();
         const teacherIds = new Set<string>();
-        for (const m of Array.isArray(subjectiveMarks) ? subjectiveMarks : []) {
+        for (const m of Array.isArray(linkedSubjectiveMarks) ? linkedSubjectiveMarks : []) {
             if (!m || typeof m !== "object") continue;
             const id = toId((m as { subjective_id?: unknown }).subjective_id);
             if (!id) continue;
@@ -277,6 +328,9 @@ export async function GET(req: Request) {
             subjectiveInfoById.set(id, {
                 mark: toNumber((m as { subjective_mark?: unknown }).subjective_mark),
                 teacherId: teacherId || null,
+                studentId: toId((m as { student_id?: unknown }).student_id),
+                subjectId: toId((m as { subject_id?: unknown }).subject_id),
+                examId: toId((m as { exam_id?: unknown }).exam_id),
                 inputDate: inputDate || null,
             });
             if (teacherId) teacherIds.add(teacherId);
@@ -431,6 +485,86 @@ export async function GET(req: Request) {
             });
         }
 
+        for (const row of orphanSubjectiveMarks) {
+            if (!row || typeof row !== "object") continue;
+
+            const subjective_id = toId((row as { subjective_id?: unknown }).subjective_id);
+            const subjectiveInfo = subjectiveInfoById.get(subjective_id);
+            const student_id =
+                subjectiveInfo?.studentId || toId((row as { student_id?: unknown }).student_id);
+            const subject_id =
+                subjectiveInfo?.subjectId || toId((row as { subject_id?: unknown }).subject_id);
+            const exam_id =
+                subjectiveInfo?.examId || toId((row as { exam_id?: unknown }).exam_id);
+            const teacher_id =
+                subjectiveInfo?.teacherId || toId((row as { teacher_id?: unknown }).teacher_id) || null;
+
+            if (!subjective_id || !student_id || !subject_id || !exam_id) continue;
+
+            const studentInfo = studentInfoById.get(student_id);
+            const class_id = studentInfo?.classId ?? null;
+            const classInfo = class_id ? classInfoById.get(class_id) ?? null : null;
+            const className = classInfo?.name ?? "";
+            const classGrade = classInfo?.grade ?? 0;
+            const subjectName = subjectNameById.get(subject_id) ?? "";
+            const examInfo = examInfoById.get(exam_id);
+            const teacherName = teacher_id ? teacherNameById.get(teacher_id) ?? "" : "";
+            const submittedAt =
+                subjectiveInfo?.inputDate || toId((row as { input_date?: unknown }).input_date) || null;
+            const compositeKey = [student_id, subject_id, exam_id].join("|");
+            const components = componentMapByCompositeKey.get(compositeKey) ?? [];
+            const fallbackComponents =
+                components.length > 0
+                    ? components
+                    : [
+                          {
+                              key: "subjective",
+                              label: "Subjektif",
+                              type: "manual",
+                              mark: subjectiveInfo?.mark ?? toNumber((row as { subjective_mark?: unknown }).subjective_mark),
+                              max_mark: 0,
+                              included_in_total: true,
+                          },
+                      ];
+            const total = fallbackComponents
+                .filter((component) => component.included_in_total)
+                .reduce((sum, component) => sum + component.mark, 0);
+            const key = [subject_id, class_id ?? "no-class", exam_id, teacher_id ?? "no-teacher"].join("|");
+
+            if (!submissionsByKey.has(key)) {
+                submissionsByKey.set(key, {
+                    id: key,
+                    subject: subjectName,
+                    class_id,
+                    className,
+                    classGrade,
+                    subject_id,
+                    exam_id,
+                    examName: examInfo?.name ?? "",
+                    academic_year: examInfo?.year ?? "",
+                    teacher_id,
+                    teacher: teacherName,
+                    status: "pending",
+                    submittedAt,
+                    marks: [],
+                });
+            }
+
+            const group = submissionsByKey.get(key)!;
+            group.status = mergeStatus(group.status, "pending");
+            if (submittedAt && (!group.submittedAt || submittedAt > group.submittedAt)) {
+                group.submittedAt = submittedAt;
+            }
+            group.marks.push({
+                result_id: `subjective:${subjective_id}`,
+                student: studentInfo?.name ?? student_id,
+                student_id,
+                components: fallbackComponents,
+                total,
+                grade: "-",
+            });
+        }
+
         const submissions = Array.from(submissionsByKey.values()).sort((a, b) => {
             const aa = a.submittedAt ? new Date(a.submittedAt).getTime() : 0;
             const bb = b.submittedAt ? new Date(b.submittedAt).getTime() : 0;
@@ -454,6 +588,7 @@ export async function POST(req: Request) {
         const subject_id = String(body?.subject_id ?? "").trim();
         const class_id = String(body?.class_id ?? "").trim();
         const exam_id = String(body?.exam_id ?? "").trim();
+        const teacher_id = String(body?.teacher_id ?? "").trim();
 
         if (!action || !subject_id || !class_id || !exam_id) {
             return NextResponse.json(
@@ -519,7 +654,7 @@ export async function POST(req: Request) {
 
         const { data: pendingRows, error: pendingErr } = await supabaseAdmin
             .from("stg_results")
-            .select("result_id")
+            .select("result_id, subjective_id")
             .eq("subject_id", subject_id)
             .eq("exam_id", exam_id)
             .eq("status", "pending")
@@ -533,14 +668,160 @@ export async function POST(req: Request) {
             );
         }
 
-        const resultIds = (Array.isArray(pendingRows) ? pendingRows : [])
+        const pendingResultRows = Array.isArray(pendingRows) ? pendingRows : [];
+        const pendingSubjectiveIds = pendingResultRows
+            .map((row: unknown) => {
+                if (!row || typeof row !== "object") return "";
+                return toId((row as { subjective_id?: unknown }).subjective_id);
+            })
+            .filter(Boolean);
+
+        const { data: matchingSubjectives } =
+            pendingSubjectiveIds.length > 0
+                ? await supabaseAdmin
+                      .from("stg_subjective_marks")
+                      .select("subjective_id")
+                      .in("subjective_id", pendingSubjectiveIds)
+                      .eq("teacher_id", teacher_id || "__no_teacher__")
+                : { data: [] as unknown[] };
+
+        const matchingSubjectiveIdSet = new Set(
+            (Array.isArray(matchingSubjectives) ? matchingSubjectives : [])
+                .map((row: unknown) => {
+                    if (!row || typeof row !== "object") return "";
+                    return toId((row as { subjective_id?: unknown }).subjective_id);
+                })
+                .filter(Boolean)
+        );
+
+        const resultIds = pendingResultRows
+            .filter((row: unknown) => {
+                if (!teacher_id) return true;
+                if (!row || typeof row !== "object") return false;
+                return matchingSubjectiveIdSet.has(
+                    toId((row as { subjective_id?: unknown }).subjective_id)
+                );
+            })
             .map((row: unknown) => {
                 if (!row || typeof row !== "object") return "";
                 return toId((row as { result_id?: unknown }).result_id);
             })
             .filter(Boolean);
 
+        let rejectedSyntheticCount = 0;
+        if (nextStatus === "rejected" && teacher_id) {
+            const [{ data: teacherSubjectives, error: subjectiveErr }, { data: existingResults, error: existingResultsErr }] =
+                await Promise.all([
+                    supabaseAdmin
+                        .from("stg_subjective_marks")
+                        .select("subjective_id, student_id, subjective_mark")
+                        .eq("teacher_id", teacher_id)
+                        .eq("subject_id", subject_id)
+                        .eq("exam_id", exam_id)
+                        .in("student_id", studentIds),
+                    supabaseAdmin
+                        .from("stg_results")
+                        .select("result_id, student_id, subjective_id")
+                        .eq("subject_id", subject_id)
+                        .eq("exam_id", exam_id)
+                        .in("student_id", studentIds),
+                ]);
+
+            if (subjectiveErr) {
+                return NextResponse.json(
+                    { message: subjectiveErr.message },
+                    { status: 500 }
+                );
+            }
+
+            if (existingResultsErr) {
+                return NextResponse.json(
+                    { message: existingResultsErr.message },
+                    { status: 500 }
+                );
+            }
+
+            const referencedSubjectiveIds = new Set(
+                (Array.isArray(existingResults) ? existingResults : [])
+                    .map((row: unknown) => {
+                        if (!row || typeof row !== "object") return "";
+                        return toId((row as { subjective_id?: unknown }).subjective_id);
+                    })
+                    .filter(Boolean)
+            );
+
+            const existingResultByStudentId = new Map<string, string>();
+            for (const row of Array.isArray(existingResults) ? existingResults : []) {
+                if (!row || typeof row !== "object") continue;
+                const studentId = toId((row as { student_id?: unknown }).student_id);
+                const resultId = toId((row as { result_id?: unknown }).result_id);
+                if (studentId && resultId && !existingResultByStudentId.has(studentId)) {
+                    existingResultByStudentId.set(studentId, resultId);
+                }
+            }
+
+            for (const row of Array.isArray(teacherSubjectives) ? teacherSubjectives : []) {
+                if (!row || typeof row !== "object") continue;
+                const subjectiveId = toId((row as { subjective_id?: unknown }).subjective_id);
+                const studentId = toId((row as { student_id?: unknown }).student_id);
+                if (!subjectiveId || !studentId || referencedSubjectiveIds.has(subjectiveId)) continue;
+
+                const total = toNumber((row as { subjective_mark?: unknown }).subjective_mark);
+                const grade = gradeFromPercentage(total);
+                const existingResultId = existingResultByStudentId.get(studentId);
+
+                if (existingResultId) {
+                    const { error: linkErr } = await supabaseAdmin
+                        .from("stg_results")
+                        .update({
+                            subjective_id: subjectiveId,
+                            total,
+                            grade,
+                            status: "rejected",
+                            approval_date: new Date().toISOString(),
+                        })
+                        .eq("result_id", existingResultId);
+
+                    if (linkErr) {
+                        return NextResponse.json(
+                            { message: linkErr.message },
+                            { status: 500 }
+                        );
+                    }
+                } else {
+                    const { error: insertErr } = await supabaseAdmin
+                        .from("stg_results")
+                        .insert({
+                            student_id: studentId,
+                            subject_id,
+                            exam_id,
+                            subjective_id: subjectiveId,
+                            total,
+                            grade,
+                            status: "rejected",
+                            approval_date: new Date().toISOString(),
+                        });
+
+                    if (insertErr) {
+                        return NextResponse.json(
+                            { message: insertErr.message },
+                            { status: 500 }
+                        );
+                    }
+                }
+
+                rejectedSyntheticCount += 1;
+            }
+        }
+
         if (resultIds.length === 0) {
+            if (rejectedSyntheticCount > 0) {
+                return NextResponse.json({
+                    success: true,
+                    updated: rejectedSyntheticCount,
+                });
+            }
+
             return NextResponse.json({
                 success: true,
                 updated: 0,
@@ -566,7 +847,7 @@ export async function POST(req: Request) {
 
         return NextResponse.json({
             success: true,
-            updated: Array.isArray(updatedRows) ? updatedRows.length : 0,
+            updated: (Array.isArray(updatedRows) ? updatedRows.length : 0) + rejectedSyntheticCount,
         });
     } catch (err) {
         console.error("COORDINATOR APPROVAL ACTION ERROR:", err);

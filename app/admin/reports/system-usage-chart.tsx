@@ -112,6 +112,7 @@ export default function SystemUsageChart() {
 									width={40}
 								/>
 								<Tooltip
+									formatter={(value) => [value, "Log Masuk"]}
 									contentStyle={{
 										fontSize: "12px",
 										borderRadius: "8px",
@@ -122,6 +123,7 @@ export default function SystemUsageChart() {
 								<Area
 									type="monotone"
 									dataKey="value"
+									name="Log Masuk"
 									stroke="#6366f1"
 									fill="url(#usageGradient)"
 									strokeWidth={2}
