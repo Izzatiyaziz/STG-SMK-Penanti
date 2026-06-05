@@ -166,8 +166,7 @@ export async function POST(req: Request) {
                 fullname: teacher.fullname,
                 roles: roleNames,
                 session_id,
-                // First-login password change is disabled (teachers can proceed directly).
-                must_change_password: false,
+                must_change_password: teacher.is_first_login === true,
             });
             setSessionCookie(response, {
                 userType: "teacher",

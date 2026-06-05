@@ -2,13 +2,20 @@
 
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
+import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select";
 import { useState } from "react";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
-import { Eye, EyeOff } from "lucide-react"; // 🔥 Tambah import ikon ini
+import { Eye, EyeOff, GraduationCap, Loader2, Shield, User } from "lucide-react";
 
 type LoginRole = "student" | "teacher" | "admin";
 type LoginPayload = {
@@ -26,6 +33,26 @@ type PasswordChangeSession = {
     roles?: string[];
 };
 
+const TEACHER_ROLE_LABELS: Record<string, string> = {
+    principal: "Pengetua",
+    "class teacher": "Guru Kelas",
+    "subject teacher": "Guru Subjek",
+    "subject coordinator": "Panitia Subjek",
+};
+
+function PasswordToggle({ show, onToggle }: { show: boolean; onToggle: () => void }) {
+    return (
+        <button
+            type="button"
+            onClick={onToggle}
+            aria-label={show ? "Sembunyikan kata laluan" : "Tunjukkan kata laluan"}
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/35 rounded-sm"
+        >
+            {show ? <EyeOff size={16} /> : <Eye size={16} />}
+        </button>
+    );
+}
+
 export function LoginForm({
     className,
     ...props
@@ -36,28 +63,24 @@ export function LoginForm({
     const [selectedTeacherRole, setSelectedTeacherRole] = useState("");
     const router = useRouter();
 
-    // ================= STATE TUKAR PASSWORD =================
     const [showPasswordDialog, setShowPasswordDialog] = useState(false);
-    const [tempData] = useState<PasswordChangeSession | null>(null);
+    const [tempData, setTempData] = useState<PasswordChangeSession | null>(null);
     const [newPassword, setNewPassword] = useState("");
     const [confirmPassword, setConfirmPassword] = useState("");
-    
-    // 🔥 STATE UNTUK TOGGLE MATA (Melihat Kata Laluan)
+
     const [showNewPassword, setShowNewPassword] = useState(false);
     const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+    const [showTeacherPassword, setShowTeacherPassword] = useState(false);
+    const [showAdminPassword, setShowAdminPassword] = useState(false);
 
-    // ================= STATE LUPA PASSWORD =================
     const [showForgotDialog, setShowForgotDialog] = useState(false);
     const [forgotRole, setForgotRole] = useState<"teacher" | "admin">("teacher");
     const [forgotIdentifier, setForgotIdentifier] = useState("");
 
-    // ================= LOGIK SEMAKAN KATA LALUAN =================
-    // 🔥 Tukar kepada sekurang-kurangnya 8 aksara (tiada had maksimum)
-    const hasLength = newPassword.length >= 8; 
+    const hasLength = newPassword.length >= 8;
     const hasUpper = /[A-Z]/.test(newPassword);
     const hasNumber = /[0-9]/.test(newPassword);
     const hasSymbol = /[^A-Za-z0-9]/.test(newPassword);
-    
     const isPasswordStrong = hasLength && hasUpper && hasNumber && hasSymbol;
 
     async function handleSubmit(
@@ -113,8 +136,17 @@ export function LoginForm({
 
                 const finalRole = selectedTeacherRole || roles[0] || "subject teacher";
 
-                // First-login password change is disabled:
-                // teachers can login and enter the system without changing password first.
+                if (data.must_change_password) {
+                    setTempData({
+                        user_id: data.user_id,
+                        role: finalRole,
+                        session_id: data.session_id ?? null,
+                        roles,
+                    });
+                    setShowPasswordDialog(true);
+                    toast.dismiss(toastId);
+                    return;
+                }
 
                 await proceedToDashboard(
                     data.user_id,
@@ -163,21 +195,20 @@ export function LoginForm({
                 session_id: sessionId ?? null,
             })
         );
-        if (toastId) toast.success("Log masuk berjaya 🎉", { id: toastId });
-        
+        if (toastId) toast.success("Log masuk berjaya!", { id: toastId });
+
         if (userType === "admin") router.push("/admin/dashboard");
         else if (userType === "teacher") {
             const r = String(specificRole).toLowerCase().trim();
             if (r === "principal") router.push("/principal/dashboard");
             else if (r === "subject coordinator") router.push("/coordinator/dashboard");
             else router.push("/teacher/dashboard");
-        }
-        else router.push("/student/dashboard");
+        } else router.push("/student/dashboard");
     }
 
     async function handlePasswordChange(e: React.FormEvent) {
         e.preventDefault();
-        
+
         if (!isPasswordStrong) {
             toast.error("Sila pastikan kata laluan memenuhi semua kriteria yang ditetapkan.");
             return;
@@ -195,7 +226,7 @@ export function LoginForm({
             const res = await fetch("/api/auth/change-password", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ 
+                body: JSON.stringify({
                     userType: "teacher",
                     user_id: tempData?.user_id,
                     current_password: "",
@@ -232,9 +263,9 @@ export function LoginForm({
             const res = await fetch("/api/auth/forgot-password", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ 
+                body: JSON.stringify({
                     role: forgotRole,
-                    identifier: forgotIdentifier 
+                    identifier: forgotIdentifier,
                 }),
             });
 
@@ -266,113 +297,152 @@ export function LoginForm({
                     setSelectedTeacherRole("");
                 }}
             >
-                <TabsList className="grid grid-cols-3 w-full min-h-12">
-                    <TabsTrigger value="student">Pelajar</TabsTrigger>
-                    <TabsTrigger value="teacher">Guru</TabsTrigger>
-                    <TabsTrigger value="admin">Admin</TabsTrigger>
+                <TabsList className="grid grid-cols-3 w-full h-11">
+                    <TabsTrigger value="student" className="flex items-center gap-1.5">
+                        <User size={14} />
+                        Pelajar
+                    </TabsTrigger>
+                    <TabsTrigger value="teacher" className="flex items-center gap-1.5">
+                        <GraduationCap size={14} />
+                        Guru
+                    </TabsTrigger>
+                    <TabsTrigger value="admin" className="flex items-center gap-1.5">
+                        <Shield size={14} />
+                        Admin
+                    </TabsTrigger>
                 </TabsList>
 
-                {/* STUDENT CONTENT */}
+                {/* STUDENT TAB */}
                 <TabsContent value="student">
                     <form onSubmit={(e) => handleSubmit(e, "student")} {...props}>
                         <FieldGroup>
                             <Field>
-                                <FieldLabel>IC Nombor</FieldLabel>
-                                <Input name="ic_number" placeholder="Contoh: 050101-01-1234" required />
+                                <FieldLabel>No. IC</FieldLabel>
+                                <Input
+                                    name="ic_number"
+                                    placeholder="050101-01-1234"
+                                    inputMode="numeric"
+                                    autoComplete="off"
+                                    required
+                                />
+                                <FieldDescription className="text-xs">
+                                    Masukkan nombor IC — contoh: 050101-01-1234
+                                </FieldDescription>
                             </Field>
-                            <Button type="submit" disabled={loading}>
-                                Log Masuk sebagai Pelajar
+                            <Button type="submit" className="w-full" disabled={loading}>
+                                {loading && <Loader2 size={15} className="animate-spin" />}
+                                {loading ? "Sedang log masuk..." : "Log Masuk sebagai Pelajar"}
                             </Button>
                         </FieldGroup>
                     </form>
                 </TabsContent>
 
-                {/* TEACHER CONTENT */}
+                {/* TEACHER TAB */}
                 <TabsContent value="teacher">
                     <form onSubmit={(e) => handleSubmit(e, "teacher")} {...props}>
                         <FieldGroup>
                             <Field>
                                 <FieldLabel>No. Staff</FieldLabel>
-                                <Input name="username" required />
+                                <Input name="username" autoComplete="username" required />
                             </Field>
                             <Field>
                                 <div className="flex justify-between items-center w-full">
                                     <FieldLabel>Kata Laluan</FieldLabel>
-                                    <button 
-                                        type="button" 
+                                    <button
+                                        type="button"
                                         onClick={() => { setForgotRole("teacher"); setShowForgotDialog(true); }}
                                         className="text-xs text-primary hover:underline"
                                     >
                                         Lupa Kata Laluan?
                                     </button>
                                 </div>
-                                <Input name="password" type="password" required />
+                                <div className="relative">
+                                    <Input
+                                        name="password"
+                                        type={showTeacherPassword ? "text" : "password"}
+                                        autoComplete="current-password"
+                                        required
+                                        className="pr-10"
+                                    />
+                                    <PasswordToggle
+                                        show={showTeacherPassword}
+                                        onToggle={() => setShowTeacherPassword((v) => !v)}
+                                    />
+                                </div>
                             </Field>
 
                             {teacherRoles.length > 0 && (
                                 <Field>
                                     <FieldLabel>Pilih Jawatan</FieldLabel>
-                                    <select
-                                        className="w-full border rounded-md p-2 bg-background"
+                                    <Select
                                         value={selectedTeacherRole}
-                                        onChange={(e) => setSelectedTeacherRole(e.target.value)}
-                                        required
+                                        onValueChange={setSelectedTeacherRole}
                                     >
-                                        <option value="">-- Pilih Jawatan --</option>
-                                        {teacherRoles.map((r) => (
-                                            <option key={r} value={r}>
-                                                {r === "principal"
-                                                    ? "Pengetua"
-                                                    : r === "class teacher"
-                                                        ? "Guru Kelas"
-                                                        : r === "subject teacher"
-                                                            ? "Guru Subjek"
-                                                            : r === "subject coordinator"
-                                                                ? "Panitia Subjek"
-                                                                : r}
-                                            </option>
-                                        ))}
-                                    </select>
+                                        <SelectTrigger className="w-full">
+                                            <SelectValue placeholder="-- Pilih Jawatan --" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {teacherRoles.map((r) => (
+                                                <SelectItem key={r} value={r}>
+                                                    {TEACHER_ROLE_LABELS[r] ?? r}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
                                 </Field>
                             )}
 
-                            <Button type="submit" disabled={loading}>
-                                Log Masuk sebagai Guru
+                            <Button type="submit" className="w-full" disabled={loading}>
+                                {loading && <Loader2 size={15} className="animate-spin" />}
+                                {loading ? "Sedang log masuk..." : "Log Masuk sebagai Guru"}
                             </Button>
                         </FieldGroup>
                     </form>
                 </TabsContent>
 
-                {/* ADMIN CONTENT */}
+                {/* ADMIN TAB */}
                 <TabsContent value="admin">
                     <form onSubmit={(e) => handleSubmit(e, "admin")} {...props}>
                         <FieldGroup>
                             <Field>
                                 <FieldLabel>ID Admin</FieldLabel>
-                                <Input name="admin_id" required />
+                                <Input name="admin_id" autoComplete="username" required />
                             </Field>
                             <Field>
                                 <div className="flex justify-between items-center w-full">
                                     <FieldLabel>Kata Laluan</FieldLabel>
-                                    <button 
-                                        type="button" 
+                                    <button
+                                        type="button"
                                         onClick={() => { setForgotRole("admin"); setShowForgotDialog(true); }}
                                         className="text-xs text-primary hover:underline"
                                     >
                                         Lupa Kata Laluan?
                                     </button>
                                 </div>
-                                <Input name="password" type="password" required />
+                                <div className="relative">
+                                    <Input
+                                        name="password"
+                                        type={showAdminPassword ? "text" : "password"}
+                                        autoComplete="current-password"
+                                        required
+                                        className="pr-10"
+                                    />
+                                    <PasswordToggle
+                                        show={showAdminPassword}
+                                        onToggle={() => setShowAdminPassword((v) => !v)}
+                                    />
+                                </div>
                             </Field>
-                            <Button type="submit" disabled={loading}>
-                                Log Masuk sebagai Admin
+                            <Button type="submit" className="w-full" disabled={loading}>
+                                {loading && <Loader2 size={15} className="animate-spin" />}
+                                {loading ? "Sedang log masuk..." : "Log Masuk sebagai Admin"}
                             </Button>
                         </FieldGroup>
                     </form>
                 </TabsContent>
             </Tabs>
 
-            {/* ================= DIALOG TUKAR KATA LALUAN ================= */}
+            {/* PASSWORD CHANGE DIALOG */}
             {showPasswordDialog && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
                     <div className="bg-background w-full max-w-md p-6 rounded-xl border shadow-2xl">
@@ -385,31 +455,26 @@ export function LoginForm({
                             <FieldGroup>
                                 <Field>
                                     <FieldLabel>Kata Laluan Baharu</FieldLabel>
-                                    {/* 🔥 Input Berbalut dengan Butang Mata */}
                                     <div className="relative">
-                                        <Input 
-                                            type={showNewPassword ? "text" : "password"} 
+                                        <Input
+                                            type={showNewPassword ? "text" : "password"}
                                             value={newPassword}
                                             onChange={(e) => setNewPassword(e.target.value)}
-                                            required 
+                                            required
                                             placeholder="Minima 8 aksara"
-                                            className="pr-10" // Beri ruang di sebelah kanan untuk ikon
+                                            className="pr-10"
                                         />
-                                        <button
-                                            type="button"
-                                            onClick={() => setShowNewPassword(!showNewPassword)}
-                                            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-                                        >
-                                            {showNewPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-                                        </button>
+                                        <PasswordToggle
+                                            show={showNewPassword}
+                                            onToggle={() => setShowNewPassword((v) => !v)}
+                                        />
                                     </div>
-                                    
-                                    {/* PAPARAN KEKUATAN KATA LALUAN */}
+
                                     {newPassword.length > 0 && (
                                         <div className="mt-2 text-xs p-3 rounded-lg border bg-muted/30">
                                             <p className={cn(
-                                                "font-bold mb-2", 
-                                                isPasswordStrong ? "text-green-500" : "text-red-500"
+                                                "font-bold mb-2",
+                                                isPasswordStrong ? "text-green-500" : "text-amber-500"
                                             )}>
                                                 Kekuatan: {isPasswordStrong ? "Kuat" : "Lemah"}
                                             </p>
@@ -433,29 +498,28 @@ export function LoginForm({
 
                                 <Field>
                                     <FieldLabel>Sahkan Kata Laluan Baharu</FieldLabel>
-                                    {/* 🔥 Input Berbalut dengan Butang Mata */}
                                     <div className="relative">
-                                        <Input 
-                                            type={showConfirmPassword ? "text" : "password"} 
+                                        <Input
+                                            type={showConfirmPassword ? "text" : "password"}
                                             value={confirmPassword}
                                             onChange={(e) => setConfirmPassword(e.target.value)}
-                                            required 
+                                            required
                                             className="pr-10"
                                         />
-                                        <button
-                                            type="button"
-                                            onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                                            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-                                        >
-                                            {showConfirmPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-                                        </button>
+                                        <PasswordToggle
+                                            show={showConfirmPassword}
+                                            onToggle={() => setShowConfirmPassword((v) => !v)}
+                                        />
                                     </div>
+                                    {confirmPassword.length > 0 && newPassword !== confirmPassword && (
+                                        <p className="text-xs text-destructive mt-1">Kata laluan tidak sepadan</p>
+                                    )}
                                 </Field>
 
-                                <div className="flex gap-3 mt-4">
-                                    <Button 
-                                        type="button" 
-                                        variant="outline" 
+                                <div className="flex gap-3 mt-2">
+                                    <Button
+                                        type="button"
+                                        variant="outline"
                                         className="flex-1"
                                         onClick={() => {
                                             setShowPasswordDialog(false);
@@ -467,6 +531,7 @@ export function LoginForm({
                                         Batal
                                     </Button>
                                     <Button type="submit" className="flex-1" disabled={loading || !isPasswordStrong}>
+                                        {loading && <Loader2 size={15} className="animate-spin" />}
                                         {loading ? "Menyimpan..." : "Simpan & Masuk"}
                                     </Button>
                                 </div>
@@ -476,7 +541,7 @@ export function LoginForm({
                 </div>
             )}
 
-            {/* DIALOG LUPA KATA LALUAN (SEDIA ADA) */}
+            {/* FORGOT PASSWORD DIALOG */}
             {showForgotDialog && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
                     <div className="bg-background w-full max-w-md p-6 rounded-xl border shadow-2xl">
@@ -489,19 +554,20 @@ export function LoginForm({
                             <FieldGroup>
                                 <Field>
                                     <FieldLabel>ID {forgotRole === "teacher" ? "Guru" : "Admin"}</FieldLabel>
-                                    <Input 
-                                        type="text" 
+                                    <Input
+                                        type="text"
                                         value={forgotIdentifier}
                                         onChange={(e) => setForgotIdentifier(e.target.value)}
-                                        required 
+                                        required
                                         placeholder={`Masukkan ID ${forgotRole === "teacher" ? "Guru" : "Admin"}`}
+                                        autoComplete="username"
                                     />
                                 </Field>
-                                
-                                <div className="flex gap-3 mt-4">
-                                    <Button 
-                                        type="button" 
-                                        variant="outline" 
+
+                                <div className="flex gap-3 mt-2">
+                                    <Button
+                                        type="button"
+                                        variant="outline"
                                         className="flex-1"
                                         onClick={() => {
                                             setShowForgotDialog(false);
@@ -512,6 +578,7 @@ export function LoginForm({
                                         Batal
                                     </Button>
                                     <Button type="submit" className="flex-1" disabled={loading}>
+                                        {loading && <Loader2 size={15} className="animate-spin" />}
                                         {loading ? "Memproses..." : "Hantar E-mel"}
                                     </Button>
                                 </div>

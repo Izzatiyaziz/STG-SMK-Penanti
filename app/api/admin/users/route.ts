@@ -78,7 +78,7 @@ export async function GET(req: Request) {
         stg_classes (
           class_name
         )
-      `);
+      `).limit(1000);
 
             if (error || !data) {
                 console.error("STUDENT FETCH ERROR:", error);
@@ -108,7 +108,8 @@ export async function GET(req: Request) {
             const { data, error } = await supabaseAdmin
                 .from("stg_teachers")
                 .select("teacher_id, username, fullname, email, status")
-                .order("fullname", { ascending: true });
+                .order("fullname", { ascending: true })
+                .limit(500);
 
             if (error || !data) {
                 console.error("TEACHER FETCH ERROR:", error);

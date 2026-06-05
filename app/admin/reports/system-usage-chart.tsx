@@ -94,8 +94,8 @@ export default function SystemUsageChart() {
 							>
 								<defs>
 									<linearGradient id="usageGradient" x1="0" y1="0" x2="0" y2="1">
-										<stop offset="0%" stopColor="#6366f1" stopOpacity={0.4} />
-										<stop offset="100%" stopColor="#6366f1" stopOpacity={0} />
+										<stop offset="0%" stopColor="var(--color-primary)" stopOpacity={0.35} />
+										<stop offset="100%" stopColor="var(--color-primary)" stopOpacity={0} />
 									</linearGradient>
 								</defs>
 
@@ -124,7 +124,7 @@ export default function SystemUsageChart() {
 									type="monotone"
 									dataKey="value"
 									name="Log Masuk"
-									stroke="#6366f1"
+									stroke="var(--color-primary)"
 									fill="url(#usageGradient)"
 									strokeWidth={2}
 									dot={false}

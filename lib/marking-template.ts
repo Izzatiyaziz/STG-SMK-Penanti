@@ -285,7 +285,7 @@ export function sanitizeGradeTemplate(group: TemplateGroup, value: unknown, fall
         type,
         max_mark: maxMark,
         question_count: toNumber(item.question_count, 0) || undefined,
-        included_in_total: true,
+        included_in_total: item.included_in_total !== false,
       } satisfies MarkComponent;
     })
     .filter(Boolean) as MarkComponent[];
@@ -399,7 +399,7 @@ export function serializeTemplateForStorage(template: GradeTemplate) {
       type: component.type,
       max_mark: component.max_mark,
       question_count: component.question_count ?? null,
-      included_in_total: true,
+      included_in_total: component.included_in_total !== false,
     })),
   };
 }

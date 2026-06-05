@@ -8,16 +8,9 @@ import {
   type MarkComponent,
 } from "@/lib/marking-template";
 import { getMalaysiaDateInputValue } from "@/lib/date-utils";
+import { gradeFromTotal as gradeFromPercentage } from "@/lib/grade-utils";
 
 export const runtime = "nodejs";
-
-function gradeFromPercentage(total: number) {
-  if (total >= 80) return "A";
-  if (total >= 65) return "B";
-  if (total >= 50) return "C";
-  if (total >= 40) return "D";
-  return "E";
-}
 
 function toId(value: unknown) {
   return typeof value === "string" ? value.trim() : value == null ? "" : String(value).trim();
@@ -257,7 +250,7 @@ export async function POST(req: Request) {
           component_type: component.type,
           mark: toNumber(marksByKey[component.key], 0),
           max_mark: component.max_mark,
-          included_in_total: true,
+          included_in_total: component.included_in_total !== false,
           question_count: component.question_count ?? null,
           group_name: templateInfo.group,
           input_date: new Date().toISOString(),
@@ -276,90 +269,66 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: true, draft: true });
     }
 
-    for (const studentId of studentIds) {
+    // Pre-fetch all existing records in batch to avoid N+1 queries
+    const [{ data: existingSubjectives }, { data: existingOmrScans }] =
+      await Promise.all([
+        supabase
+          .from("stg_subjective_marks")
+          .select("subjective_id, student_id")
+          .eq("teacher_id", teacher_id)
+          .eq("subject_id", subject_id)
+          .eq("exam_id", exam_id)
+          .in("student_id", studentIds),
+        primaryOmrComponent
+          ? supabase
+              .from("stg_omr_scans")
+              .select("omr_scan_id, student_id, objective_total_mark")
+              .eq("subject_id", subject_id)
+              .eq("exam_id", exam_id)
+              .in("student_id", studentIds)
+              .order("scan_date", { ascending: false })
+          : { data: [] as Array<{ omr_scan_id: string; student_id: string }> | null },
+      ]);
+
+    const subjectiveByStudent = new Map<string, string>(
+      (existingSubjectives ?? []).map((r) => [toId(r.student_id), toId(r.subjective_id)])
+    );
+    // Keep only the latest scan per student
+    const omrScanByStudent = new Map<string, string>();
+    for (const scan of existingOmrScans ?? []) {
+      const sid = toId(scan.student_id);
+      if (!omrScanByStudent.has(sid)) omrScanByStudent.set(sid, toId(scan.omr_scan_id));
+    }
+    const now = new Date().toISOString();
+
+    // Compute all per-student values in memory
+    type StudentComputed = {
+      studentId: string;
+      marksByKey: Record<string, number>;
+      manualTotal: number;
+      primaryOmrMark: number;
+      total: number;
+      grade: string;
+    };
+    const computed: StudentComputed[] = studentIds.map((studentId) => {
       const marksByKey = payloadByStudent.get(studentId) ?? {};
       const summary = computeMarkSummary(templateInfo.template, marksByKey);
       const manualTotal = summary.components
-        .filter((component) => component.type === "manual")
-        .reduce((sum, component) => sum + component.mark, 0);
-      const primaryOmrMark = primaryOmrComponent ? toNumber(marksByKey[primaryOmrComponent.key], 0) : 0;
+        .filter((c) => c.type === "manual")
+        .reduce((sum, c) => sum + c.mark, 0);
+      return {
+        studentId,
+        marksByKey,
+        manualTotal,
+        primaryOmrMark: primaryOmrComponent ? toNumber(marksByKey[primaryOmrComponent.key], 0) : 0,
+        total: summary.percentage,
+        grade: gradeFromPercentage(summary.percentage),
+      };
+    });
 
-      const { data: existingSubjective } = await supabase
-        .from("stg_subjective_marks")
-        .select("subjective_id")
-        .eq("teacher_id", teacher_id)
-        .eq("student_id", studentId)
-        .eq("subject_id", subject_id)
-        .eq("exam_id", exam_id)
-        .maybeSingle();
-
-      let subjective_id: string | null = null;
-      if (existingSubjective?.subjective_id) {
-        const { error: updateSubjectiveErr } = await supabase
-          .from("stg_subjective_marks")
-          .update({
-            subjective_mark: manualTotal,
-            input_date: new Date().toISOString(),
-          })
-          .eq("subjective_id", existingSubjective.subjective_id);
-        if (updateSubjectiveErr) throw updateSubjectiveErr;
-        subjective_id = existingSubjective.subjective_id;
-      } else {
-        const { data: createdSubjective, error: createSubjectiveErr } = await supabase
-          .from("stg_subjective_marks")
-          .insert({
-            teacher_id,
-            student_id: studentId,
-            subject_id,
-            exam_id,
-            subjective_mark: manualTotal,
-          })
-          .select("subjective_id")
-          .single();
-        if (createSubjectiveErr) throw createSubjectiveErr;
-        subjective_id = toId(createdSubjective?.subjective_id) || null;
-      }
-
-      let omr_scan_id: string | null = null;
-      if (primaryOmrComponent) {
-        const { data: latestOmr } = await supabase
-          .from("stg_omr_scans")
-          .select("omr_scan_id, objective_total_mark")
-          .eq("student_id", studentId)
-          .eq("subject_id", subject_id)
-          .eq("exam_id", exam_id)
-          .order("scan_date", { ascending: false })
-          .limit(1)
-          .maybeSingle();
-
-        if (latestOmr?.omr_scan_id) {
-          const { error: updateOmrErr } = await supabase
-            .from("stg_omr_scans")
-            .update({
-              objective_total_mark: primaryOmrMark,
-              scan_date: new Date().toISOString(),
-            })
-            .eq("omr_scan_id", latestOmr.omr_scan_id);
-          if (updateOmrErr) throw updateOmrErr;
-          omr_scan_id = toId(latestOmr.omr_scan_id) || null;
-        } else {
-          const { data: createdOmr, error: createOmrErr } = await supabase
-            .from("stg_omr_scans")
-            .insert({
-              student_id: studentId,
-              subject_id,
-              exam_id,
-              objective_total_mark: primaryOmrMark,
-              scan_date: new Date().toISOString(),
-            })
-            .select("omr_scan_id")
-            .single();
-          if (createOmrErr) throw createOmrErr;
-          omr_scan_id = toId(createdOmr?.omr_scan_id) || null;
-        }
-      }
-
-      const componentRows = templateInfo.template.components.map((component) => ({
+    // Batch upsert mark_components for all students
+    const allComponentRows = computed.flatMap(({ studentId, marksByKey }) =>
+      templateInfo.template.components.map((component) => ({
         student_id: studentId,
         subject_id,
         exam_id,
@@ -373,76 +342,100 @@ export async function POST(req: Request) {
         included_in_total: true,
         question_count: component.question_count ?? null,
         group_name: templateInfo.group,
-        input_date: new Date().toISOString(),
-      }));
-
-      const { error: componentsErr } = await supabase.from("stg_mark_components").upsert(componentRows, {
-        onConflict: "student_id,subject_id,exam_id,component_key",
-      });
-      if (componentsErr) {
-        throw new Error(
-          `${componentsErr.message}. Jalankan migration stg_mark_components dahulu sebelum guna template pemarkahan baharu.`,
-        );
-      }
-      const total = summary.percentage;
-      const grade = gradeFromPercentage(total);
-
-      const { data: exactExistingResult } = subjective_id
-        ? await supabase
-            .from("stg_results")
-            .select("result_id")
-            .eq("student_id", studentId)
-            .eq("subject_id", subject_id)
-            .eq("exam_id", exam_id)
-            .eq("subjective_id", subjective_id)
-            .limit(1)
-            .maybeSingle()
-        : { data: null };
-
-      const { data: fallbackExistingResults } = exactExistingResult?.result_id
-        ? { data: [] as Array<{ result_id?: unknown }> }
-        : await supabase
-            .from("stg_results")
-            .select("result_id")
-            .eq("student_id", studentId)
-            .eq("subject_id", subject_id)
-            .eq("exam_id", exam_id)
-            .limit(1);
-
-      const existingResultId =
-        toId(exactExistingResult?.result_id) ||
-        toId(
-          Array.isArray(fallbackExistingResults)
-            ? fallbackExistingResults[0]?.result_id
-            : "",
-        );
-
-      if (existingResultId) {
-        const { error: updateResultErr } = await supabase
-          .from("stg_results")
-          .update({
-            omr_scan_id,
-            subjective_id,
-            total,
-            grade,
-            status: "pending",
-          })
-          .eq("result_id", existingResultId);
-        if (updateResultErr) throw updateResultErr;
-      } else {
-        const { error: insertResultErr } = await supabase.from("stg_results").insert({
-          student_id: studentId,
-          subject_id,
-          exam_id,
-          omr_scan_id,
-          subjective_id,
-          total,
-          grade,
-          status: "pending",
-        });
-        if (insertResultErr) throw insertResultErr;
-      }
+        input_date: now,
+      }))
+    );
+    const { error: componentsErr } = await supabase
+      .from("stg_mark_components")
+      .upsert(allComponentRows, { onConflict: "student_id,subject_id,exam_id,component_key" });
+    if (componentsErr) {
+      throw new Error(
+        `${componentsErr.message}. Jalankan migration stg_mark_components dahulu sebelum guna template pemarkahan baharu.`
+      );
     }
+
+    // Upsert subjective_marks for all students
+    const subjectiveUpsertRows = computed.map(({ studentId, manualTotal }) => ({
+      teacher_id,
+      student_id: studentId,
+      subject_id,
+      exam_id,
+      subjective_mark: manualTotal,
+      input_date: now,
+    }));
+    const { data: upsertedSubjectives, error: subjectiveErr } = await supabase
+      .from("stg_subjective_marks")
+      .upsert(subjectiveUpsertRows, { onConflict: "teacher_id,student_id,subject_id,exam_id" })
+      .select("subjective_id, student_id");
+    if (subjectiveErr) throw subjectiveErr;
+
+    const newSubjectiveByStudent = new Map<string, string>(
+      (upsertedSubjectives ?? []).map((r) => [toId(r.student_id), toId(r.subjective_id)])
+    );
+    // Merge with pre-fetched map (upsert may not return rows if no change)
+    for (const [sid, subId] of subjectiveByStudent) {
+      if (!newSubjectiveByStudent.has(sid)) newSubjectiveByStudent.set(sid, subId);
+    }
+
+    // Handle OMR scans: insert new ones for students without a scan
+    if (primaryOmrComponent) {
+      const studentsNeedingNewScan = computed.filter(({ studentId }) => !omrScanByStudent.has(studentId));
+      if (studentsNeedingNewScan.length > 0) {
+        const { data: newScans, error: newScanErr } = await supabase
+          .from("stg_omr_scans")
+          .insert(
+            studentsNeedingNewScan.map(({ studentId, primaryOmrMark }) => ({
+              student_id: studentId,
+              subject_id,
+              exam_id,
+              objective_total_mark: primaryOmrMark,
+              scan_date: now,
+            }))
+          )
+          .select("omr_scan_id, student_id");
+        if (newScanErr) throw newScanErr;
+        for (const scan of newScans ?? []) {
+          omrScanByStudent.set(toId(scan.student_id), toId(scan.omr_scan_id));
+        }
+      }
+      // Update existing scans in batch (individual updates are needed since values differ per student)
+      const studentsWithExistingScan = computed.filter(({ studentId }) =>
+        existingOmrScans?.some((s) => toId(s.student_id) === studentId)
+      );
+      await Promise.all(
+        studentsWithExistingScan.map(({ studentId, primaryOmrMark }) => {
+          const scanId = omrScanByStudent.get(studentId);
+          if (!scanId) return Promise.resolve();
+          return supabase
+            .from("stg_omr_scans")
+            .update({ objective_total_mark: primaryOmrMark, scan_date: now })
+            .eq("omr_scan_id", scanId);
+        })
+      );
+    }
+
+    // Batch upsert results for all students
+    const resultUpsertRows = computed.map(({ studentId, total, grade }) => ({
+      student_id: studentId,
+      subject_id,
+      exam_id,
+      omr_scan_id: omrScanByStudent.get(studentId) ?? null,
+      subjective_id: newSubjectiveByStudent.get(studentId) ?? subjectiveByStudent.get(studentId) ?? null,
+      total,
+      grade,
+      status: "pending",
+    }));
+    const { error: resultsErr } = await supabase
+      .from("stg_results")
+      .upsert(resultUpsertRows, { onConflict: "student_id,subject_id,exam_id" });
+    if (resultsErr) throw resultsErr;
+
+    // Audit trail: log mark submission event (fire-and-forget)
+    supabase.from("stg_sessions").insert({
+      user_id: teacher_id,
+      role: "teacher",
+      action: `Kemaskini Markah: ${subject_id} | Exam: ${exam_id} | Kelas: ${class_id} | ${studentIds.length} pelajar`,
+    }).then(() => {}).catch(() => {});
 
     return NextResponse.json({ success: true });
   } catch (err: unknown) {

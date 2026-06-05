@@ -65,7 +65,7 @@ export async function GET(req: Request) {
 
 		const coordinatorSubjectIds = await getCoordinatorSubjectIds(teacherId);
 		if (coordinatorSubjectIds.length === 0) {
-			return NextResponse.json({ message: "Tiada subjek seliaan", data: null });
+			return NextResponse.json({ message: "Tiada subjek seliaan", data: null }, { status: 404 });
 		}
 
 		const { data: subjects } = await supabase
@@ -84,7 +84,7 @@ export async function GET(req: Request) {
 		const subjectName = toId(mathSubject?.subject_name) || "Mathematics";
 
 		if (!subjectId) {
-			return NextResponse.json({ message: "Subjek Mathematics tidak dijumpai", data: null });
+			return NextResponse.json({ message: "Subjek Mathematics tidak dijumpai", data: null }, { status: 404 });
 		}
 
 		const [{ data: results, error: resultErr }, { data: assignments }] =

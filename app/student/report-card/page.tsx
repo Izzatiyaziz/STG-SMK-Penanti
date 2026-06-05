@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Image from "next/image";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
     Table,
@@ -12,7 +13,7 @@ import {
     TableHeader,
     TableRow,
 } from "@/components/ui/table";
-import { Button } from "@/components/ui/button";
+import { Loader2 } from "lucide-react";
 
 type SubjectResult = {
     subject: string;
@@ -45,16 +46,11 @@ type ReportCardPayload = {
 
 function gradeColor(grade: string) {
     switch (String(grade ?? "").toUpperCase()) {
-        case "A":
-            return "border-emerald-200 bg-emerald-100 text-emerald-700";
-        case "B":
-            return "border-sky-200 bg-sky-100 text-sky-700";
-        case "C":
-            return "border-amber-200 bg-amber-100 text-amber-700";
-        case "D":
-            return "border-orange-200 bg-orange-100 text-orange-700";
-        default:
-            return "border-rose-200 bg-rose-100 text-rose-700";
+        case "A":  return "border-emerald-200 bg-emerald-100 text-emerald-700";
+        case "B":  return "border-sky-200 bg-sky-100 text-sky-700";
+        case "C":  return "border-amber-200 bg-amber-100 text-amber-700";
+        case "D":  return "border-orange-200 bg-orange-100 text-orange-700";
+        default:   return "border-rose-200 bg-rose-100 text-rose-700";
     }
 }
 
@@ -90,120 +86,188 @@ export default function ReportCardPage() {
     const student = data?.student;
     const results = data?.results ?? [];
     const summary = data?.summary;
+    const examLabel = [student?.exam, student?.year].filter(Boolean).join(" ").trim();
 
     return (
-        <div className="min-h-screen bg-muted/30 p-4 md:p-6">
-            <div className="max-w-7xl mx-auto space-y-6">
-                <Card className="border border-border shadow">
-                    <CardContent className="space-y-3 p-6 text-center">
-                        <Image
-                            src="/img/smkp-logo.png"
-                            alt="Logo sekolah"
-                            width={72}
-                            height={72}
-                            className="mx-auto h-16 w-16 object-contain"
-                        />
-                        <div>
-                            <h2 className="text-lg font-bold uppercase">SMK Penanti</h2>
-                            <p className="font-semibold uppercase">
-                                Slip Keputusan {student?.exam ? `- ${student.exam} ${student.year}` : ""}
-                            </p>
-                        </div>
-                    </CardContent>
-                </Card>
+        <div className="flex flex-col gap-8 p-6 md:p-8">
+            {/* PAGE HEADER */}
+            <div className="flex flex-col gap-1 border-b border-border/40 pb-6">
+                <p className="text-xs font-semibold tracking-[0.2em] uppercase text-primary">
+                    Pelajar
+                </p>
+                <h1 className="!text-[36px] font-black leading-tight text-foreground">
+                    Slip Keputusan
+                </h1>
+                <p className="mt-1 text-sm text-muted-foreground">
+                    Rekod rasmi keputusan peperiksaan pelajar.
+                </p>
+            </div>
 
-                {loading ? (
-                    <Card className="border border-border shadow">
-                        <CardContent className="p-6 text-sm text-muted-foreground">
-                            Memuatkan slip keputusan...
+            {/* SCHOOL HEADER CARD */}
+            <Card className="border-border bg-card shadow-sm">
+                <CardContent className="flex flex-col items-center gap-3 p-6 text-center">
+                    <Image
+                        src="/img/smkp-logo.png"
+                        alt="Logo sekolah"
+                        width={72}
+                        height={72}
+                        className="h-16 w-16 object-contain"
+                    />
+                    <div>
+                        <h2 className="text-base font-bold uppercase tracking-wide">SMK Penanti</h2>
+                        <p className="text-sm font-semibold uppercase text-muted-foreground">
+                            Slip Keputusan{examLabel ? ` — ${examLabel}` : ""}
+                        </p>
+                    </div>
+                </CardContent>
+            </Card>
+
+            {loading ? (
+                <div className="flex items-center justify-center gap-3 py-16 text-muted-foreground">
+                    <Loader2 className="h-5 w-5 animate-spin text-primary" />
+                    <span className="text-sm">Memuatkan slip keputusan...</span>
+                </div>
+            ) : error ? (
+                <div className="rounded-md border border-destructive/40 bg-destructive/5 p-4 text-sm text-destructive">
+                    {error}
+                </div>
+            ) : data ? (
+                <>
+                    {/* STUDENT INFO */}
+                    <Card className="border-border bg-card shadow-sm">
+                        <CardContent className="grid grid-cols-1 gap-4 p-6 text-sm md:grid-cols-2">
+                            <div className="space-y-1.5">
+                                <p>
+                                    <span className="font-semibold text-foreground">Nama</span>
+                                    <span className="mx-2 text-muted-foreground">:</span>
+                                    {student?.name}
+                                </p>
+                                <p>
+                                    <span className="font-semibold text-foreground">No. KP</span>
+                                    <span className="mx-2 text-muted-foreground">:</span>
+                                    {student?.ic}
+                                </p>
+                            </div>
+                            <div className="space-y-1.5 md:text-right">
+                                <p>
+                                    <span className="font-semibold text-foreground">Kelas</span>
+                                    <span className="mx-2 text-muted-foreground">:</span>
+                                    {student?.className}
+                                </p>
+                            </div>
                         </CardContent>
                     </Card>
-                ) : error ? (
-                    <Card className="border border-border shadow">
-                        <CardContent className="p-6 text-sm text-destructive">{error}</CardContent>
-                    </Card>
-                ) : data ? (
-                    <>
-                        <Card className="border border-border shadow">
-                            <CardContent className="grid grid-cols-1 gap-4 p-5 text-sm md:grid-cols-2">
-                                <div className="space-y-1">
-                                    <p><b>Nama</b>   : {student?.name}</p>
-                                    <p><b>No. KP</b> : {student?.ic}</p>
-                                </div>
-                                <div className="space-y-1 md:text-right">
-                                    <p><b>Kelas</b> : {student?.className}</p>
-                                </div>
-                            </CardContent>
-                        </Card>
 
-                        <Card className="overflow-hidden rounded-xl border-border bg-card shadow-md">
-                            <CardContent className="p-0">
-                                <div className="overflow-x-auto">
-                                    <Table>
-                                        <TableHeader className="bg-muted/30">
-                                            <TableRow className="border-b border-border hover:bg-transparent">
-                                                <TableHead className="w-16 py-4 text-center font-semibold text-foreground">Bil.</TableHead>
-                                                <TableHead className="py-4 font-semibold text-foreground">Subjek</TableHead>
-                                                <TableHead className="w-28 py-4 text-center font-semibold text-foreground">Markah</TableHead>
-                                                <TableHead className="w-28 py-4 text-center font-semibold text-foreground">Gred</TableHead>
+                    {/* RESULTS TABLE */}
+                    <Card className="overflow-hidden border-border bg-card shadow-sm">
+                        <CardContent className="p-0">
+                            <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                        <TableHead className="w-14 text-center">Bil.</TableHead>
+                                        <TableHead>Subjek</TableHead>
+                                        <TableHead className="w-28 text-center">Markah</TableHead>
+                                        <TableHead className="w-28 text-center">Gred</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {results.length ? (
+                                        results.map((r, i) => (
+                                            <TableRow key={`${r.subject}-${i}`}>
+                                                <TableCell className="text-center text-muted-foreground">{i + 1}</TableCell>
+                                                <TableCell className="font-medium">{r.subject}</TableCell>
+                                                <TableCell className="text-center font-semibold">{r.mark}</TableCell>
+                                                <TableCell className="text-center">
+                                                    <Badge variant="outline" className={gradeColor(r.grade)}>
+                                                        {r.grade}
+                                                    </Badge>
+                                                </TableCell>
                                             </TableRow>
-                                        </TableHeader>
-                                        <TableBody>
-                                            {results.map((r, i) => (
-                                                <TableRow
-                                                    key={`${r.subject}-${i}`}
-                                                    className="border-b border-border transition-colors last:border-0 hover:bg-muted/50"
-                                                >
-                                                    <TableCell className="py-4 text-center font-medium text-muted-foreground">{i + 1}</TableCell>
-                                                    <TableCell className="py-4 font-semibold text-foreground">{r.subject}</TableCell>
-                                                    <TableCell className="py-4 text-center font-semibold">{r.mark}</TableCell>
-                                                    <TableCell className="py-4 text-center">
-                                                        <Badge variant="outline" className={gradeColor(r.grade)}>
-                                                            {r.grade}
-                                                        </Badge>
-                                                    </TableCell>
-                                                </TableRow>
-                                            ))}
-                                        </TableBody>
-                                    </Table>
-                                </div>
-                            </CardContent>
-                        </Card>
+                                        ))
+                                    ) : (
+                                        <TableRow>
+                                            <TableCell colSpan={4} className="py-8 text-center text-sm text-muted-foreground">
+                                                Tiada keputusan untuk dipaparkan.
+                                            </TableCell>
+                                        </TableRow>
+                                    )}
+                                </TableBody>
+                            </Table>
+                        </CardContent>
+                    </Card>
 
-                        <Card className="border border-border shadow">
-                            <CardContent className="grid grid-cols-1 gap-4 p-5 text-sm md:grid-cols-2">
-                                <div className="space-y-1">
-                                    <p><b>Bilangan Mata Pelajaran</b> : {summary?.totalSubjects}</p>
-                                    <p><b>Kedudukan Dalam Kelas</b> : {summary?.classRank}</p>
-                                    <p><b>Kedudukan Dalam Tingkatan</b> : {summary?.levelRank || "-"}</p>
-                                    <p><b>Pencapaian Gred Keseluruhan</b> : {summary?.gradeSummary || "-"}</p>
-                                </div>
-                                <div className="space-y-1">
-                                    <p><b>Jumlah Markah</b> : {summary?.totalMarks}</p>
-                                    <p><b>Peratus</b> : {summary?.percentage}%</p>
-                                    <p><b>Gred Purata Pelajar</b> : {summary?.averageGradePoint ?? "-"}</p>
-                                    <p><b>Keputusan</b> : {summary?.decision || "-"}</p>
-                                </div>
-                            </CardContent>
-                        </Card>
-
-                        <Card className="border border-border shadow">
-                            <CardContent className="p-5 text-sm">
-                                <p><b>Nama Guru Kelas</b> : {student?.classTeacher || "-"}</p>
+                    {/* SUMMARY */}
+                    <Card className="border-border bg-card shadow-sm">
+                        <CardContent className="grid grid-cols-1 gap-4 p-6 text-sm md:grid-cols-2">
+                            <div className="space-y-1.5">
                                 <p>
-                                    <b>Ulasan Guru Kelas</b> :{" "}
-                                    <span className="italic">
-                                        {summary?.comment || "Ulasan belum diisi."}
-                                    </span>
+                                    <span className="font-semibold text-foreground">Bilangan Mata Pelajaran</span>
+                                    <span className="mx-2 text-muted-foreground">:</span>
+                                    {summary?.totalSubjects}
                                 </p>
-                            </CardContent>
-                        </Card>
-                    </>
-                ) : null}
+                                <p>
+                                    <span className="font-semibold text-foreground">Kedudukan Dalam Kelas</span>
+                                    <span className="mx-2 text-muted-foreground">:</span>
+                                    {summary?.classRank}
+                                </p>
+                                <p>
+                                    <span className="font-semibold text-foreground">Kedudukan Dalam Tingkatan</span>
+                                    <span className="mx-2 text-muted-foreground">:</span>
+                                    {summary?.levelRank || "—"}
+                                </p>
+                                <p>
+                                    <span className="font-semibold text-foreground">Pencapaian Gred Keseluruhan</span>
+                                    <span className="mx-2 text-muted-foreground">:</span>
+                                    {summary?.gradeSummary || "—"}
+                                </p>
+                            </div>
+                            <div className="space-y-1.5">
+                                <p>
+                                    <span className="font-semibold text-foreground">Jumlah Markah</span>
+                                    <span className="mx-2 text-muted-foreground">:</span>
+                                    {summary?.totalMarks}
+                                </p>
+                                <p>
+                                    <span className="font-semibold text-foreground">Peratus</span>
+                                    <span className="mx-2 text-muted-foreground">:</span>
+                                    {summary?.percentage}%
+                                </p>
+                                <p>
+                                    <span className="font-semibold text-foreground">Gred Purata Pelajar</span>
+                                    <span className="mx-2 text-muted-foreground">:</span>
+                                    {summary?.averageGradePoint ?? "—"}
+                                </p>
+                                <p>
+                                    <span className="font-semibold text-foreground">Keputusan</span>
+                                    <span className="mx-2 text-muted-foreground">:</span>
+                                    {summary?.decision || "—"}
+                                </p>
+                            </div>
+                        </CardContent>
+                    </Card>
 
-                <div className="flex justify-end">
-                    <Button className="w-full sm:w-auto">Muat Turun PDF Slip Keputusan</Button>
-                </div>
+                    {/* TEACHER COMMENT */}
+                    <Card className="border-border bg-card shadow-sm">
+                        <CardContent className="space-y-1.5 p-6 text-sm">
+                            <p>
+                                <span className="font-semibold text-foreground">Nama Guru Kelas</span>
+                                <span className="mx-2 text-muted-foreground">:</span>
+                                {student?.classTeacher || "—"}
+                            </p>
+                            <p>
+                                <span className="font-semibold text-foreground">Ulasan Guru Kelas</span>
+                                <span className="mx-2 text-muted-foreground">:</span>
+                                <span className="italic text-muted-foreground">
+                                    {summary?.comment || "Ulasan belum diisi."}
+                                </span>
+                            </p>
+                        </CardContent>
+                    </Card>
+                </>
+            ) : null}
+
+            <div className="flex justify-end">
+                <Button>Muat Turun PDF Slip Keputusan</Button>
             </div>
         </div>
     );

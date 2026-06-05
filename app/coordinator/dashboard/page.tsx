@@ -437,53 +437,37 @@ export default function SubjectCoordinatorDashboard() {
 	if (!sessionReady) return null;
 
 	return (
-		<div className="min-h-screen bg-background p-4 md:p-6">
-			<div className="max-w-7xl mx-auto space-y-8">
-				<div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
-					<div className="space-y-3">
-						<div className="flex items-center gap-4">
-							<div className="p-3 rounded-2xl bg-gradient-to-br from-primary/10 to-primary/5 border border-primary/20 shadow-sm">
-								<BarChart3 className="w-7 h-7 text-primary" />
-							</div>
-							<div>
-								<h2 className="text-2xl font-bold text-foreground">
-									Selamat Datang, Ketua Panitia Subjek {subjectName}
-								</h2>
-								<p className="text-muted-foreground font-medium mt-1">
-									Mengurus guru subjek, semak kelulusan markah dan pantau kemas kini sistem
-								</p>
-							</div>
-						</div>
-						<div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
-							<div className="w-1 h-1 rounded-full bg-muted" />
-							<div className="flex items-center gap-1">
-								<Clock className="w-3.5 h-3.5" />
-								<span>Kemas kini: <LastUpdatedTime /></span>
-							</div>
-						</div>
+		<div className="flex flex-col gap-8 p-6 md:p-8">
+			<div className="flex flex-col gap-1 border-b border-border/40 pb-6">
+				<p className="text-xs font-semibold tracking-[0.2em] uppercase text-primary">
+					Panitia Subjek
+				</p>
+				<div className="flex items-end justify-between">
+					<div>
+						<h1 className="!text-[36px] font-black leading-tight text-foreground">
+							Papan Pemuka
+						</h1>
+						<p className="mt-1 text-sm text-muted-foreground">
+							Kemas kini: <LastUpdatedTime />
+						</p>
 					</div>
-
-					<div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-						<div className="inline-flex h-10 w-full items-center gap-2 rounded-md border border-border bg-background px-4 text-sm font-medium text-foreground shadow-xs sm:w-auto sm:max-w-[260px]">
+					<div className="flex items-center gap-3">
+						<div className="inline-flex h-9 items-center gap-2 rounded-md border border-border bg-background px-3 text-sm font-medium text-foreground shadow-xs">
 							<BookOpen className="h-4 w-4 shrink-0 text-primary" />
-							<span className="truncate">{subjectName}</span>
+							<span className="truncate max-w-[180px]">{subjectName}</span>
 						</div>
-
 						<Button
 							variant="outline"
 							onClick={fetchDashboard}
 							disabled={loading || !subjectId || !examId}
-							className="border-border hover:bg-accent hover:text-accent-foreground shadow-xs"
+							className="shadow-xs"
 						>
-							{loading ? (
-								<RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-							) : (
-								<RefreshCw className="w-4 h-4 mr-2" />
-							)}
+							<RefreshCw className={`mr-2 h-4 w-4 ${loading ? "animate-spin" : ""}`} />
 							Muat Semula
 						</Button>
 					</div>
 				</div>
+			</div>
 
 				<div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
 					{quickAccess.map((item) => (
@@ -788,7 +772,6 @@ export default function SubjectCoordinatorDashboard() {
 						</PanelCard>
 					</div>
 				</div>
-			</div>
 		</div>
 	);
 }

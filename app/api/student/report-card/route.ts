@@ -107,12 +107,18 @@ export async function GET(req: Request) {
             return NextResponse.json({ message: "Pelajar tidak ditemui" }, { status: 404 });
         }
 
+        const classId = toId(studentRow.class_id);
+
         let reportCardQuery = supabase
             .from("stg_report_cards")
             .select("report_card_id, class_id, teacher_id, exam_id, average_mark, class_position, ai_comment, generated_date")
             .eq("student_id", student_id)
             .order("generated_date", { ascending: false })
             .limit(1);
+
+        if (classId) {
+            reportCardQuery = (reportCardQuery as typeof reportCardQuery).eq("class_id", classId);
+        }
 
         if (exam_id) {
             reportCardQuery = supabase
@@ -121,6 +127,9 @@ export async function GET(req: Request) {
                 .eq("student_id", student_id)
                 .eq("exam_id", exam_id)
                 .limit(1);
+            if (classId) {
+                reportCardQuery = (reportCardQuery as typeof reportCardQuery).eq("class_id", classId);
+            }
         }
 
         const { data: reportCards, error: cardErr } = await reportCardQuery;

@@ -21,26 +21,41 @@ export async function POST() {
 
         const { data: students, error } = await supabase
             .from("stg_students")
-            .select("student_id, enrollment_date");
+            .select("student_id, enrollment_date")
+            .limit(5000);
 
         if (error) {
             return NextResponse.json({ message: error.message }, { status: 500 });
         }
 
-        let updated = 0;
+        const byLevel: Record<string, string[]> = {};
         for (const s of students ?? []) {
             const lvl = deriveLevel(s.enrollment_date as any);
             if (!lvl) continue;
-
-            const { error: uErr } = await supabase
-                .from("stg_students")
-                .update({ level: lvl })
-                .eq("student_id", s.student_id);
-
-            if (!uErr) updated++;
+            (byLevel[lvl] ??= []).push(s.student_id as string);
         }
 
-        return NextResponse.json({ success: true, updated });
+        let updated = 0;
+        const errors: string[] = [];
+        for (const [lvl, ids] of Object.entries(byLevel)) {
+            const { error: uErr, count } = await supabase
+                .from("stg_students")
+                .update({ level: lvl })
+                .in("student_id", ids)
+                .select("student_id", { count: "exact", head: true });
+
+            if (uErr) {
+                errors.push(`Level ${lvl}: ${uErr.message}`);
+            } else {
+                updated += count ?? ids.length;
+            }
+        }
+
+        return NextResponse.json({
+            success: errors.length === 0,
+            updated,
+            ...(errors.length ? { errors } : {}),
+        });
     } catch (err) {
         console.error("RECALC LEVELS ERROR:", err);
         return NextResponse.json({ message: "Ralat pelayan" }, { status: 500 });

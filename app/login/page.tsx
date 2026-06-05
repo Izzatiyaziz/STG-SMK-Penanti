@@ -1,183 +1,149 @@
 "use client";
 
-import {
-    BookOpenCheck,
-    ClipboardList,
-    GraduationCap,
-    ScanLine,
-    ShieldCheck,
-} from "lucide-react";
+import { GraduationCap } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 
 import { ModeToggle } from "@/components/mode-toggle";
-import {
-    Card,
-    CardContent,
-    CardDescription,
-    CardHeader,
-    CardTitle,
-} from "@/components/ui/card";
 import { LoginForm } from "./login-form";
 
 const portalFeatures = [
-    {
-        title: "Pemarkahan Berstruktur",
-        description: "Urus markah objektif, subjektif, dan komponen peperiksaan.",
-        icon: ClipboardList,
-    },
-    {
-        title: "Sokongan OMR",
-        description: "Imbas dan semak jawapan objektif menggunakan aliran kerja digital.",
-        icon: ScanLine,
-    },
-    {
-        title: "Laporan Akademik",
-        description: "Jana slip keputusan dan ringkasan prestasi pelajar.",
-        icon: BookOpenCheck,
-    },
+	{
+		title: "Pemarkahan Berstruktur",
+		desc:
+			"Urus markah objektif, subjektif, dan komponen peperiksaan dalam satu sistem.",
+	},
+	{
+		title: "Sokongan OMR Digital",
+		desc: "Imbas dan semak jawapan objektif menggunakan aliran kerja digital.",
+	},
+	{
+		title: "Laporan Akademik",
+		desc: "Jana slip keputusan dan ringkasan prestasi pelajar secara automatik.",
+	},
 ];
 
 export default function LoginPage() {
-    return (
-        <main className="min-h-svh bg-background">
-            <div className="mx-auto flex min-h-svh w-full max-w-7xl flex-col px-4 py-4 sm:px-6 lg:px-8">
-                <header className="animate-app-fade flex items-center justify-between gap-4">
-                    <Link href="/" className="flex min-w-0 items-center gap-3">
-                        <div className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-primary/20 bg-card shadow-sm">
-                            <Image
-                                src="/img/smkp-logo.png"
-                                alt="SMK Penanti"
-                                width={28}
-                                height={28}
-                                priority
-                            />
-                        </div>
-                        <div className="min-w-0">
-                            <p className="truncate text-sm font-semibold text-foreground">
-                                STG SMK Penanti
-                            </p>
-                            <p className="truncate text-xs text-muted-foreground">
-                                Sistem Pemarkahan dan Laporan Akademik
-                            </p>
-                        </div>
-                    </Link>
-                    <ModeToggle />
-                </header>
+	return (
+		<main className="min-h-svh bg-background login-grid-bg">
+			<div className="grid min-h-svh lg:grid-cols-2">
+				{/* LEFT PANEL — Hero content — desktop only */}
+				<div className="hidden lg:flex flex-col justify-between px-8 py-8 lg:px-12 xl:px-16 2xl:px-24">
+					<header className="animate-app-fade flex items-center justify-between gap-3">
+						<Link href="/" className="flex items-center gap-3">
+							<Image
+								src="/img/smkp-logo.png"
+								alt="SMK Penanti"
+								width={32}
+								height={32}
+								priority
+							/>
+							<span className="text-xs font-semibold tracking-[0.15em] uppercase text-muted-foreground">
+								STG SMK Penanti
+							</span>
+						</Link>
+						<div className="hidden lg:block">
+							<ModeToggle />
+						</div>
+					</header>
 
-                <section className="grid flex-1 items-center gap-8 py-8 lg:grid-cols-[1.05fr_0.95fr] lg:gap-12 lg:py-10">
-                    <div className="hidden min-w-0 lg:block">
-                        <div className="max-w-2xl space-y-8">
-                            <div className="animate-app-enter space-y-5">
-                                <div className="inline-flex items-center gap-2 rounded-full border border-primary/20 bg-card px-3 py-1.5 text-sm font-medium text-primary shadow-sm">
-                                    <ShieldCheck className="h-4 w-4" />
-                                    Portal Akademik Sekolah
-                                </div>
-                                <div className="space-y-4">
-                                    <h1 className="max-w-xl text-4xl font-bold leading-tight tracking-normal text-foreground">
-                                        Log masuk ke sistem pemarkahan SMK Penanti.
-                                    </h1>
-                                    <p className="max-w-xl text-base leading-7 text-muted-foreground">
-                                        Satu ruang kerja untuk guru, pentadbir, pelajar,
-                                        panitia subjek, dan pengetua mengurus data akademik
-                                        dengan lebih tersusun.
-                                    </p>
-                                </div>
-                            </div>
+					<div className="space-y-10 animate-app-enter text-center">
+						<div className="space-y-5">
+							<p className="text-xs font-semibold tracking-[0.25em] uppercase text-primary">
+								Portal Akademik Sekolah
+							</p>
+							<h1 className="!text-[60px] font-black leading-[1.05] tracking-tight text-foreground xl:!text-[72px]">
+								Sistem
+								<br />
+								Pemarkahan
+								<br />
+								<em className="italic text-primary" style={{ fontSize: "inherit" }}>
+									Akademik.
+								</em>
+							</h1>
+							<p className="mx-auto max-w-sm text-base leading-7 text-muted-foreground">
+								Satu ruang kerja untuk guru, pentadbir, pelajar, panitia, dan pengetua
+								mengurus data akademik dengan lebih tersusun.
+							</p>
+						</div>
 
-                            <div className="grid gap-3">
-                                {portalFeatures.map((feature, index) => {
-                                    const Icon = feature.icon;
+						<div className="mx-auto max-w-md divide-y divide-border/40">
+							{portalFeatures.map((feature, i) => (
+								<div
+									key={feature.title}
+									className={`flex items-center justify-center gap-6 py-4 animate-app-enter ${
+										i === 0
+											? "animate-delay-1"
+											: i === 1
+												? "animate-delay-2"
+												: "animate-delay-3"
+									}`}
+								>
+									<span className="min-w-[1.5rem] pt-0.5 text-xs font-bold tabular-nums text-primary/60">
+										0{i + 1}
+									</span>
+									<div className="space-y-0.5 text-left">
+										<p className="font-semibold text-foreground">{feature.title}</p>
+										<p className="text-sm leading-5 text-muted-foreground">
+											{feature.desc}
+										</p>
+									</div>
+								</div>
+							))}
+						</div>
+					</div>
 
-                                    return (
-                                        <Card
-                                            key={feature.title}
-                                            className={`animate-app-enter rounded-lg border-border/70 bg-card/80 py-0 shadow-sm backdrop-blur ${
-                                                index === 1
-                                                    ? "animate-delay-1"
-                                                    : index === 2
-                                                      ? "animate-delay-2"
-                                                      : ""
-                                            }`}
-                                        >
-                                            <CardContent className="flex items-start gap-4 p-4">
-                                                <div className="flex size-11 shrink-0 items-center justify-center rounded-lg border border-primary/15 bg-primary/10 text-primary">
-                                                    <Icon className="h-5 w-5" />
-                                                </div>
-                                                <div className="min-w-0 space-y-1">
-                                                    <h2 className="font-semibold text-foreground">
-                                                        {feature.title}
-                                                    </h2>
-                                                    <p className="text-sm leading-6 text-muted-foreground">
-                                                        {feature.description}
-                                                    </p>
-                                                </div>
-                                            </CardContent>
-                                        </Card>
-                                    );
-                                })}
-                            </div>
+					<footer className="animate-app-fade flex justify-end items-center gap-2 text-xs text-muted-foreground">
+						<GraduationCap className="h-3.5 w-3.5" />
+						<span>Kubang Semang, Pulau Pinang</span>
+					</footer>
+				</div>
 
-                            <div className="animate-app-enter animate-delay-3 grid max-w-xl grid-cols-3 gap-3">
-                                <div className="rounded-lg border border-border/70 bg-card/70 p-4 shadow-sm">
-                                    <p className="text-2xl font-bold text-primary">3</p>
-                                    <p className="mt-1 text-xs text-muted-foreground">
-                                        Peranan utama
-                                    </p>
-                                </div>
-                                <div className="rounded-lg border border-border/70 bg-card/70 p-4 shadow-sm">
-                                    <p className="text-2xl font-bold text-primary">OMR</p>
-                                    <p className="mt-1 text-xs text-muted-foreground">
-                                        Semakan objektif
-                                    </p>
-                                </div>
-                                <div className="rounded-lg border border-border/70 bg-card/70 p-4 shadow-sm">
-                                    <p className="text-2xl font-bold text-primary">PDF</p>
-                                    <p className="mt-1 text-xs text-muted-foreground">
-                                        Slip keputusan
-                                    </p>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
+				{/* RIGHT PANEL — Login card */}
+				<div className="flex min-h-svh flex-col items-center justify-center bg-card px-5 py-10 sm:px-8 lg:col-start-2">
+					{/* Mobile header */}
+					<div className="mb-8 flex w-full max-w-sm items-center justify-between lg:hidden">
+						<Link href="/" className="flex items-center gap-2.5">
+							<Image
+								src="/img/smkp-logo.png"
+								alt="SMK Penanti"
+								width={28}
+								height={28}
+								priority
+							/>
+							<span className="text-sm font-semibold">STG SMK Penanti</span>
+						</Link>
+						<ModeToggle />
+					</div>
 
-                    <div className="flex min-w-0 justify-center lg:justify-end">
-                        <Card className="animate-app-enter animate-delay-1 w-full max-w-md rounded-lg border-border/80 bg-card/95 shadow-xl backdrop-blur">
-                            <CardHeader className="space-y-5 text-center">
-                                <div className="mx-auto flex size-16 items-center justify-center rounded-2xl border border-primary/20 bg-primary/10 shadow-sm">
-                                    <Image
-                                        src="/img/smkp-logo.png"
-                                        alt="SMK Penanti"
-                                        width={46}
-                                        height={46}
-                                        priority
-                                    />
-                                </div>
-                                <div className="space-y-2">
-                                    <CardTitle className="text-2xl font-bold tracking-normal">
-                                        Log Masuk
-                                    </CardTitle>
-                                    <CardDescription className="mx-auto max-w-sm">
-                                        Pilih peranan anda dan masukkan kelayakan untuk
-                                        mengakses sistem.
-                                    </CardDescription>
-                                </div>
-                            </CardHeader>
-                            <CardContent>
-                                <LoginForm />
-                            </CardContent>
-                        </Card>
-                    </div>
-                </section>
+					<div className="w-full max-w-[360px] space-y-8 animate-app-enter animate-delay-1">
+						<div className="flex items-center justify-center">
+							<div className="hidden items-center gap-2.5 lg:flex">
+								<Image
+									src="/img/smkp-logo.png"
+									alt="SMK Penanti"
+									width={80}
+									height={80}
+									priority
+								/>
+							</div>
+						</div>
 
-                <footer className="animate-app-fade flex flex-col items-center justify-between gap-2 border-t border-border/60 py-4 text-xs text-muted-foreground sm:flex-row">
-                    <div className="flex items-center gap-2">
-                        <GraduationCap className="h-4 w-4" />
-                        <span>SMK Penanti, Kubang Semang, Pulau Pinang</span>
-                    </div>
-                    <span>Sistem akademik dalaman sekolah</span>
-                </footer>
-            </div>
-        </main>
-    );
+						<div className="space-y-1.5 text-center">
+							<h2 className="!text-[32px] font-black text-foreground">Log Masuk</h2>
+							<p className="text-sm text-muted-foreground">
+								Pilih jawatan dan masukkan kelayakan anda.
+							</p>
+						</div>
+
+						<LoginForm />
+					</div>
+
+					<p className="mt-10 text-center text-xs text-muted-foreground">
+						Sistem akademik dalaman &mdash; SMK Penanti
+					</p>
+				</div>
+			</div>
+		</main>
+	);
 }

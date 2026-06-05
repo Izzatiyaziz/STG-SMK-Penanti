@@ -90,16 +90,26 @@ export async function GET(req: Request) {
             });
         }
 
-        const { data: students, error } = await supabase
+        const search = String(searchParams.get("search") ?? "").trim();
+        const page = Math.max(1, parseInt(searchParams.get("page") ?? "1", 10));
+        const pageSize = Math.min(500, Math.max(1, parseInt(searchParams.get("page_size") ?? "100", 10)));
+        const from = (page - 1) * pageSize;
+        const to = from + pageSize - 1;
+
+        let query = supabase
             .from("stg_students")
-            .select("student_id, fullname, ic_number, class_id, status, created_at, enrollment_date, level")
-            .order("fullname", { ascending: true });
+            .select("student_id, fullname, ic_number, class_id, status, created_at, enrollment_date, level", { count: "exact" })
+            .order("fullname", { ascending: true })
+            .range(from, to);
+
+        if (search) {
+            query = query.or(`fullname.ilike.%${search}%,ic_number.ilike.%${search}%`);
+        }
+
+        const { data: students, error, count } = await query;
 
         if (error) {
-            return NextResponse.json(
-                { success: true, data: [] },
-                { status: 200 }
-            );
+            return NextResponse.json({ success: true, data: [], count: 0 });
         }
 
         const classIds = Array.from(
@@ -132,7 +142,10 @@ export async function GET(req: Request) {
         return NextResponse.json({
             success: true,
             data: formatted,
-            count: formatted.length,
+            count: count ?? formatted.length,
+            page,
+            page_size: pageSize,
+            total_pages: Math.ceil((count ?? formatted.length) / pageSize),
         });
     } catch (err: any) {
         console.error("GET STUDENTS ERROR:", err);

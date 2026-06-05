@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -342,20 +342,16 @@ export default function MyClassPage() {
 
 	if (loading) {
 		return (
-			<div className="flex h-screen items-center justify-center bg-background">
-				<div className="text-center space-y-4">
-					<Loader2 className="w-10 h-10 animate-spin text-primary mx-auto" />
-					<p className="text-muted-foreground font-medium animate-pulse">
-						Memuatkan maklumat kelas...
-					</p>
-				</div>
+			<div className="flex items-center justify-center gap-3 py-20 text-muted-foreground">
+				<Loader2 className="h-5 w-5 animate-spin text-primary" />
+				<span className="text-sm">Memuatkan maklumat kelas...</span>
 			</div>
 		);
 	}
 
 	if (!classInfo) {
 		return (
-			<div className="min-h-screen flex items-center justify-center p-6">
+			<div className="flex flex-col gap-8 p-6 md:p-8">
 				<Card className="max-w-md w-full border-dashed border-2">
 					<CardContent className="pt-10 pb-10 text-center space-y-4">
 						<div className="bg-muted w-16 h-16 rounded-full flex items-center justify-center mx-auto text-muted-foreground">
@@ -372,37 +368,19 @@ export default function MyClassPage() {
 	}
 
 	return (
-		<div className="min-h-screen bg-background p-4 md:p-6">
-			<div className="max-w-7xl mx-auto space-y-8">
-				<div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
-					<div className="space-y-3">
-						<div className="flex items-center gap-4">
-							<div className="p-3 rounded-2xl bg-gradient-to-br from-primary/10 to-primary/5 border border-primary/20 shadow-sm">
-								<Users className="w-7 h-7 text-primary" />
-							</div>
-							<div>
-								<h1 className="text-xl font-bold text-foreground">
-									Pengurusan Pelajar Kelas
-								</h1>
-								<p className="text-muted-foreground font-medium mt-1">
-									Tingkatan {classInfo.grade} | Guru Kelas:{" "}
-									<span className="text-primary font-bold">
-										{classInfo.name}
-									</span>
-								</p>
-							</div>
-						</div>
-						<div className="flex items-center gap-3 text-sm text-muted-foreground">
-							<div className="flex items-center gap-1">
-								<Clock className="w-3.5 h-3.5" />
-								<span>
-									Kemas kini: <LastUpdatedTime />
-								</span>
-							</div>
-						</div>
-					</div>
+		<div className="flex flex-col gap-8 p-6 md:p-8">
+			<div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between border-b border-border/40 pb-6">
+				<div className="flex flex-col gap-1">
+					<p className="text-xs font-semibold tracking-[0.2em] uppercase text-primary">Guru Kelas</p>
+					<h1 className="!text-[36px] font-black leading-tight text-foreground">Pengurusan Pelajar</h1>
+					<p className="mt-1 text-sm text-muted-foreground">
+						Tingkatan {classInfo.grade} · Kelas{" "}
+						<span className="font-semibold text-foreground">{classInfo.name}</span>
+						{" "}· Kemas kini: <LastUpdatedTime />
+					</p>
+				</div>
 
-					<div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+				<div className="flex flex-col gap-3 sm:flex-row sm:items-center">
 						<Button
 							variant="outline"
 							onClick={handleRefresh}
@@ -583,8 +561,8 @@ export default function MyClassPage() {
 					</div>
 				</div>
 
-				<Card className="border-border bg-card shadow-lg overflow-hidden">
-					<CardHeader className="border-b border-border bg-gradient-to-r from-card to-card/80 px-6 py-5">
+				<Card className="border-border bg-card shadow-sm overflow-hidden">
+					<CardHeader className="border-b border-border px-6 py-5">
 						<div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
 							<div>
 								<CardTitle className="text-xl font-bold flex items-center gap-2">
@@ -690,7 +668,6 @@ export default function MyClassPage() {
 						</div>
 					</CardContent>
 				</Card>
-			</div>
 
 			<AlertDialog
 				open={removeOpen}

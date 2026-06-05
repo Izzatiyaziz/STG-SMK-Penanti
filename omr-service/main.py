@@ -11,7 +11,7 @@ import cv2
 import numpy as np
 from fastapi import FastAPI, HTTPException, UploadFile, File, Form
 from fastapi.responses import HTMLResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 try:
     from dotenv import load_dotenv
@@ -41,8 +41,8 @@ jamai_client = (
 
 
 class BubblePoint(BaseModel):
-    x: int
-    y: int
+    x: int = Field(ge=0)
+    y: int = Field(ge=0)
     r: int = Field(default=10, ge=3, le=40)
 
 
@@ -71,6 +71,17 @@ class OMRGradeRequest(BaseModel):
     min_mark_threshold: float = Field(default=0.30, ge=0.05, le=0.95)
     ambiguity_gap: float = Field(default=0.06, ge=0.01, le=0.95)
     search_radius: int = Field(default=6, ge=0, le=40)
+
+    @model_validator(mode="after")
+    def check_coords_within_bounds(self) -> "OMRGradeRequest":
+        for q_id, q in self.template.items():
+            for option, pt in [("A", q.A), ("B", q.B), ("C", q.C), ("D", q.D)]:
+                if pt.x >= self.template_width or pt.y >= self.template_height:
+                    raise ValueError(
+                        f"Q{q_id} option {option} coords ({pt.x},{pt.y}) exceed "
+                        f"template size {self.template_width}x{self.template_height}"
+                    )
+        return self
 
 
 class WarpRequest(BaseModel):
@@ -499,6 +510,9 @@ def _apply_answer_region_mask(gray: np.ndarray, region: AnswerRegion | None) -> 
     return masked
 
 
+_DEBUG_FILES = ["warped.png", "template-overlay.png"]
+
+
 def _write_debug_images(
     warped: np.ndarray,
     template: dict[str, QuestionTemplate],
@@ -528,6 +542,19 @@ def _write_debug_images(
         cv2.imwrite(str(debug_dir / "template-overlay.png"), overlay)
     except Exception as exc:
         print(f"Failed to write OMR debug images: {exc}")
+
+
+def _cleanup_debug_images() -> None:
+    if os.getenv("OMR_DEBUG", "").strip() in {"1", "true", "TRUE", "yes", "YES"}:
+        return
+    try:
+        debug_dir = Path(__file__).parent / "debug"
+        for name in _DEBUG_FILES:
+            p = debug_dir / name
+            if p.exists():
+                p.unlink(missing_ok=True)
+    except Exception:
+        pass
 
 
 def _remove_shadow(gray: np.ndarray) -> np.ndarray:
@@ -916,6 +943,7 @@ def grade(req: OMRGradeRequest) -> Any:
         )
 
     score_percent = float(round((correct / total) * 100, 2)) if total else 0.0
+    _cleanup_debug_images()
     return OMRGradeResponse(
         total_questions=total,
         correct=correct,

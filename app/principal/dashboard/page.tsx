@@ -183,38 +183,31 @@ export default function PrincipalDashboardPage() {
 		.slice(0, 3);
 
 	return (
-		<div className="min-h-screen bg-background p-4 md:p-6">
-			<div className="mx-auto max-w-7xl space-y-8">
-				<div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-					<div className="space-y-3">
-						<div className="flex items-center gap-4">
-							<div className="rounded-2xl border border-primary/20 bg-primary/10 p-3 shadow-sm">
-								<BarChart3 className="h-7 w-7 text-primary" />
-							</div>
-							<div>
-								<h1 className="text-xl font-bold text-foreground">Selamat Datang, Pengetua Sekolah</h1>
-								<p className="mt-1 font-medium text-muted-foreground">
-									Ringkasan statistik dan log aktiviti sistem terkini
-								</p>
-							</div>
-						</div>
-						<div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
-							<div className="flex items-center gap-1">
-								<Clock className="h-3.5 w-3.5" />
-								<span>Kemas kini: <LastUpdatedTime /></span>
-							</div>
-						</div>
+		<div className="flex flex-col gap-8 p-6 md:p-8">
+			<div className="flex flex-col gap-1 border-b border-border/40 pb-6">
+				<p className="text-xs font-semibold tracking-[0.2em] uppercase text-primary">
+					Pengetua
+				</p>
+				<div className="flex items-end justify-between">
+					<div>
+						<h1 className="!text-[36px] font-black leading-tight text-foreground">
+							Papan Pemuka
+						</h1>
+						<p className="mt-1 text-sm text-muted-foreground">
+							Kemas kini: <LastUpdatedTime />
+						</p>
 					</div>
 					<Button
 						variant="outline"
 						onClick={fetchDashboard}
 						disabled={loading}
-						className="h-10 rounded-lg border-border bg-background shadow-xs hover:bg-accent hover:text-accent-foreground"
+						className="mb-1 shadow-xs"
 					>
 						<RefreshCw className={`mr-2 h-4 w-4 ${loading ? "animate-spin" : ""}`} />
 						Muat Semula
 					</Button>
 				</div>
+			</div>
 
 				<div className="grid grid-cols-1 gap-5 md:grid-cols-3">
 					<SummaryCard
@@ -388,7 +381,6 @@ export default function PrincipalDashboardPage() {
 						</ResponsiveContainer>
 					</ChartCard>
 					<TopClassesTable rows={topClassRows} />
-				</div>
 			</div>
 		</div>
 	);

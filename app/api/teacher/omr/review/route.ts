@@ -6,6 +6,7 @@ import {
   getGradeTemplateForClass,
   getPrimaryOmrComponent,
 } from "@/lib/marking-template";
+import { gradeFromTotal } from "@/lib/grade-utils";
 
 export const runtime = "nodejs";
 
@@ -23,13 +24,6 @@ function normalizeOption(v: unknown) {
   return ["A", "B", "C", "D"].includes(u) ? u : "";
 }
 
-function gradeFromTotal(total: number) {
-  if (total >= 80) return "A";
-  if (total >= 65) return "B";
-  if (total >= 50) return "C";
-  if (total >= 40) return "D";
-  return "E";
-}
 
 export async function PATCH(req: Request) {
   try {
@@ -175,6 +169,13 @@ export async function PATCH(req: Request) {
       .eq("student_id", student_id)
       .eq("subject_id", subject_id)
       .eq("exam_id", exam_id);
+
+    // Audit trail: log OMR review event (fire-and-forget)
+    supabaseAdmin.from("stg_sessions").insert({
+      user_id: guard.session.user_id,
+      role: "teacher",
+      action: `Semak OMR: Pelajar ${student_id} | Subject: ${subject_id} | Exam: ${exam_id} | ${overrides.length} soalan`,
+    }).then(() => {}).catch(() => {});
 
     return NextResponse.json({
       success: true,

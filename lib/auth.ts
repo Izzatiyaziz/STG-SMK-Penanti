@@ -24,22 +24,9 @@ type ApiGuard =
     | { response: NextResponse };
 
 function getSessionSecret() {
-    const secret = process.env.STG_SESSION_SECRET;
-
-    if (!secret && process.env.NODE_ENV === "production") {
-        throw new Error("Missing STG_SESSION_SECRET");
-    }
-
-    const developmentSecret =
-        secret ||
-        process.env.EMAIL_PASS ||
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-    if (!developmentSecret) {
-        throw new Error("Missing STG_SESSION_SECRET");
-    }
-
-    return developmentSecret;
+    const secret = process.env.STG_SESSION_SECRET || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    if (!secret) throw new Error("Missing STG_SESSION_SECRET");
+    return secret;
 }
 
 function base64UrlEncode(value: string) {

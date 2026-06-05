@@ -6,6 +6,7 @@ import {
     getGradeTemplateForClass,
     getPrimaryOmrComponent,
 } from "@/lib/marking-template";
+import { gradeFromTotal } from "@/lib/grade-utils";
 
 export const runtime = "nodejs";
 
@@ -30,7 +31,6 @@ type OMRServiceResultRow = {
     ratios?: unknown;
 };
 type SubjectiveRow = { subjective_id?: unknown; subjective_mark?: unknown } | null;
-type ExistingResultRow = { result_id?: unknown } | null;
 
 function toId(v: unknown) {
     return typeof v === "string" ? v.trim() : v == null ? "" : String(v).trim();
@@ -46,13 +46,6 @@ function normalizeOption(v: unknown) {
     return ["A", "B", "C", "D"].includes(upper) ? upper : "";
 }
 
-function gradeFromTotal(total: number) {
-    if (total >= 80) return "A";
-    if (total >= 65) return "B";
-    if (total >= 50) return "C";
-    if (total >= 40) return "D";
-    return "E";
-}
 
 export async function POST(req: Request) {
     try {
@@ -327,49 +320,25 @@ export async function POST(req: Request) {
                     const total = computeMarkSummary(templateInfo.template, marksByKey).percentage;
                     const grade = gradeFromTotal(total);
 
-                    const { data: existingResult, error: existingResultErr } = await supabaseAdmin
+                    const { error: upsertResultErr } = await supabaseAdmin
                         .from("stg_results")
-                        .select("result_id")
-                        .eq("student_id", student_id)
-                        .eq("subject_id", subject_id)
-                        .eq("exam_id", exam_id)
-                        .maybeSingle();
-
-                    if (existingResultErr) {
-                        console.warn("Failed to lookup existing result while saving OMR result:", existingResultErr.message);
-                        resultWarning = "OMR scan saved, but failed to sync stg_results.";
-                    } else if ((existingResult as ExistingResultRow)?.result_id) {
-                        const { error: updateResultErr } = await supabaseAdmin
-                            .from("stg_results")
-                            .update({
+                        .upsert(
+                            {
+                                student_id,
+                                subject_id,
+                                exam_id,
                                 omr_scan_id,
                                 subjective_id,
                                 total,
                                 grade,
                                 status: "pending",
-                            })
-                            .eq("result_id", (existingResult as ExistingResultRow)?.result_id);
+                            },
+                            { onConflict: "student_id,subject_id,exam_id" }
+                        );
 
-                        if (updateResultErr) {
-                            console.warn("Failed to update result after OMR save:", updateResultErr.message);
-                            resultWarning = "OMR scan saved, but result table update failed.";
-                        }
-                    } else {
-                        const { error: insertResultErr } = await supabaseAdmin.from("stg_results").insert({
-                            student_id,
-                            subject_id,
-                            exam_id,
-                            omr_scan_id,
-                            subjective_id,
-                            total,
-                            grade,
-                            status: "pending",
-                        });
-
-                        if (insertResultErr) {
-                            console.warn("Failed to insert result after OMR save:", insertResultErr.message);
-                            resultWarning = "OMR scan saved, but result table insert failed.";
-                        }
+                    if (upsertResultErr) {
+                        console.warn("Failed to upsert result after OMR save:", upsertResultErr.message);
+                        resultWarning = "OMR scan saved, but result table sync failed.";
                     }
                 }
             }

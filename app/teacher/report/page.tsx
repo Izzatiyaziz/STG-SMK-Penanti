@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Image from "next/image";
@@ -961,15 +961,12 @@ export function TeacherReportContent({
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-background to-muted/20 p-4 md:p-6">
-      <div className="mx-auto max-w-7xl space-y-6">
-       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-          <div className="flex items-center gap-4">
-            <div className="rounded-2xl border border-primary/20 bg-primary/10 p-3 shadow-sm">
-              <BarChart3 className="h-7 w-7 text-primary" />
-            </div>
-            <div>
-              <h1 className="text-2xl font-bold tracking-tight text-foreground">
+    <div className="flex flex-col gap-8 p-6 md:p-8">
+
+      <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between border-b border-border/40 pb-6">
+          <div className="flex flex-col gap-1">
+            <p className="text-xs font-semibold tracking-[0.2em] uppercase text-primary">Guru</p>
+              <h1 className="!text-[36px] font-black leading-tight text-foreground">
                 {activeReportPage === "analitik"
                   ? "Laporan Kelas"
                   : viewMode === "class_teacher"
@@ -983,7 +980,6 @@ export function TeacherReportContent({
                     ? "Senarai pelajar kelas untuk semak markah diluluskan, isi ulasan, dan jana kad laporan."
                     : "Senarai markah pelajar berdasarkan kelas dan subjek yang anda ajar."}
               </p>
-            </div>
           </div>
 
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
@@ -1056,7 +1052,7 @@ export function TeacherReportContent({
         {/* Ringkasan cards untuk subject_teacher dibuang (diminta) */}
 
         {viewMode === "class_teacher" ? (
-          <Card className="overflow-hidden rounded-xl border-border bg-card shadow-md">
+          <Card className="overflow-hidden rounded-xl border-border bg-card shadow-sm">
             <CardContent className="grid grid-cols-1 gap-4 p-6 md:grid-cols-[auto_1fr] md:items-end">
               <GraduationCap className="mb-3 h-5 w-5 text-primary md:mb-3" />
               <div className="space-y-2">
@@ -1080,7 +1076,7 @@ export function TeacherReportContent({
 
         {viewMode === "class_teacher" && activeReportPage === "analitik" ? (
           <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.7fr_1fr]">
-            <Card className="overflow-hidden rounded-lg border-border shadow-md">
+            <Card className="overflow-hidden rounded-lg border-border shadow-sm">
               <CardHeader>
                 <CardTitle>Kedudukan Purata Pelajar</CardTitle>
                 <CardDescription>
@@ -1109,7 +1105,7 @@ export function TeacherReportContent({
               </CardContent>
             </Card>
 
-            <Card className="overflow-hidden rounded-lg border-border shadow-md">
+            <Card className="overflow-hidden rounded-lg border-border shadow-sm">
               <CardHeader>
                 <CardTitle>Taburan Gred Subjek</CardTitle>
                 <CardDescription>
@@ -1162,7 +1158,7 @@ export function TeacherReportContent({
           </div>
         ) : viewMode === "subject_teacher" ? (
           <div className="space-y-8">
-            <Card className="overflow-hidden rounded-xl border-border bg-card shadow-md">
+            <Card className="overflow-hidden rounded-xl border-border bg-card shadow-sm">
               <CardContent className="grid grid-cols-1 gap-4 p-6 md:grid-cols-2 xl:grid-cols-4">
                 <div className="space-y-2">
                   <div className="text-sm font-medium text-muted-foreground">Tingkatan</div>
@@ -1253,8 +1249,8 @@ export function TeacherReportContent({
             {(activeReportPage === "laporan" || viewMode === "subject_teacher") ? (
               <>
             <div className="grid grid-cols-1 gap-6 xl:grid-cols-[0.9fr_1.35fr]">
-              <Card className="overflow-hidden rounded-xl border-border bg-card shadow-md">
-                <CardHeader className="border-b border-border bg-gradient-to-r from-card to-card/80 px-6 py-5">
+              <Card className="overflow-hidden rounded-xl border-border bg-card shadow-sm">
+                <CardHeader className="border-b border-border px-6 py-5">
                   <CardTitle className="flex items-center gap-2">
                     <ChartPie className="h-5 w-5 text-primary" />
                     Analisis Gred
@@ -1307,8 +1303,8 @@ export function TeacherReportContent({
                 </CardContent>
               </Card>
 
-              <Card className="overflow-hidden rounded-xl border-border bg-card shadow-md">
-                <CardHeader className="border-b border-border bg-gradient-to-r from-card to-card/80 px-6 py-5">
+              <Card className="overflow-hidden rounded-xl border-border bg-card shadow-sm">
+                <CardHeader className="border-b border-border px-6 py-5">
                   <CardTitle className="flex items-center gap-2">
                     <BarChart3 className="h-5 w-5 text-primary" />
                     Prestasi Mengikut Kelas
@@ -1347,8 +1343,8 @@ export function TeacherReportContent({
             </div>
 
             <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-              <Card className="overflow-hidden rounded-xl border-border bg-card shadow-md">
-                <CardHeader className="border-b border-border bg-gradient-to-r from-card to-card/80 px-6 py-5">
+              <Card className="overflow-hidden rounded-xl border-border bg-card shadow-sm">
+                <CardHeader className="border-b border-border px-6 py-5">
                   <CardTitle className="flex items-center gap-2">
                     <Trophy className="h-5 w-5 text-primary" />
                     Senarai Pelajar Cemerlang
@@ -1386,8 +1382,8 @@ export function TeacherReportContent({
                 </CardContent>
               </Card>
 
-              <Card className="overflow-hidden rounded-xl border-border bg-card shadow-md">
-                <CardHeader className="border-b border-border bg-gradient-to-r from-card to-card/80 px-6 py-5">
+              <Card className="overflow-hidden rounded-xl border-border bg-card shadow-sm">
+                <CardHeader className="border-b border-border px-6 py-5">
                   <CardTitle className="flex items-center gap-2">
                     <TrendingDown className="h-5 w-5 text-primary" />
                     Senarai Pelajar Perlu Perhatian
@@ -1432,8 +1428,8 @@ export function TeacherReportContent({
 
         {viewMode === "class_teacher" && activeReportPage === "laporan" ? (
           <>
-        <Card className="border-border bg-card shadow-lg overflow-hidden">
-          <CardHeader className="border-b border-border bg-gradient-to-r from-card to-card/80 px-6 py-5">
+        <Card className="border-border bg-card shadow-sm overflow-hidden">
+          <CardHeader className="border-b border-border px-6 py-5">
             <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
               <div>
                 <CardTitle className="text-xl font-bold flex items-center gap-2">
@@ -1579,7 +1575,7 @@ export function TeacherReportContent({
             <div className="flex-1 overflow-auto px-4 pb-2">
               <div className="space-y-4">
 
-                <Card className="overflow-hidden rounded-xl border-border bg-card shadow-md">
+                <Card className="overflow-hidden rounded-xl border-border bg-card shadow-sm">
                   <CardHeader className="border-b border-border px-6 py-5">
                     <CardTitle className="flex items-center gap-2 text-base font-bold">
                       <FileSpreadsheet className="h-5 w-5 text-primary" />
@@ -1620,7 +1616,7 @@ export function TeacherReportContent({
                   </CardContent>
                 </Card>
 
-                <Card className="overflow-hidden rounded-xl border-border bg-card shadow-md">
+                <Card className="overflow-hidden rounded-xl border-border bg-card shadow-sm">
                   <CardHeader className="border-b border-border px-6 py-5">
                     <CardTitle className="flex items-center gap-2 text-base font-bold">
                       <MessageSquareText className="h-5 w-5 text-primary" />
@@ -1742,7 +1738,7 @@ export function TeacherReportContent({
                   </CardContent>
                 </Card>
 
-                <Card className="overflow-hidden rounded-xl border-border bg-card shadow-md">
+                <Card className="overflow-hidden rounded-xl border-border bg-card shadow-sm">
                   <CardContent className="p-0">
                     <div className="overflow-x-auto">
                       <Table>
@@ -1821,7 +1817,6 @@ export function TeacherReportContent({
         </Dialog>
           </>
         ) : null}
-      </div>
     </div>
   );
 }
