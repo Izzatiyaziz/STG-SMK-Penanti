@@ -73,6 +73,15 @@ class OMRGradeRequest(BaseModel):
     search_radius: int = Field(default=8, ge=0, le=40)
 
 
+class WarpRequest(BaseModel):
+    image_base64: str
+
+
+class WarpResponse(BaseModel):
+    warped_image_base64: str
+    corners_found: bool
+
+
 class ReportCommentRequest(BaseModel):
     prompt_input: str = Field(min_length=2)
 
@@ -521,6 +530,26 @@ def _write_debug_images(
         print(f"Failed to write OMR debug images: {exc}")
 
 
+def _remove_shadow(gray: np.ndarray) -> np.ndarray:
+    """
+    Normalize uneven lighting and shadows using morphological background estimation.
+
+    Dilating with a large kernel fills in the dark filled bubbles, leaving a smooth
+    map of the paper's background illumination. Dividing each pixel by that map
+    equalizes shadow gradients across the sheet before bubble fill measurement.
+    """
+    ksize = max(41, (min(gray.shape) // 20) | 1)  # odd; ~5 % of smallest dimension
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (ksize, ksize))
+    background = cv2.morphologyEx(gray, cv2.MORPH_DILATE, kernel)
+    norm = np.clip(
+        (gray.astype(np.float32) / (background.astype(np.float32) + 1.0)) * 255.0,
+        0,
+        255,
+    ).astype(np.uint8)
+    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+    return clahe.apply(norm)
+
+
 def _normalize_option(value: str | None) -> str | None:
     if value is None:
         return None
@@ -729,6 +758,34 @@ async def grade_file(
     return grade(req)
 
 
+@app.post("/warp", response_model=WarpResponse)
+def warp(req: WarpRequest) -> Any:
+    image = _decode_base64_image(req.image_base64)
+    corners = _find_sheet_corners(image)
+
+    # Determine whether the corner finder actually found a real quad or fell back
+    # to the full-frame fallback (which means no paper was detected).
+    h, w = image.shape[:2]
+    margin = int(min(h, w) * 0.01)
+    fallback_pts = {(margin, margin), (w - margin, margin), (w - margin, h - margin), (margin, h - margin)}
+    detected_pts = {
+        tuple(corners.top_left.astype(int).tolist()),
+        tuple(corners.top_right.astype(int).tolist()),
+        tuple(corners.bottom_right.astype(int).tolist()),
+        tuple(corners.bottom_left.astype(int).tolist()),
+    }
+    corners_found = detected_pts != fallback_pts
+
+    warped = _warp_sheet(image, corners, 955, 1280)
+
+    ok, buf = cv2.imencode(".jpg", warped, [cv2.IMWRITE_JPEG_QUALITY, 92])
+    if not ok:
+        raise HTTPException(status_code=500, detail="Failed to encode warped image")
+
+    warped_b64 = "data:image/jpeg;base64," + base64.b64encode(buf.tobytes()).decode("ascii")
+    return WarpResponse(warped_image_base64=warped_b64, corners_found=corners_found)
+
+
 @app.post("/grade", response_model=OMRGradeResponse)
 def grade(req: OMRGradeRequest) -> Any:
     image = _decode_base64_image(req.image_base64)
@@ -758,6 +815,7 @@ def grade(req: OMRGradeRequest) -> Any:
         )
     _write_debug_images(warped, req.template, req.answer_region)
     gray = cv2.cvtColor(warped, cv2.COLOR_BGR2GRAY)
+    gray = _remove_shadow(gray)
     gray = _apply_answer_region_mask(gray, req.answer_region)
 
     total = 0
