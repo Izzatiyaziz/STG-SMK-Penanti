@@ -431,11 +431,11 @@ export async function POST(req: Request) {
     if (resultsErr) throw resultsErr;
 
     // Audit trail: log mark submission event (fire-and-forget)
-    supabase.from("stg_sessions").insert({
+    void Promise.resolve(supabase.from("stg_sessions").insert({
       user_id: teacher_id,
       role: "teacher",
       action: `Kemaskini Markah: ${subject_id} | Exam: ${exam_id} | Kelas: ${class_id} | ${studentIds.length} pelajar`,
-    }).then(() => {}).catch(() => {});
+    })).catch(() => {});
 
     return NextResponse.json({ success: true });
   } catch (err: unknown) {

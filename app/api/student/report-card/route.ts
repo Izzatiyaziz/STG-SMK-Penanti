@@ -166,7 +166,6 @@ export async function GET(req: Request) {
                 .eq("status", "approved"),
         ]);
 
-        const classId = toId(reportCard.class_id);
         const { count: totalStudents } = classId
             ? await supabase
                   .from("stg_students")

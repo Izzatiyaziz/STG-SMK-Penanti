@@ -171,11 +171,11 @@ export async function PATCH(req: Request) {
       .eq("exam_id", exam_id);
 
     // Audit trail: log OMR review event (fire-and-forget)
-    supabaseAdmin.from("stg_sessions").insert({
+    void Promise.resolve(supabaseAdmin.from("stg_sessions").insert({
       user_id: guard.session.user_id,
       role: "teacher",
       action: `Semak OMR: Pelajar ${student_id} | Subject: ${subject_id} | Exam: ${exam_id} | ${overrides.length} soalan`,
-    }).then(() => {}).catch(() => {});
+    })).catch(() => {});
 
     return NextResponse.json({
       success: true,

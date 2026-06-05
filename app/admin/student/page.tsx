@@ -500,7 +500,7 @@ export default function AdminStudentsPage() {
 					<Button
 						variant="outline"
 						size="sm"
-						onClick={fetchStudents}
+						onClick={() => fetchStudents()}
 						disabled={loading}
 					>
 						{loading ? (
@@ -898,7 +898,7 @@ export default function AdminStudentsPage() {
 							<Button
 								variant="ghost"
 								size="sm"
-								onClick={fetchStudents}
+								onClick={() => fetchStudents()}
 								disabled={loading}
 								className="font-semibold"
 							>

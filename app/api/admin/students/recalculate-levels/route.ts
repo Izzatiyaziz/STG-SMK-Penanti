@@ -38,11 +38,12 @@ export async function POST() {
         let updated = 0;
         const errors: string[] = [];
         for (const [lvl, ids] of Object.entries(byLevel)) {
-            const { error: uErr, count } = await supabase
+            const { data: updatedRows, error: uErr } = await supabase
                 .from("stg_students")
                 .update({ level: lvl })
                 .in("student_id", ids)
-                .select("student_id", { count: "exact", head: true });
+                .select("student_id");
+            const count = updatedRows?.length ?? 0;
 
             if (uErr) {
                 errors.push(`Level ${lvl}: ${uErr.message}`);
