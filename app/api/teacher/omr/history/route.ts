@@ -4,6 +4,18 @@ import supabaseAdmin from "@/lib/supabase-admin";
 
 export const runtime = "nodejs";
 
+type ScanRow = {
+  omr_scan_id: string;
+  objective_total_mark: number | null;
+  scan_date: string;
+  student_id: string;
+  subject_id: string;
+  exam_id: string;
+  stg_students: { name: string; identifier: string; class_id: string; stg_classes: { class_name: string; grade: number } };
+  stg_subjects: { subject_name: string };
+  stg_exams: { exam_name: string; year: string };
+};
+
 function toId(v: unknown) {
   return typeof v === "string" ? v.trim() : v == null ? "" : String(v).trim();
 }
@@ -47,21 +59,10 @@ export async function GET(req: Request) {
 
     if (exam_id) query = query.eq("exam_id", exam_id);
     if (subject_id) query = query.eq("subject_id", subject_id);
+    if (class_id) query = (query as typeof query).eq("stg_students.class_id", class_id);
 
     const { data: scans, error: scansErr } = await query;
     if (scansErr) return NextResponse.json({ message: scansErr.message }, { status: 500 });
-
-    type ScanRow = {
-      omr_scan_id: string;
-      objective_total_mark: number;
-      scan_date: string;
-      student_id: string;
-      subject_id: string;
-      exam_id: string;
-      stg_students: { name: string; identifier: string; class_id: string; stg_classes: { class_name: string; grade: number } };
-      stg_subjects: { subject_name: string };
-      stg_exams: { exam_name: string; year: string };
-    };
 
     const rows = (Array.isArray(scans) ? scans : []) as unknown as ScanRow[];
 
@@ -87,9 +88,9 @@ export async function GET(req: Request) {
         subject_id: String(row.subject_id),
         subject_name: String(row.stg_subjects?.subject_name ?? ""),
         exam_id: String(row.exam_id),
-        exam_name: `${row.stg_exams?.exam_name ?? ""} (${row.stg_exams?.year ?? ""})`,
+        exam_name: [row.stg_exams?.exam_name, row.stg_exams?.year].filter(Boolean).join(" "),
         scan_date: String(row.scan_date),
-        objective_total_mark: Number(row.objective_total_mark ?? 0),
+        objective_total_mark: row.objective_total_mark != null ? Number(row.objective_total_mark) : null,
       }));
 
     return NextResponse.json({ data });
