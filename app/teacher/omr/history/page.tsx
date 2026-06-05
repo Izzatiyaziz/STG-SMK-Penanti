@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { ArrowLeft, Eye, RotateCw, ClipboardList, Loader2 } from "lucide-react";
@@ -50,6 +50,8 @@ type Assignment = {
   grade: number | null;
 };
 
+const ALLOWED_ROLES = new Set(["subject teacher", "subject coordinator"]);
+
 export default function OMRHistoryPage() {
   const router = useRouter();
   const [teacherId, setTeacherId] = useState("");
@@ -69,7 +71,7 @@ export default function OMRHistoryPage() {
         userType?: string; role?: string;
       };
       const role = String(session.role ?? "").toLowerCase().trim();
-      if (session.userType !== "teacher" || !new Set(["subject teacher", "subject coordinator"]).has(role)) {
+      if (session.userType !== "teacher" || !ALLOWED_ROLES.has(role)) {
         toast.error("Anda tidak dibenarkan akses halaman ini");
         router.replace("/teacher/dashboard");
         return;
@@ -81,7 +83,7 @@ export default function OMRHistoryPage() {
   useEffect(() => {
     if (!teacherId) return;
     Promise.all([
-      fetch("/api/teacher/exams").then((r) => r.json()),
+      fetch("/api/teacher/exams").then((r) => r.json()).catch(() => ({ data: [] })),
       fetch(`/api/teacher/omr/assignments?teacher_id=${encodeURIComponent(teacherId)}&exam_id=all`)
         .then((r) => r.json())
         .catch(() => ({ data: [] })),
@@ -91,21 +93,25 @@ export default function OMRHistoryPage() {
     });
   }, [teacherId]);
 
+  const selectedAssignment = useMemo(
+    () => assignments.find((a) => a.id === filterAssignmentId),
+    [assignments, filterAssignmentId]
+  );
+
   useEffect(() => {
     if (!teacherId) return;
     setLoading(true);
     const params = new URLSearchParams();
-    const assignment = assignments.find((a) => a.id === filterAssignmentId);
     if (filterExamId !== "all") params.set("exam_id", filterExamId);
-    if (assignment?.class_id) params.set("class_id", assignment.class_id);
-    if (assignment?.subject_id) params.set("subject_id", assignment.subject_id);
+    if (selectedAssignment?.class_id) params.set("class_id", selectedAssignment.class_id);
+    if (selectedAssignment?.subject_id) params.set("subject_id", selectedAssignment.subject_id);
 
     fetch(`/api/teacher/omr/history?${params.toString()}`)
       .then((r) => r.json())
       .then((json) => setScans(Array.isArray(json?.data) ? json.data : []))
       .catch(() => { toast.error("Gagal memuatkan sejarah imbasan"); setScans([]); })
       .finally(() => setLoading(false));
-  }, [teacherId, filterExamId, filterAssignmentId, assignments]);
+  }, [teacherId, filterExamId, selectedAssignment]);
 
   function viewResult(scan: ScanRow) {
     const params = new URLSearchParams({
