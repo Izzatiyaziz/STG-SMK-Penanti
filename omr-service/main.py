@@ -68,9 +68,9 @@ class OMRGradeRequest(BaseModel):
     answer_region: AnswerRegion | None = None
     template: dict[str, QuestionTemplate]
     answer_key: dict[str, str]
-    min_mark_threshold: float = Field(default=0.32, ge=0.05, le=0.95)
-    ambiguity_gap: float = Field(default=0.08, ge=0.01, le=0.95)
-    search_radius: int = Field(default=8, ge=0, le=40)
+    min_mark_threshold: float = Field(default=0.30, ge=0.05, le=0.95)
+    ambiguity_gap: float = Field(default=0.06, ge=0.01, le=0.95)
+    search_radius: int = Field(default=12, ge=0, le=40)
 
 
 class WarpRequest(BaseModel):
@@ -701,13 +701,13 @@ def demo() -> str:
       <textarea name="template_json" placeholder='{"template_width":1400,"template_height":2000,"template":{...},"answer_key":{...}}'></textarea>
 
       <label>Min Mark Threshold</label>
-      <input type="number" name="min_mark_threshold" value="0.32" step="0.01" min="0.05" max="0.95" />
+      <input type="number" name="min_mark_threshold" value="0.30" step="0.01" min="0.05" max="0.95" />
 
       <label>Ambiguity Gap</label>
-      <input type="number" name="ambiguity_gap" value="0.08" step="0.01" min="0.01" max="0.95" />
+      <input type="number" name="ambiguity_gap" value="0.06" step="0.01" min="0.01" max="0.95" />
 
       <label>Search Radius</label>
-      <input type="number" name="search_radius" value="8" step="1" min="0" max="40" />
+      <input type="number" name="search_radius" value="12" step="1" min="0" max="40" />
 
       <button type="submit">Grade</button>
     </form>
