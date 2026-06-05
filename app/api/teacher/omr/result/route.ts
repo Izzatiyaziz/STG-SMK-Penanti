@@ -95,7 +95,8 @@ export async function GET(req: Request) {
       confidence: toNumber(answer.confidence),
     }));
     const correct = results.filter((answer) => answer.status === "correct").length;
-    const blank = results.filter((answer) => answer.status === "blank" || !answer.detected_option).length;
+    const ambiguous = results.filter((answer) => answer.status === "ambiguous").length;
+    const blank = results.filter((answer) => answer.status === "blank" || (!answer.detected_option && answer.status !== "ambiguous")).length;
     const wrong = results.filter((answer) => answer.status === "wrong").length;
     const totalQuestions = results.length;
     const { data: componentRow } = await supabaseAdmin
@@ -130,7 +131,7 @@ export async function GET(req: Request) {
       correct,
       wrong,
       blank,
-      ambiguous: 0,
+      ambiguous,
       score_percent: totalQuestions > 0 ? Math.round((correct / totalQuestions) * 10000) / 100 : 0,
       results,
     });

@@ -162,9 +162,9 @@ export async function POST(req: Request) {
                 answer_region,
                 template: filteredTemplate,
                 answer_key,
-                min_mark_threshold: body?.min_mark_threshold ?? 0.32,
-                ambiguity_gap: body?.ambiguity_gap ?? 0.08,
-                search_radius: body?.search_radius ?? 8,
+                min_mark_threshold: body?.min_mark_threshold ?? 0.30,
+                ambiguity_gap: body?.ambiguity_gap ?? 0.06,
+                search_radius: body?.search_radius ?? 6,
             }),
         });
 

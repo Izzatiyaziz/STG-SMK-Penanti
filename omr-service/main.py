@@ -70,7 +70,7 @@ class OMRGradeRequest(BaseModel):
     answer_key: dict[str, str]
     min_mark_threshold: float = Field(default=0.30, ge=0.05, le=0.95)
     ambiguity_gap: float = Field(default=0.06, ge=0.01, le=0.95)
-    search_radius: int = Field(default=12, ge=0, le=40)
+    search_radius: int = Field(default=6, ge=0, le=40)
 
 
 class WarpRequest(BaseModel):
@@ -550,6 +550,47 @@ def _remove_shadow(gray: np.ndarray) -> np.ndarray:
     return clahe.apply(norm)
 
 
+def _suppress_red_ink(bgr: np.ndarray) -> np.ndarray:
+    """
+    Set red-hued pixels (printed circle outlines on SPM answer sheets) to white
+    so they don't interfere with pencil-fill detection after binarization.
+
+    In HSV (OpenCV 0-180 hue scale), red ink wraps around 0/180.  Pencil graphite
+    is near-neutral (low saturation) so the saturation gate (S >= 50) keeps it.
+    A 3×3 dilation of the mask covers antialiased outline edges after JPEG
+    compression or JPEG re-encoding from the perspective warp.
+    """
+    hsv = cv2.cvtColor(bgr, cv2.COLOR_BGR2HSV)
+    mask_lo = cv2.inRange(hsv, np.array([0, 100, 80]), np.array([10, 255, 255]))
+    mask_hi = cv2.inRange(hsv, np.array([170, 100, 80]), np.array([180, 255, 255]))
+    red_mask = cv2.bitwise_or(mask_lo, mask_hi)
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
+    red_mask = cv2.dilate(red_mask, kernel, iterations=1)
+    out = bgr.copy()
+    out[red_mask > 0] = (255, 255, 255)
+    return out
+
+
+def _binarize_fills(gray: np.ndarray) -> np.ndarray:
+    """
+    After shadow removal (background ≈ white), adaptively binarize so any pencil
+    mark — light or heavy — becomes solid black (0) and paper stays white (255).
+
+    blockSize must be odd and large enough to span several bubble spacings so the
+    local mean is dominated by background, not by the bubble being thresholded.
+    At 955px wide with ~40px bubble pitch, 101px captures ~2.5 spacings → reliable
+    background estimate regardless of pencil pressure.
+    """
+    return cv2.adaptiveThreshold(
+        gray,
+        255,
+        cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+        cv2.THRESH_BINARY,   # paper → 255 (bright), marks → 0 (dark)
+        blockSize=101,
+        C=12,
+    )
+
+
 def _normalize_option(value: str | None) -> str | None:
     if value is None:
         return None
@@ -723,7 +764,7 @@ async def grade_file(
     template_json: str | None = Form(default=None),
     min_mark_threshold: float = Form(default=0.32),
     ambiguity_gap: float = Form(default=0.08),
-    search_radius: int = Form(default=8),
+    search_radius: int = Form(default=6),
 ) -> Any:
     binary = await image.read()
     # Validate early that the uploaded payload is actually an image OpenCV can decode.

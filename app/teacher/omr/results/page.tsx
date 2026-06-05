@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
-import { AlertTriangle, ArrowLeft, CheckCircle2, ClipboardList, Download, Printer, XCircle, Loader2 } from "lucide-react";
+import { AlertTriangle, ArrowLeft, CheckCircle2, ClipboardList, Download, Printer, XCircle, Loader2, HelpCircle, Save } from "lucide-react";
 import * as XLSX from "xlsx";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -28,10 +28,12 @@ type OMRResultRow = {
 };
 
 type OMRResultPayload = {
+  omr_scan_id?: string;
   total_questions?: number | string;
   correct?: number | string;
   wrong?: number | string;
   blank?: number | string;
+  ambiguous?: number | string;
   warning?: string;
   results?: OMRResultRow[];
 };
@@ -42,6 +44,9 @@ function toNumber(value: unknown) {
 }
 
 function getStatusMeta(status: string, detectedOption: string) {
+  if (status === "ambiguous") {
+    return { label: "Tidak Jelas", mark: 0, className: "border-amber-300 bg-amber-50 text-amber-800", icon: HelpCircle };
+  }
   if (!detectedOption || status === "blank") {
     return { label: "Kosong", mark: 0, className: "border-slate-200 bg-slate-100 text-slate-700", icon: AlertTriangle };
   }
@@ -59,11 +64,21 @@ function SummaryBadge({ label, value, className }: { label: string; value: numbe
   );
 }
 
+const OPTIONS = ["A", "B", "C", "D"] as const;
+
 export default function OMRResultsPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [resultRaw, setResultRaw] = useState<OMRResultPayload | null>(null);
   const [loading, setLoading] = useState(true);
+  const [overrides, setOverrides] = useState<Record<number, string>>({});
+  const [isSaving, setIsSaving] = useState(false);
+
+  // Context IDs needed for review API
+  const student_id = searchParams.get("student_id") ?? "";
+  const class_id = searchParams.get("class_id") ?? "";
+  const subject_id = searchParams.get("subject_id") ?? "";
+  const exam_id = searchParams.get("exam_id") ?? "";
 
   useEffect(() => {
     const raw = localStorage.getItem("stg_session");
@@ -77,11 +92,6 @@ export default function OMRResultsPage() {
         return;
       }
     } catch { router.replace("/login"); return; }
-
-    const student_id = searchParams.get("student_id");
-    const class_id = searchParams.get("class_id");
-    const subject_id = searchParams.get("subject_id");
-    const exam_id = searchParams.get("exam_id");
 
     if (student_id && class_id && subject_id && exam_id) {
       const params = new URLSearchParams({ student_id, class_id, subject_id, exam_id });
@@ -104,31 +114,96 @@ export default function OMRResultsPage() {
       setResultRaw(stored ? JSON.parse(stored) as OMRResultPayload : null);
       setLoading(false);
     }
-  }, [router, searchParams]);
+  }, [router, student_id, class_id, subject_id, exam_id]);
 
   const summary = useMemo(() => {
     const results = Array.isArray(resultRaw?.results) ? resultRaw!.results : [];
+    const ambiguousCount = results.filter((r) => String(r.status ?? "") === "ambiguous").length;
     const totalMarks = results.reduce((total, row) => {
+      const qno = toNumber(row.question_no);
       const status = String(row.status ?? "").toLowerCase();
-      const detected = String(row.detected_option ?? "").trim();
-      return total + getStatusMeta(status, detected).mark;
+      const detected = overrides[qno] ?? String(row.detected_option ?? "").trim();
+      // If question was ambiguous and now overridden, compute correct/wrong
+      const effectiveStatus =
+        status === "ambiguous" && overrides[qno]
+          ? (overrides[qno] === String(row.expected_option ?? "").trim().toUpperCase() ? "correct" : "wrong")
+          : status;
+      return total + getStatusMeta(effectiveStatus, detected).mark;
     }, 0);
     return {
       correct: toNumber(resultRaw?.correct),
       wrong: toNumber(resultRaw?.wrong),
       blank: toNumber(resultRaw?.blank),
+      ambiguousCount,
       totalMarks,
       totalQuestions: toNumber(resultRaw?.total_questions) || results.length,
       warning: typeof resultRaw?.warning === "string" ? resultRaw.warning : "",
       results,
+      omrScanId: resultRaw?.omr_scan_id ?? "",
     };
-  }, [resultRaw]);
+  }, [resultRaw, overrides]);
+
+  const pendingAmbiguous = summary.results.filter(
+    (r) => String(r.status ?? "") === "ambiguous" && !overrides[toNumber(r.question_no)]
+  ).length;
+
+  async function saveReview() {
+    if (!summary.omrScanId) {
+      toast.error("ID imbasan tidak dijumpai — sila semak semula dari halaman OMR");
+      return;
+    }
+    if (!student_id || !subject_id || !exam_id || !class_id) {
+      toast.error("Maklumat pelajar tidak lengkap");
+      return;
+    }
+    setIsSaving(true);
+    try {
+      const overrideList = Object.entries(overrides).map(([q, opt]) => ({
+        question_no: Number(q),
+        selected_option: opt,
+      }));
+      const res = await fetch("/api/teacher/omr/review", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          omr_scan_id: summary.omrScanId,
+          student_id,
+          subject_id,
+          exam_id,
+          class_id,
+          overrides: overrideList,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json?.success) {
+        toast.error(json?.message || "Gagal menyimpan semakan");
+        return;
+      }
+      toast.success("Semakan berjaya disimpan!");
+      // Refresh result from DB
+      const params = new URLSearchParams({ student_id, class_id, subject_id, exam_id });
+      const refreshed = await fetch(`/api/teacher/omr/result?${params.toString()}`).then((r) => r.json());
+      if (refreshed?.success) {
+        setResultRaw(refreshed as OMRResultPayload);
+        setOverrides({});
+      }
+    } catch {
+      toast.error("Gagal menghubungi server");
+    } finally {
+      setIsSaving(false);
+    }
+  }
 
   function exportExcel() {
     const rows = summary.results.map((row) => {
+      const qno = toNumber(row.question_no);
       const status = String(row.status ?? "").toLowerCase();
-      const detected = String(row.detected_option ?? "").trim();
-      const meta = getStatusMeta(status, detected);
+      const detected = overrides[qno] ?? String(row.detected_option ?? "").trim();
+      const effectiveStatus =
+        status === "ambiguous" && overrides[qno]
+          ? (overrides[qno] === String(row.expected_option ?? "").trim().toUpperCase() ? "correct" : "wrong")
+          : status;
+      const meta = getStatusMeta(effectiveStatus, detected);
       return {
         "No.": row.question_no,
         "Jawapan Pelajar": detected || "-",
@@ -157,9 +232,14 @@ export default function OMRResultsPage() {
       startY: 30,
       head: [["No.", "Jawapan Pelajar", "Skema", "Status", "Markah"]],
       body: summary.results.map((row) => {
+        const qno = toNumber(row.question_no);
         const status = String(row.status ?? "").toLowerCase();
-        const detected = String(row.detected_option ?? "").trim();
-        const meta = getStatusMeta(status, detected);
+        const detected = overrides[qno] ?? String(row.detected_option ?? "").trim();
+        const effectiveStatus =
+          status === "ambiguous" && overrides[qno]
+            ? (overrides[qno] === String(row.expected_option ?? "").trim().toUpperCase() ? "correct" : "wrong")
+            : status;
+        const meta = getStatusMeta(effectiveStatus, detected);
         return [String(row.question_no ?? ""), detected || "-", String(row.expected_option ?? "").trim() || "-", meta.label, meta.mark];
       }),
       styles: { fontSize: 9 },
@@ -189,10 +269,20 @@ export default function OMRResultsPage() {
 
       <Card className="overflow-hidden rounded-xl border-border bg-card shadow-sm">
         <CardHeader className="border-b border-border px-6 py-5">
-          <CardTitle className="flex items-center gap-2 text-xl font-bold text-foreground">
-            <CheckCircle2 className="h-5 w-5 text-primary" />
-            Keputusan OMR
-          </CardTitle>
+          <div className="flex items-center justify-between">
+            <CardTitle className="flex items-center gap-2 text-xl font-bold text-foreground">
+              <CheckCircle2 className="h-5 w-5 text-primary" />
+              Keputusan OMR
+            </CardTitle>
+            {summary.ambiguousCount > 0 && (
+              <Badge variant="outline" className="border-amber-300 bg-amber-50 text-amber-800 gap-1.5">
+                <HelpCircle className="h-3.5 w-3.5" />
+                {pendingAmbiguous > 0
+                  ? `${pendingAmbiguous} soalan perlu disemak`
+                  : "Semua soalan telah disemak"}
+              </Badge>
+            )}
+          </div>
         </CardHeader>
         <CardContent className="space-y-4 p-6">
           {resultRaw ? (
@@ -200,6 +290,15 @@ export default function OMRResultsPage() {
               {summary.warning && (
                 <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
                   {summary.warning}
+                </div>
+              )}
+
+              {summary.ambiguousCount > 0 && (
+                <div className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                  <p className="font-semibold">Terdapat {summary.ambiguousCount} soalan tidak jelas</p>
+                  <p className="mt-0.5 text-amber-700">
+                    Pilih jawapan yang betul untuk setiap soalan bertanda &quot;Tidak Jelas&quot; di bawah, kemudian klik Simpan Semakan.
+                  </p>
                 </div>
               )}
 
@@ -217,15 +316,44 @@ export default function OMRResultsPage() {
                     </TableHeader>
                     <TableBody>
                       {summary.results.map((row) => {
+                        const qno = toNumber(row.question_no);
                         const status = String(row.status ?? "").toLowerCase();
-                        const detected = String(row.detected_option ?? "").trim();
-                        const expected = String(row.expected_option ?? "").trim();
-                        const meta = getStatusMeta(status, detected);
+                        const isAmbiguous = status === "ambiguous";
+                        const override = overrides[qno];
+                        const detected = override ?? String(row.detected_option ?? "").trim();
+                        const expected = String(row.expected_option ?? "").trim().toUpperCase();
+                        const effectiveStatus = isAmbiguous && override
+                          ? (override === expected ? "correct" : "wrong")
+                          : status;
+                        const meta = getStatusMeta(effectiveStatus, detected);
                         const StatusIcon = meta.icon;
                         return (
-                          <TableRow key={String(row.question_no ?? "")} className="border-b border-border transition-colors last:border-0 hover:bg-muted/50">
+                          <TableRow
+                            key={String(row.question_no ?? "")}
+                            className={`border-b border-border transition-colors last:border-0 hover:bg-muted/50 ${isAmbiguous && !override ? "bg-amber-50/40" : ""}`}
+                          >
                             <TableCell className="py-4 text-center font-medium text-muted-foreground">{row.question_no}</TableCell>
-                            <TableCell className="py-4 text-center font-semibold text-foreground">{detected || "-"}</TableCell>
+                            <TableCell className="py-4 text-center">
+                              {isAmbiguous ? (
+                                <div className="flex items-center justify-center gap-1">
+                                  {OPTIONS.map((opt) => (
+                                    <button
+                                      key={opt}
+                                      onClick={() => setOverrides((prev) => ({ ...prev, [qno]: opt }))}
+                                      className={`h-7 w-7 rounded-md border text-xs font-bold transition-colors ${
+                                        override === opt
+                                          ? "border-primary bg-primary text-primary-foreground"
+                                          : "border-border bg-background text-foreground hover:border-primary hover:bg-primary/10"
+                                      }`}
+                                    >
+                                      {opt}
+                                    </button>
+                                  ))}
+                                </div>
+                              ) : (
+                                <span className="font-semibold text-foreground">{detected || "-"}</span>
+                              )}
+                            </TableCell>
                             <TableCell className="py-4 text-center font-semibold text-foreground">{expected || "-"}</TableCell>
                             <TableCell className="py-4 text-center">
                               <span className={`inline-flex items-center gap-2 rounded-lg border px-3 py-1.5 text-sm font-semibold ${meta.className}`}>
@@ -249,6 +377,9 @@ export default function OMRResultsPage() {
                   <SummaryBadge label="Betul" value={summary.correct} className="border-emerald-200 bg-emerald-100 text-emerald-700" />
                   <SummaryBadge label="Salah" value={summary.wrong} className="border-rose-200 bg-rose-100 text-rose-700" />
                   <SummaryBadge label="Kosong" value={summary.blank} className="border-slate-200 bg-slate-100 text-slate-700" />
+                  {summary.ambiguousCount > 0 && (
+                    <SummaryBadge label="Tidak Jelas" value={summary.ambiguousCount} className="border-amber-300 bg-amber-50 text-amber-800" />
+                  )}
                 </div>
                 <div className="rounded-lg border border-primary/20 bg-primary/5 px-5 py-3 text-right shadow-xs">
                   <div className="text-xs font-medium text-muted-foreground">Jumlah Markah</div>
@@ -256,7 +387,18 @@ export default function OMRResultsPage() {
                 </div>
               </div>
 
-              <div className="flex gap-3 print:hidden">
+              <div className="flex flex-wrap gap-3 print:hidden">
+                {Object.keys(overrides).length > 0 && (
+                  <Button
+                    onClick={saveReview}
+                    disabled={isSaving}
+                    className="gap-2"
+                  >
+                    {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                    Simpan Semakan
+                    {pendingAmbiguous > 0 && ` (${Object.keys(overrides).length} dipilih)`}
+                  </Button>
+                )}
                 <Button variant="outline" size="sm" onClick={exportExcel} className="gap-2">
                   <Download className="h-4 w-4" />
                   Export Excel

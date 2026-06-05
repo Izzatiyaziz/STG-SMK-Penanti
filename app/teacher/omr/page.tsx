@@ -191,7 +191,7 @@ export default function OMRScanPage() {
   );
   const [minMarkThreshold, setMinMarkThreshold] = useState<string>("0.30");
   const [ambiguityGap, setAmbiguityGap] = useState<string>("0.06");
-  const [searchRadius, setSearchRadius] = useState<string>("12");
+  const [searchRadius, setSearchRadius] = useState<string>("6");
 
   /* ================= ROLE GUARD ================= */
   useEffect(() => {
@@ -534,7 +534,7 @@ export default function OMRScanPage() {
           image_base64: capturedImage, template_width, template_height, answer_region, template,
           min_mark_threshold: Number(minMarkThreshold) || 0.30,
           ambiguity_gap: Number(ambiguityGap) || 0.06,
-          search_radius: Number(searchRadius) || 12,
+          search_radius: Number(searchRadius) || 6,
         }),
       });
       const json = await res.json();
