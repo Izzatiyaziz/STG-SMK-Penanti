@@ -120,6 +120,8 @@ function buildSpmTemplateBundle(
 
 type TemplateMode = "auto-spm" | "custom" | "test";
 
+type ScanFlowState = "idle" | "warping" | "preview";
+
 function toId(v: unknown) {
   return typeof v === "string" ? v.trim() : v == null ? "" : String(v).trim();
 }
@@ -163,7 +165,6 @@ export default function OMRScanPage() {
   const [activeTab, setActiveTab] = useState<"scan" | "upload">("scan");
   const [advancedOpen, setAdvancedOpen] = useState(false);
 
-  type ScanFlowState = "idle" | "warping" | "preview";
   const [scanFlowState, setScanFlowState] = useState<ScanFlowState>("idle");
   const [warpedImage, setWarpedImage] = useState<string | null>(null);
   const [cornersFound, setCornersFound] = useState(false);
@@ -385,7 +386,10 @@ export default function OMRScanPage() {
         body: JSON.stringify({ image_base64: imageBase64 }),
       });
       const json = await res.json();
-      if (!res.ok || !json?.success) return { warped: imageBase64, cornersFound: false };
+      if (!res.ok || !json?.success) {
+        toast.warning("Perkhidmatan warp gagal, imej asal digunakan");
+        return { warped: imageBase64, cornersFound: false };
+      }
       if (!json.corners_found) toast.warning(json.warning || "Sudut kertas tidak dikesan");
       return { warped: json.warped_image_base64, cornersFound: !!json.corners_found };
     } catch {
@@ -393,7 +397,7 @@ export default function OMRScanPage() {
     }
   }
 
-  async function handleCaptureAndWarp(rawImage: string, label: string) {
+  const handleCaptureAndWarp = useCallback(async (rawImage: string, label: string) => {
     if (captureInProgressRef.current) return;
     captureInProgressRef.current = true;
     setCapturedImage(rawImage);
@@ -409,10 +413,12 @@ export default function OMRScanPage() {
       toast.error("Gagal memproses imej");
       setScanFlowState("idle");
       setCapturedImage(null);
+      startCamera();
     } finally {
       captureInProgressRef.current = false;
     }
-  }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stopCamera, startCamera]);
 
   function confirmWarp() {
     if (!warpedImage) return;
@@ -448,8 +454,7 @@ export default function OMRScanPage() {
     ctx?.drawImage(video, 0, 0, canvas.width, canvas.height);
     const raw = canvas.toDataURL("image/png");
     void handleCaptureAndWarp(raw, "Diambil automatik — kertas dikesan");
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoCapture]);
+  }, [autoCapture, handleCaptureAndWarp]);
 
   const { detectionState } = useDocumentDetection({
     videoRef: videoRef as React.RefObject<HTMLVideoElement>,
@@ -1060,7 +1065,7 @@ export default function OMRScanPage() {
                       <p className="text-xs text-muted-foreground text-center">{imageSourceLabel}</p>
                     )}
                     <div className="flex gap-3">
-                      <Button variant="outline" className="flex-1 gap-2" onClick={() => { setCapturedImage(null); setImageSourceLabel(""); }}>
+                      <Button variant="outline" className="flex-1 gap-2" onClick={() => { setCapturedImage(null); setImageSourceLabel(""); setWarpedImage(null); setScanFlowState("idle"); captureInProgressRef.current = false; }}>
                         <RotateCw className="h-4 w-4" />
                         Ganti Imej
                       </Button>
