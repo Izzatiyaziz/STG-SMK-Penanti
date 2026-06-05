@@ -539,7 +539,7 @@ export default function OMRScanPage() {
       });
       const json = await res.json();
       if (!res.ok || !json?.success) { toast.error(json?.message || "Gagal memproses OMR"); return; }
-      localStorage.setItem("stg_marks_context", JSON.stringify({ class_id, subject_id, exam_id }));
+      localStorage.setItem("stg_marks_context", JSON.stringify({ class_id, subject_id, exam_id, student_id }));
       sessionStorage.setItem("stg_omr_last_result", JSON.stringify(json));
       toast.success("OMR berjaya diproses!");
       const params = new URLSearchParams({ student_id, subject_id, class_id, exam_id });

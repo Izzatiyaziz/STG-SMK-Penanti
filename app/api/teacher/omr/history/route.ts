@@ -59,7 +59,6 @@ export async function GET(req: Request) {
 
     if (exam_id) query = query.eq("exam_id", exam_id);
     if (subject_id) query = query.eq("subject_id", subject_id);
-    if (class_id) query = (query as typeof query).eq("stg_students.class_id", class_id);
 
     const { data: scans, error: scansErr } = await query;
     if (scansErr) return NextResponse.json({ message: scansErr.message }, { status: 500 });
