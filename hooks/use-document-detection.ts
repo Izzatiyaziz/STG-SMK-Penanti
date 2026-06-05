@@ -171,6 +171,9 @@ export function useDocumentDetection({
   const stableFiredRef = useRef(false);
   const rafRef = useRef<number | null>(null);
   const offscreenRef = useRef<HTMLCanvasElement | null>(null);
+  const offscreenCtxRef = useRef<CanvasRenderingContext2D | null>(null);
+  const onStableRef = useRef(onStable);
+  useEffect(() => { onStableRef.current = onStable; }); // no deps — sync every render
 
   const clearOverlay = useCallback(() => {
     const overlay = overlayCanvasRef.current;
@@ -212,12 +215,17 @@ export function useDocumentDetection({
       }
       const offscreen = offscreenRef.current;
       const scale = 0.3;
-      offscreen.width = Math.floor(video.videoWidth * scale);
-      offscreen.height = Math.floor(video.videoHeight * scale);
-      overlay.width = video.videoWidth;
-      overlay.height = video.videoHeight;
+      const sw = Math.floor(video.videoWidth * scale);
+      const sh = Math.floor(video.videoHeight * scale);
+      if (offscreen.width !== sw) offscreen.width = sw;
+      if (offscreen.height !== sh) offscreen.height = sh;
+      if (overlay.width !== video.videoWidth) overlay.width = video.videoWidth;
+      if (overlay.height !== video.videoHeight) overlay.height = video.videoHeight;
 
-      const offCtx = offscreen.getContext("2d", { willReadFrequently: true });
+      if (!offscreenCtxRef.current || offscreenCtxRef.current.canvas !== offscreen) {
+        offscreenCtxRef.current = offscreen.getContext("2d", { willReadFrequently: true });
+      }
+      const offCtx = offscreenCtxRef.current;
       if (!offCtx) return;
       offCtx.drawImage(video, 0, 0, offscreen.width, offscreen.height);
       const imageData = offCtx.getImageData(0, 0, offscreen.width, offscreen.height);
@@ -244,7 +252,6 @@ export function useDocumentDetection({
       };
 
       quadHistory.current = [...quadHistory.current.slice(-(STABILITY_FRAMES - 1)), scaledQuad];
-      setDetectedQuad(scaledQuad);
 
       const isStable =
         quadHistory.current.length >= STABILITY_FRAMES &&
@@ -255,10 +262,11 @@ export function useDocumentDetection({
 
       if (isStable) {
         setDetectionState("stable");
+        setDetectedQuad(scaledQuad);
         drawOverlay(overlay, scaledQuad, "#22c55e", false);
         if (!stableFiredRef.current) {
           stableFiredRef.current = true;
-          onStable();
+          onStableRef.current();
         }
       } else {
         stableFiredRef.current = false;
@@ -271,7 +279,7 @@ export function useDocumentDetection({
     return () => {
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
     };
-  }, [enabled, videoRef, overlayCanvasRef, onStable, clearOverlay, resetDetection]);
+  }, [enabled, videoRef, overlayCanvasRef, clearOverlay, resetDetection]);
 
   return { detectionState, detectedQuad, resetDetection, clearOverlay };
 }
