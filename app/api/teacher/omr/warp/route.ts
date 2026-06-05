@@ -13,10 +13,18 @@ export async function POST(req: Request) {
     const guard = await requireApiRole("teacher");
     if ("response" in guard) return guard.response;
 
-    const body = await req.json();
-    const image_base64 = String(body?.image_base64 ?? "").trim();
+    let body: unknown;
+    try {
+      body = await req.json();
+    } catch {
+      return NextResponse.json({ message: "Badan permintaan tidak sah (JSON diperlukan)" }, { status: 400 });
+    }
+    const image_base64 = String((body as Record<string, unknown>)?.image_base64 ?? "").trim();
     if (!image_base64) {
       return NextResponse.json({ message: "image_base64 diperlukan" }, { status: 400 });
+    }
+    if (image_base64.length > 20_000_000) {
+      return NextResponse.json({ message: "Imej terlalu besar" }, { status: 413 });
     }
 
     const omrServiceUrl = process.env.OMR_SERVICE_URL || "http://127.0.0.1:8001";
@@ -31,8 +39,10 @@ export async function POST(req: Request) {
       });
       if (!res.ok) throw new Error(`Service error ${res.status}`);
       serviceData = await res.json() as WarpServiceResponse;
-    } catch {
+      if (!serviceData?.warped_image_base64) throw new Error("Invalid service response shape");
+    } catch (serviceErr) {
       // Service unavailable or timeout — return original image, never block scan
+      console.warn("OMR warp service unavailable, falling back to original image:", serviceErr);
       return NextResponse.json({
         success: true,
         warped_image_base64: image_base64,
@@ -44,7 +54,7 @@ export async function POST(req: Request) {
     return NextResponse.json({
       success: true,
       warped_image_base64: serviceData.warped_image_base64,
-      corners_found: serviceData.corners_found,
+      corners_found: serviceData.corners_found ?? false,
       ...(!serviceData.corners_found && {
         warning: "Sudut kertas tidak dikesan, imej asal digunakan",
       }),
