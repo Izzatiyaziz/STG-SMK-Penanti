@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -635,14 +635,25 @@ export default function SubjectTeacherPage() {
   if (!session) return null;
 
   return (
-    <div className="flex flex-col gap-8 p-6 md:p-8">
-      <div className="flex flex-col gap-1 border-b border-border/40 pb-6">
-        <p className="text-xs font-semibold tracking-[0.2em] uppercase text-primary">Guru Subjek</p>
-        <h1 className="!text-[36px] font-black leading-tight text-foreground">Pemarkahan Markah</h1>
-        <p className="mt-1 text-sm text-muted-foreground">Mengurus markah pelajar untuk peperiksaan mengikut subjek dan kelas.</p>
-      </div>
+    <div className="min-h-screen bg-gradient-to-b from-background to-muted/20 p-4 md:p-6">
+      <div className="mx-auto max-w-7xl space-y-6">
+        <div className="space-y-3">
+          <div className="flex items-center gap-4">
+            <div className="p-3 rounded-2xl bg-gradient-to-br from-primary/10 to-primary/5 border border-primary/20 shadow-sm">
+              <LayoutDashboard className="w-7 h-7 text-primary" />
+            </div>
+            <div>
+               <h1 className="text-2xl font-bold text-foreground tracking-tight">
+                 Pemarkahan Markah
+               </h1>
+               <p className="text-muted-foreground font-medium mt-1">
+                 Mengurus markah pelajar untuk peperiksaan mengikut subjek dan kelas.
+               </p>
+         </div>
+       </div>
+    </div>
 
-        <Card className="border border-border/50 shadow-sm">
+        <Card className="border border-border/50 shadow-lg">
           <CardContent className="grid grid-cols-1 gap-4 p-4 md:grid-cols-4">
             <div className="space-y-2">
               <div className="text-sm text-muted-foreground">Peperiksaan</div>
@@ -771,8 +782,8 @@ export default function SubjectTeacherPage() {
         )}
 
         {templateInfo.template && (
-          <Card className="overflow-hidden border-border bg-card shadow-sm">
-            <CardHeader className="border-b border-border px-6 py-5">
+          <Card className="overflow-hidden border-border bg-card shadow-lg">
+            <CardHeader className="border-b border-border bg-gradient-to-r from-card to-card/80 px-6 py-5">
               <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                 <div>
                   <CardTitle className="flex items-center gap-2 text-xl font-bold">
@@ -948,6 +959,7 @@ export default function SubjectTeacherPage() {
             {submitLoading ? "Menghantar..." : "Hantar"}
           </Button>
         </div>
+      </div>
     </div>
   );
 }

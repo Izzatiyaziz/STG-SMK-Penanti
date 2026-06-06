@@ -195,10 +195,6 @@ export default function TeacherProfilePage() {
             name={me?.name ?? "Teacher"}
             email={me?.email}
             roleLabel={teacherRoleLabel}
-            accentLabel="ID"
-            accentValue={formatStaffId(me?.staff_id, me?.teacher_id ?? session?.user_id)}
-            enableProfileColor
-            profileColorStorageKey="profile-color:teacher"
             note={
                 forceFirstLogin
                     ? "Anda sedang melengkapkan log masuk kali pertama. Sila tetapkan kata laluan baharu sebelum meneruskan penggunaan sistem."
@@ -211,21 +207,13 @@ export default function TeacherProfilePage() {
                             <IdCard className="h-4 w-4 text-primary" />
                             Butiran Guru
                         </div>
-                        <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                        <div className="mt-4 grid gap-3 sm:grid-cols-2">
                             <div className="rounded-xl border border-border/60 bg-background px-4 py-3">
                                 <div className="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">
                                     ID Guru
                                 </div>
                                 <div className="mt-1 break-words font-semibold text-foreground">
                                     {formatStaffId(me?.staff_id, me?.teacher_id ?? session?.user_id)}
-                                </div>
-                            </div>
-                            <div className="rounded-xl border border-border/60 bg-background px-4 py-3">
-                                <div className="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">
-                                    Jawatan
-                                </div>
-                                <div className="mt-1 font-semibold text-foreground">
-                                    {teacherRoleLabel}
                                 </div>
                             </div>
                             <div className="rounded-xl border border-border/60 bg-background px-4 py-3">
@@ -238,6 +226,14 @@ export default function TeacherProfilePage() {
                                     </Badge>
                                 </div>
                             </div>
+                            <div className="rounded-xl border border-border/60 bg-background px-4 py-3 sm:col-span-2 sm:mx-auto sm:w-[calc(50%-0.375rem)]">
+                                <div className="text-center text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">
+                                    Jawatan
+                                </div>
+                                <div className="mt-1 text-center font-semibold text-foreground">
+                                    {teacherRoleLabel}
+                                </div>
+                            </div>
                         </div>
                     </section>
 
@@ -246,19 +242,19 @@ export default function TeacherProfilePage() {
                             <ShieldCheck className="h-4 w-4 text-primary" />
                             Akses Sistem
                         </div>
-                        <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                        <div className="mt-4 grid gap-3 sm:grid-cols-2">
                             {accessItems.map((item) => {
                                 const Icon = item.icon;
 
                                 return (
                                     <div
                                         key={item.label}
-                                        className="flex items-center gap-3 rounded-xl border border-border/60 bg-background px-3 py-2.5 transition-colors hover:bg-muted/40"
+                                        className="flex items-center gap-3 rounded-xl border border-border/60 bg-background px-3 py-3"
                                     >
-                                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-primary/20 bg-primary/10 text-primary">
+                                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-primary/20 bg-primary/10 text-primary">
                                             <Icon className="h-4 w-4" />
                                         </div>
-                                        <span className="text-sm font-medium text-foreground">
+                                        <span className="text-sm font-semibold text-foreground">
                                             {item.label}
                                         </span>
                                     </div>

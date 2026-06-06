@@ -2,49 +2,50 @@
 
 import { useEffect, useMemo, useState } from "react";
 import {
-	Table,
-	TableBody,
-	TableCell,
-	TableHead,
-	TableHeader,
-	TableRow,
+    Table,
+    TableBody,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow,
 } from "@/components/ui/table";
 import {
-	Pagination,
-	PaginationContent,
-	PaginationEllipsis,
-	PaginationItem,
-	PaginationLink,
-	PaginationNext,
-	PaginationPrevious,
+    Pagination,
+    PaginationContent,
+    PaginationEllipsis,
+    PaginationItem,
+    PaginationLink,
+    PaginationNext,
+    PaginationPrevious,
 } from "@/components/ui/pagination";
 import { Badge } from "@/components/ui/badge";
 import { AddTeacherDialog } from "./add-teacher-dialog";
 import {
-	Search,
-	Users,
-	Filter,
-	Loader2,
-	UserPlus,
-	RefreshCw,
-	Mail,
-	BookOpen,
-	Award,
-	Clock,
-	Download,
-	Edit,
-	Trash2,
-	SortAsc,
-	SortDesc,
-	Building2,
-	CheckCircle,
+    Search,
+    Users,
+    Filter,
+    Loader2,
+    UserPlus,
+    RefreshCw,
+    Mail,
+    Shield,
+    BookOpen,
+    Award,
+    Clock,
+    Download,
+    Edit,
+    Trash2,
+    SortAsc,
+    SortDesc,
+    Building2,
+    CheckCircle,
 } from "lucide-react";
 import {
-	Select,
-	SelectContent,
-	SelectItem,
-	SelectTrigger,
-	SelectValue,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -52,724 +53,832 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
 import { EditTeacherDialog } from "./edit-teacher-dialog";
 import { formatMalaysiaTime } from "@/lib/date-utils";
-import { exportTeachersPDF } from "@/lib/export-pdf";
 
 type User = {
-	id: string;
-	name: string;
-	identifier: string;
-	roles: string[];
-	email?: string;
-	subjects?: string[];
-	lastActive?: string;
-	status?: "active" | "inactive";
+    id: string;
+    name: string;
+    identifier: string;
+    roles: string[];
+    email?: string;
+    subjects?: string[];
+    lastActive?: string;
+    status?: "active" | "inactive";
 };
 
 // Client-side only time component
 const getTimeLabel = () => formatMalaysiaTime();
 
 const LastUpdatedTime = () => {
-	const [time, setTime] = useState<string>(() => getTimeLabel());
+    const [time, setTime] = useState<string>(() => getTimeLabel());
 
-	useEffect(() => {
-		const interval = setInterval(() => {
-			setTime(getTimeLabel());
-		}, 60000);
-		return () => clearInterval(interval);
-	}, []);
+    useEffect(() => {
+        const interval = setInterval(() => {
+            setTime(getTimeLabel());
+        }, 60000);
+        return () => clearInterval(interval);
+    }, []);
 
-	return (
-		<span className="font-medium text-primary">{time || "Memuatkan..."}</span>
-	);
+    return <span className="font-medium text-primary">{time || "Memuatkan..."}</span>;
 };
 
 export default function UsersPage() {
-	const PAGE_SIZE = 10;
-	const [users, setUsers] = useState<User[]>([]);
-	const [loading, setLoading] = useState(true);
-	const [searchQuery, setSearchQuery] = useState("");
-	const [filterRole, setFilterRole] = useState<string>("all");
-	const [sortBy, setSortBy] = useState<"name" | "roles" | "date">("name");
-	const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
-	const [currentPage, setCurrentPage] = useState(1);
-	const [editOpen, setEditOpen] = useState(false);
-	const [deleteOpen, setDeleteOpen] = useState(false);
-	const [selectedUser, setSelectedUser] = useState<User | null>(null);
+    const PAGE_SIZE = 10;
+    const [users, setUsers] = useState<User[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [searchQuery, setSearchQuery] = useState("");
+    const [filterRole, setFilterRole] = useState<string>("all");
+    const [sortBy, setSortBy] = useState<"name" | "roles" | "date">("name");
+    const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
+    const [currentPage, setCurrentPage] = useState(1);
+    const [editOpen, setEditOpen] = useState(false);
+    const [deleteOpen, setDeleteOpen] = useState(false);
+    const [selectedUser, setSelectedUser] = useState<User | null>(null);
 
-	async function fetchUsers() {
-		setLoading(true);
-		try {
-			const res = await fetch("/api/admin/users?role=teacher");
-			const data = await res.json();
-			setUsers(data);
-		} catch (err) {
-			console.error("FETCH USERS ERROR:", err);
-			toast.error("Gagal memuatkan senarai guru");
-		} finally {
-			setLoading(false);
-		}
-	}
+    async function fetchUsers() {
+        setLoading(true);
+        try {
+            const res = await fetch("/api/admin/users?role=teacher");
+            const data = await res.json();
+            setUsers(data);
+        } catch (err) {
+            console.error("FETCH USERS ERROR:", err);
+            toast.error("Gagal memuatkan senarai guru");
+        } finally {
+            setLoading(false);
+        }
+    }
 
-	useEffect(() => {
-		fetchUsers();
-	}, []);
+    useEffect(() => {
+        fetchUsers();
+    }, []);
 
-	// ================= FILTER AND SORT =================
-	const filteredUsers = users
-		.filter((user) => {
-			const matchesSearch =
-				user.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-				user.identifier.toLowerCase().includes(searchQuery.toLowerCase()) ||
-				user.email?.toLowerCase().includes(searchQuery.toLowerCase());
+    // ================= FILTER AND SORT =================
+    const filteredUsers = users
+        .filter((user) => {
+            const matchesSearch =
+                user.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                user.identifier.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                user.email?.toLowerCase().includes(searchQuery.toLowerCase());
 
-			const matchesRole = filterRole === "all" || user.roles.includes(filterRole);
+            const matchesRole = filterRole === "all" || user.roles.includes(filterRole);
 
-			return matchesSearch && matchesRole;
-		})
-		.sort((a, b) => {
-			let compareA, compareB;
+            return matchesSearch && matchesRole;
+        })
+        .sort((a, b) => {
+            let compareA, compareB;
+            
+            switch (sortBy) {
+                case "name":
+                    compareA = a.name.toLowerCase();
+                    compareB = b.name.toLowerCase();
+                    break;
+                case "roles":
+                    compareA = a.roles[0]?.toLowerCase() ?? "";
+                    compareB = b.roles[0]?.toLowerCase() ?? "";
+                    break;
 
-			switch (sortBy) {
-				case "name":
-					compareA = a.name.toLowerCase();
-					compareB = b.name.toLowerCase();
-					break;
-				case "roles":
-					compareA = a.roles[0]?.toLowerCase() ?? "";
-					compareB = b.roles[0]?.toLowerCase() ?? "";
-					break;
+                case "date":
+                    compareA = a.lastActive || "";
+                    compareB = b.lastActive || "";
+                    break;
+                default:
+                    compareA = a.name.toLowerCase();
+                    compareB = b.name.toLowerCase();
+            }
 
-				case "date":
-					compareA = a.lastActive || "";
-					compareB = b.lastActive || "";
-					break;
-				default:
-					compareA = a.name.toLowerCase();
-					compareB = b.name.toLowerCase();
-			}
+            if (sortOrder === "asc") {
+                return compareA.localeCompare(compareB);
+            } else {
+                return compareB.localeCompare(compareA);
+            }
+        });
 
-			if (sortOrder === "asc") {
-				return compareA.localeCompare(compareB);
-			} else {
-				return compareB.localeCompare(compareA);
-			}
-		});
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [searchQuery, filterRole, sortBy, sortOrder]);
 
-	useEffect(() => {
-		setCurrentPage(1);
-	}, [searchQuery, filterRole, sortBy, sortOrder]);
+    useEffect(() => {
+        const totalPages = Math.max(1, Math.ceil(filteredUsers.length / PAGE_SIZE));
+        if (currentPage > totalPages) {
+            setCurrentPage(totalPages);
+        }
+    }, [currentPage, filteredUsers.length]);
 
-	useEffect(() => {
-		const totalPages = Math.max(1, Math.ceil(filteredUsers.length / PAGE_SIZE));
-		if (currentPage > totalPages) {
-			setCurrentPage(totalPages);
-		}
-	}, [currentPage, filteredUsers.length]);
+    const totalPages = Math.max(1, Math.ceil(filteredUsers.length / PAGE_SIZE));
+    const paginatedUsers = useMemo(() => {
+        const startIndex = (currentPage - 1) * PAGE_SIZE;
+        return filteredUsers.slice(startIndex, startIndex + PAGE_SIZE);
+    }, [currentPage, filteredUsers]);
 
-	const totalPages = Math.max(1, Math.ceil(filteredUsers.length / PAGE_SIZE));
-	const paginatedUsers = useMemo(() => {
-		const startIndex = (currentPage - 1) * PAGE_SIZE;
-		return filteredUsers.slice(startIndex, startIndex + PAGE_SIZE);
-	}, [currentPage, filteredUsers]);
+    const paginationItems = useMemo(() => {
+        if (totalPages <= 5) {
+            return Array.from({ length: totalPages }, (_, index) => index + 1);
+        }
 
-	const paginationItems = useMemo(() => {
-		if (totalPages <= 5) {
-			return Array.from({ length: totalPages }, (_, index) => index + 1);
-		}
+        if (currentPage <= 3) {
+            return [1, 2, 3, 4, "ellipsis", totalPages] as const;
+        }
 
-		if (currentPage <= 3) {
-			return [1, 2, 3, 4, "ellipsis", totalPages] as const;
-		}
+        if (currentPage >= totalPages - 2) {
+            return [1, "ellipsis", totalPages - 3, totalPages - 2, totalPages - 1, totalPages] as const;
+        }
 
-		if (currentPage >= totalPages - 2) {
-			return [
-				1,
-				"ellipsis",
-				totalPages - 3,
-				totalPages - 2,
-				totalPages - 1,
-				totalPages,
-			] as const;
-		}
+        return [1, "ellipsis-left", currentPage - 1, currentPage, currentPage + 1, "ellipsis-right", totalPages] as const;
+    }, [currentPage, totalPages]);
 
-		return [
-			1,
-			"ellipsis-left",
-			currentPage - 1,
-			currentPage,
-			currentPage + 1,
-			"ellipsis-right",
-			totalPages,
-		] as const;
-	}, [currentPage, totalPages]);
+    // ================= STATS =================
+        const stats = {
+        total: users.length,
+        classTeachers: users.filter((u) => u.roles.includes("class teacher")).length,
+        subjectTeachers: users.filter((u) => u.roles.includes("subject teacher")).length,
+        coordinators: users.filter((u) => u.roles.includes("subject coordinator")).length,
+        principals: users.filter((u) => u.roles.includes("principal")).length,
+        };
 
-	// ================= STATS =================
-	const stats = {
-		total: users.length,
-		classTeachers: users.filter((u) => u.roles.includes("class teacher")).length,
-		subjectTeachers: users.filter((u) => u.roles.includes("subject teacher"))
-			.length,
-		coordinators: users.filter((u) => u.roles.includes("subject coordinator"))
-			.length,
-		principals: users.filter((u) => u.roles.includes("principal")).length,
-	};
+    // ================= ROLE COLORS =================
+        const getRoleColor = (role: string) => {
+        switch (role) {
+            case "admin":
+            return {
+                bg: "bg-red-100",
+                text: "text-red-700",
+                border: "border-red-200",
+                icon: <Shield className="w-3 h-3 mr-1" />,
+            };
 
-	// ================= ACTIONS =================
-	const handleExport = () => {
-		if (filteredUsers.length === 0) {
-			toast.error("Tiada data untuk dieksport");
-			return;
-		}
-		const filterLabel =
-			filterRole === "all"
-				? undefined
-				: filterRole === "class teacher"
-					? "Guru Kelas"
-					: filterRole === "subject teacher"
-						? "Guru Subjek"
-						: filterRole === "subject coordinator"
-							? "Panitia Subjek"
-							: filterRole === "principal"
-								? "Pengetua"
-								: filterRole;
-		exportTeachersPDF(filteredUsers, filterLabel);
-		toast.success("PDF sedang dimuat turun...");
-	};
+            case "principal":
+            return {
+                bg: "bg-yellow-100",
+                text: "text-yellow-700",
+                border: "border-yellow-200",
+                icon: <CheckCircle className="w-3 h-3 mr-1" />,
+            };
 
-	const handleEditUser = (user: User) => {
-		setSelectedUser(user);
-		setEditOpen(true);
-	};
+            case "class teacher":
+            return {
+                bg: "bg-blue-100",
+                text: "text-blue-700",
+                border: "border-blue-200",
+                icon: <Building2 className="w-3 h-3 mr-1" />,
+            };
 
-	const handleDeleteUser = (user: User) => {
-		setSelectedUser(user);
-		setDeleteOpen(true);
-	};
+            case "subject teacher":
+            return {
+                bg: "bg-emerald-100",
+                text: "text-emerald-700",
+                border: "border-emerald-200",
+                icon: <BookOpen className="w-3 h-3 mr-1" />,
+            };
 
-	// ================= TOGGLE SORT =================
-	const toggleSort = (field: "name" | "roles" | "date") => {
-		if (sortBy === field) {
-			setSortOrder(sortOrder === "asc" ? "desc" : "asc");
-		} else {
-			setSortBy(field);
-			setSortOrder("asc");
-		}
-	};
+            case "subject coordinator":
+            return {
+                bg: "bg-orange-100",
+                text: "text-orange-700",
+                border: "border-orange-200",
+                icon: <Award className="w-3 h-3 mr-1" />,
+            };
 
-	return (
-		<div className="flex flex-col gap-8 p-6 md:p-8">
-			{/* PAGE HEADER */}
-			<div className="flex flex-col gap-1 border-b border-border/40 pb-6 md:flex-row md:items-end md:justify-between">
-				<div>
-					<p className="text-xs font-semibold tracking-[0.2em] uppercase text-primary">
-						Pentadbiran
-					</p>
-					<h1 className="!text-[36px] font-black leading-tight text-foreground">
-						Guru
-					</h1>
-				</div>
-				<div className="flex items-center gap-2">
-					<Button
-						variant="outline"
-						size="sm"
-						onClick={fetchUsers}
-						disabled={loading}
-					>
-						{loading ? (
-							<Loader2 className="w-3.5 h-3.5 animate-spin" />
-						) : (
-							<RefreshCw className="w-3.5 h-3.5" />
-						)}
-						<span className="ml-1.5">Muat Semula</span>
-					</Button>
-					<Button variant="outline" size="sm" onClick={handleExport}>
-						<Download className="w-3.5 h-3.5" />
-						<span className="ml-1.5">Eksport</span>
-					</Button>
-					<AddTeacherDialog onSuccess={fetchUsers}>
-						<Button size="sm">
-							<UserPlus className="w-3.5 h-3.5" />
-							<span className="ml-1.5">Tambah Guru</span>
-						</Button>
-					</AddTeacherDialog>
-				</div>
-			</div>
+            // fallback teacher biasa (kalau ada)
+            case "teacher":
+            return {
+                bg: "bg-slate-100",
+                text: "text-slate-700",
+                border: "border-slate-200",
+                icon: <Users className="w-3 h-3 mr-1" />,
+            };
 
-			{/* ROLE FILTER — typographic tap row */}
-			<div className="grid grid-cols-2 gap-px bg-border/40 sm:grid-cols-4">
-				{(
-					[
-						{ role: "all", count: stats.total, label: "Semua Guru" },
-						{
-							role: "class teacher",
-							count: stats.classTeachers,
-							label: "Guru Kelas",
-						},
-						{
-							role: "subject teacher",
-							count: stats.subjectTeachers,
-							label: "Guru Subjek",
-						},
-						{
-							role: "subject coordinator",
-							count: stats.coordinators,
-							label: "Panitia",
-						},
-					] as const
-				).map(({ role, count, label }) => {
-					const isActive = filterRole === role;
-					return (
-						<button
-							key={role}
-							onClick={() => setFilterRole(role)}
-							className={`flex flex-col gap-1.5 p-5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
-								isActive
-									? "bg-primary text-primary-foreground"
-									: "bg-card hover:bg-card/80 text-foreground"
-							}`}
-						>
-							<span
-								className={`!text-[32px] font-black leading-none ${isActive ? "text-primary-foreground" : "text-primary"}`}
-							>
-								{count}
-							</span>
-							<span
-								className={`text-xs ${isActive ? "text-primary-foreground/70" : "text-muted-foreground"}`}
-							>
-								{label}
-							</span>
-						</button>
-					);
-				})}
-			</div>
+            default:
+            return {
+                bg: "bg-gray-100",
+                text: "text-gray-700",
+                border: "border-gray-200",
+                icon: <Users className="w-3 h-3 mr-1" />,
+            };
+        }
+        };
 
-			{/* MAIN CONTENT CARD */}
-			<Card className="border-border bg-card overflow-hidden">
-				<CardHeader className="border-b border-border/60 px-6 py-4">
-					<div className="flex flex-col gap-1">
-						<CardTitle className="font-semibold text-foreground">
-							Senarai Guru
-						</CardTitle>
-						<p className="text-xs text-muted-foreground">
-							{filteredUsers.length} guru dijumpai
-						</p>
-					</div>
-				</CardHeader>
+    // ================= ACTIONS =================
+    const handleExport = () => {
+        toast.success("Data guru berjaya dieksport", {
+            description: "Fail sedang dimuat turun...",
+        });
+    };
 
-				<CardContent className="p-6">
-					{/* FILTER AND SEARCH SECTION */}
-					<div className="flex flex-col lg:flex-row gap-4 mb-6">
-						{/* SEARCH */}
-						<div className="flex-1 relative">
-							<Search className="absolute left-3.5 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-							<Input
-								placeholder="Cari guru (nama, no. staff atau e-mel)..."
-								value={searchQuery}
-								onChange={(e) => setSearchQuery(e.target.value)}
-								className="pl-10 h-11 rounded-lg border-border bg-background focus:border-primary focus:ring-primary/20"
-							/>
-						</div>
+    const handleEditUser = (user: User) => {
+        setSelectedUser(user);
+        setEditOpen(true);
+    };
 
-						{/* ROLE FILTER + RESET */}
-						<div className="flex flex-col sm:flex-row gap-3">
-							<div className="w-full sm:w-[220px]">
-								<Select value={filterRole} onValueChange={setFilterRole}>
-									<SelectTrigger className="h-11 rounded-lg border-border bg-background">
-										<SelectValue placeholder="Pilih Peranan" />
-									</SelectTrigger>
+    const handleDeleteUser = (user: User) => {
+        setSelectedUser(user);
+        setDeleteOpen(true);
+    };
 
-									<SelectContent className="rounded-lg border-border">
-										<SelectItem value="all">
-											<div className="flex items-center gap-2">
-												<Users className="w-4 h-4" />
-												Semua Jawatan
-											</div>
-										</SelectItem>
+    // ================= TOGGLE SORT =================
+    const toggleSort = (field: "name" | "roles" | "date") => {
+        if (sortBy === field) {
+            setSortOrder(sortOrder === "asc" ? "desc" : "asc");
+        } else {
+            setSortBy(field);
+            setSortOrder("asc");
+        }
+    };
 
-										<SelectItem value="principal">
-											<div className="flex items-center gap-2">
-												<CheckCircle className="w-4 h-4 text-yellow-600" />
-												Pengetua
-											</div>
-										</SelectItem>
+    return (
+        <div className="min-h-screen bg-background p-4 md:p-6">
+            <div className="max-w-7xl mx-auto space-y-8">
+                {/* HEADER SECTION */}
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+                    <div className="space-y-3">
+                        <div className="flex items-center gap-4">
+                            <div className="p-3 rounded-2xl bg-gradient-to-br from-primary/10 to-primary/5 border border-primary/20 shadow-sm">
+                                <Users className="w-7 h-7 text-primary" />
+                            </div>
+                            <div>
+                                <h1 className="text-xl font-bold text-foreground flex items-center gap-2">
+                                    Pengurusan Guru
+                                </h1>
+                                <p className="text-muted-foreground font-medium mt-1">
+                                    Mengurus maklumat guru dan kebenaran akses sistem dengan cekap
+                                </p>
+                            </div>
+                        </div>
+                              <div className="flex items-center gap-3 text-sm text-muted-foreground">
+                                                  <div className="flex items-center gap-1">
+                                                      <Clock className="w-3.5 h-3.5" />
+                                                      <span>Kemas kini: <LastUpdatedTime /></span>
+                                                  </div>
+                                              </div>
+                    </div>
 
-										<SelectItem value="class teacher">
-											<div className="flex items-center gap-2">
-												<Building2 className="w-4 h-4 text-blue-600" />
-												Guru Kelas
-											</div>
-										</SelectItem>
+                    <div className="flex items-center gap-3">
+                        <Button
+                            variant="outline"
+                            onClick={fetchUsers}
+                            disabled={loading}
+                            className="border-border hover:bg-accent hover:text-accent-foreground shadow-xs"
+                        >
+                            {loading ? (
+                                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                            ) : (
+                                <RefreshCw className="w-4 h-4 mr-2" />
+                            )}
+                            Muat Semula
+                        </Button>
 
-										<SelectItem value="subject teacher">
-											<div className="flex items-center gap-2">
-												<BookOpen className="w-4 h-4 text-emerald-600" />
-												Guru Subjek
-											</div>
-										</SelectItem>
+                        <Button
+                            variant="outline"
+                            onClick={handleExport}
+                            className="border-border hover:bg-accent hover:text-accent-foreground shadow-xs"
+                        >
+                            <Download className="w-4 h-4 mr-2" />
+                            Eksport
+                        </Button>
 
-										<SelectItem value="subject coordinator">
-											<div className="flex items-center gap-2">
-												<Award className="w-4 h-4 text-orange-600" />
-												Panitia Subjek
-											</div>
-										</SelectItem>
-									</SelectContent>
-								</Select>
-							</div>
+                        <AddTeacherDialog onSuccess={fetchUsers}>
+                            <Button className="bg-primary hover:bg-primary/90 text-primary-foreground shadow-sm">
+                                <UserPlus className="w-4 h-4 mr-2" />
+                                Tambah Guru
+                            </Button>
+                        </AddTeacherDialog>
+                    </div>
+                </div>
 
-							<Button
-								variant="outline"
-								onClick={() => {
-									setSearchQuery("");
-									setFilterRole("all");
-									setSortBy("name");
-									setSortOrder("asc");
-								}}
-								className="h-11 rounded-lg border-border hover:bg-accent hover:text-accent-foreground"
-							>
-								Reset
-							</Button>
-						</div>
-					</div>
+                {/* STATS CARDS */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                    <Card
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => setFilterRole("all")}
+                        onKeyDown={(e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                                e.preventDefault();
+                                setFilterRole("all");
+                            }
+                        }}
+                        className={`border-border bg-card shadow-sm hover:shadow-md transition-all duration-300 hover:border-emerald-300 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${
+                            filterRole === "all" ? "ring-2 ring-emerald-300 border-emerald-300" : ""
+                        }`}
+                    >
+                        <CardContent className="p-5">
+                            <div className="flex items-start justify-between">
+                                <div>
+                                    <p className="text-sm font-medium text-muted-foreground mb-2">Jumlah Guru</p>
+                                    <h3 className="text-3xl font-bold text-emerald-600">
+                                        {stats.total}
+                                    </h3>
+                                </div>
+                                <div className="p-3 rounded-xl bg-emerald-100 border border-emerald-200">
+                                    <Users className="w-5 h-5 text-emerald-600" />
+                                </div>
+                            </div>
+                        </CardContent>
+                    </Card>
 
-					{/* TABLE SECTION */}
-					<div className="rounded-lg border border-border overflow-hidden">
-						<div className="overflow-x-auto">
-							<Table>
-								<TableHeader className="bg-muted/30">
-									<TableRow className="hover:bg-transparent border-b border-border">
-										<TableHead className="font-semibold text-foreground py-4 w-16 text-center">
-											#
-										</TableHead>
-										<TableHead className="font-semibold text-foreground py-4">
-											<Button
-												variant="ghost"
-												size="sm"
-												onClick={() => toggleSort("name")}
-												className="p-0 h-auto font-semibold hover:bg-transparent"
-											>
-												Nama Guru
-												{sortBy === "name" &&
-													(sortOrder === "asc" ? (
-														<SortAsc className="w-3.5 h-3.5 ml-1" />
-													) : (
-														<SortDesc className="w-3.5 h-3.5 ml-1" />
-													))}
-											</Button>
-										</TableHead>
-										<TableHead className="font-semibold text-foreground py-4">
-											No. Staff
-										</TableHead>
-										<TableHead className="font-semibold text-foreground py-4">
-											E-mel
-										</TableHead>
-										<TableHead className="font-semibold text-foreground py-4">
-											<Button
-												variant="ghost"
-												size="sm"
-												onClick={() => toggleSort("roles")}
-												className="p-0 h-auto font-semibold hover:bg-transparent"
-											>
-												Jawatan
-												{sortBy === "roles" &&
-													(sortOrder === "asc" ? (
-														<SortAsc className="w-3.5 h-3.5 ml-1" />
-													) : (
-														<SortDesc className="w-3.5 h-3.5 ml-1" />
-													))}
-											</Button>
-										</TableHead>
-										<TableHead className="font-semibold text-foreground py-4 text-right pr-6">
-											Tindakan
-										</TableHead>
-									</TableRow>
-								</TableHeader>
+                    <Card
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => setFilterRole("class teacher")}
+                        onKeyDown={(e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                                e.preventDefault();
+                                setFilterRole("class teacher");
+                            }
+                        }}
+                        className={`border-border bg-card shadow-sm hover:shadow-md transition-all duration-300 hover:border-blue-300 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${
+                            filterRole === "class teacher" ? "ring-2 ring-blue-300 border-blue-300" : ""
+                        }`}
+                    >
+                        <CardContent className="p-5">
+                            <div className="flex items-start justify-between">
+                                <div>
+                                    <p className="text-sm font-medium text-muted-foreground mb-2">Guru Kelas</p>
+                                    <h3 className="text-3xl font-bold text-blue-600">
+                                        {stats.classTeachers}
+                                    </h3>
+                                </div>
+                                <div className="p-3 rounded-xl bg-blue-100 border border-blue-200">
+                                    <Building2 className="w-5 h-5 text-blue-600" />
+                                </div>
+                            </div>
+                        </CardContent>
+                    </Card>
 
-								<TableBody>
-									{loading ? (
-										<TableRow>
-											<TableCell colSpan={6} className="py-16">
-												<div className="flex flex-col items-center justify-center gap-4">
-													<div className="relative">
-														<Loader2 className="w-10 h-10 animate-spin text-primary" />
-													</div>
-													<div className="text-center">
-														<p className="font-semibold text-foreground">
-															Memuatkan data guru...
-														</p>
-														<p className="text-sm text-muted-foreground mt-1">
-															Sila tunggu sebentar
-														</p>
-													</div>
-												</div>
-											</TableCell>
-										</TableRow>
-									) : filteredUsers.length === 0 ? (
-										<TableRow>
-											<TableCell colSpan={6} className="py-16">
-												<div className="flex flex-col items-center justify-center gap-4">
-													<div className="p-4 rounded-full bg-muted/50">
-														<Users className="w-12 h-12 text-muted-foreground/50" />
-													</div>
-													<div className="text-center">
-														<p className="font-semibold text-foreground">
-															Tiada guru dijumpai
-														</p>
-														<p className="text-sm text-muted-foreground mt-1 max-w-md">
-															{searchQuery || filterRole !== "all"
-																? "Tiada guru yang sepadan dengan carian anda"
-																: "Mulakan dengan menambah guru pertama"}
-														</p>
-													</div>
-													{!searchQuery && filterRole === "all" && (
-														<AddTeacherDialog onSuccess={fetchUsers}>
-															<Button className="bg-primary hover:bg-primary/90 text-primary-foreground">
-																<UserPlus className="w-4 h-4 mr-2" />
-																Tambah Guru Pertama
-															</Button>
-														</AddTeacherDialog>
-													)}
-												</div>
-											</TableCell>
-										</TableRow>
-									) : (
-										paginatedUsers.map((user, index) => {
-											return (
-												<TableRow
-													key={user.id}
-													className="hover:bg-muted/50 transition-colors border-b border-border last:border-0 group"
-												>
-													{/* # Column (Clickable) */}
-													<TableCell
-														className="py-4 text-center cursor-pointer"
-														onClick={() => handleEditUser(user)}
-													>
-														<div className="font-medium text-muted-foreground hover:text-primary transition-colors">
-															{(currentPage - 1) * PAGE_SIZE + index + 1}
-														</div>
-													</TableCell>
+                    <Card
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => setFilterRole("subject coordinator")}
+                        onKeyDown={(e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                                e.preventDefault();
+                                setFilterRole("subject coordinator");
+                            }
+                        }}
+                        className={`border-border bg-card shadow-sm hover:shadow-md transition-all duration-300 hover:border-violet-300 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${
+                            filterRole === "subject coordinator" ? "ring-2 ring-violet-300 border-violet-300" : ""
+                        }`}
+                    >
+                        <CardContent className="p-5">
+                            <div className="flex items-start justify-between">
+                                <div>
+                                    <p className="text-sm font-medium text-muted-foreground mb-2">Panitia Subjek</p>
+                                    <h3 className="text-3xl font-bold text-violet-600">
+                                        {stats.coordinators}
+                                    </h3>
+                                </div>
+                                <div className="p-3 rounded-xl bg-violet-100 border border-violet-200">
+                                    <Award className="w-5 h-5 text-violet-600" />
+                                </div>
+                            </div>
+                        </CardContent>
+                    </Card>
+                </div>
 
-													{/* Nama Guru (Clickable) */}
-													<TableCell
-														className="py-4 cursor-pointer"
-														onClick={() => handleEditUser(user)}
-													>
-														<div className="flex items-center gap-3">
-															<div className="flex size-9 shrink-0 items-center justify-center rounded-full border border-primary/20 bg-primary/10">
-																<span className="text-sm font-semibold text-primary">
-																	{user.name.toUpperCase().charAt(0)}
-																</span>
-															</div>
-															<div>
-																<div className="font-semibold text-foreground hover:text-primary transition-colors">
-																	{user.name.toUpperCase()}
-																</div>
-																{user.subjects && user.subjects.length > 0 && (
-																	<div className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
-																		<BookOpen className="w-3 h-3" />
-																		{user.subjects.slice(0, 2).join(", ")}
-																		{user.subjects.length > 2 && "..."}
-																	</div>
-																)}
-															</div>
-														</div>
-													</TableCell>
+                {/* MAIN CONTENT CARD */}
+                <Card className="border-border bg-card shadow-md rounded-xl overflow-hidden">
+                    <CardHeader className="border-b border-border bg-gradient-to-r from-card to-card/80 px-6 py-5">
+                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                            <div>
+                                <CardTitle className="text-xl font-bold text-foreground flex items-center gap-2">
+                                    <Filter className="w-5 h-5 text-primary" />
+                                    Senarai Guru
+                                </CardTitle>
+                                <p className="text-sm text-muted-foreground mt-1">
+                                    Urus dan pantau semua guru dalam sistem
+                                </p>
+                            </div>
+                            <div className="flex items-center gap-3">
+                                <Badge variant="outline" className="border-primary/30 bg-primary/5 text-primary font-medium">
+                                    <Filter className="w-3 h-3 mr-1" />
+                                    {filteredUsers.length} guru
+                                </Badge>
+                            </div>
+                        </div>
+                    </CardHeader>
 
-													{/* No. Staff */}
-													<TableCell className="py-4">
-														<div className="font-mono bg-muted/30 px-3 py-1.5 rounded-md text-foreground border border-border">
-															{user.identifier}
-														</div>
-													</TableCell>
+                    <CardContent className="p-6">
+                        {/* FILTER AND SEARCH SECTION */}
+                        <div className="flex flex-col lg:flex-row gap-4 mb-6">
+                        {/* SEARCH */}
+                        <div className="flex-1 relative">
+                            <Search className="absolute left-3.5 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                            <Input
+                            placeholder="Cari guru (nama, no. staff atau e-mel)..."
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            className="pl-10 h-11 rounded-lg border-border bg-background focus:border-primary focus:ring-primary/20"
+                            />
+                        </div>
 
-													{/* E-mel */}
-													<TableCell className="py-4">
-														<div className="flex items-center gap-2 text-muted-foreground">
-															{user.email ? (
-																<>
-																	<Mail className="w-3.5 h-3.5 flex-shrink-0" />
-																	<span className="truncate">{user.email}</span>
-																</>
-															) : (
-																<span className="text-muted-foreground/70">-</span>
-															)}
-														</div>
-													</TableCell>
+                        {/* ROLE FILTER + RESET */}
+                        <div className="flex flex-col sm:flex-row gap-3">
+                            <div className="w-full sm:w-[220px]">
+                            <Select value={filterRole} onValueChange={setFilterRole}>
+                                <SelectTrigger className="h-11 rounded-lg border-border bg-background">
+                                <SelectValue placeholder="Pilih Peranan" />
+                                </SelectTrigger>
 
-													{/* Peranan */}
-													<TableCell className="py-4">
-														<div className="flex flex-wrap gap-2">
-															{user.roles.map((role) => (
-																<Badge
-																	key={role}
-																	variant="outline"
-																	className="border-border/60 text-muted-foreground"
-																>
-																	{role === "subject teacher"
-																		? "Guru Subjek"
-																		: role === "class teacher"
-																			? "Guru Kelas"
-																			: role === "subject coordinator"
-																				? "Panitia Subjek"
-																				: role === "principal"
-																					? "Pengetua"
-																					: role}
-																</Badge>
-															))}
-														</div>
-													</TableCell>
+                                <SelectContent className="rounded-lg border-border">
+                                <SelectItem value="all">
+                                    <div className="flex items-center gap-2">
+                                    <Users className="w-4 h-4" />
+                                    Semua Jawatan
+                                    </div>
+                                </SelectItem>
 
-													{/* Tindakan */}
-													<TableCell className="py-4 text-right pr-6">
-														<div className="flex justify-end gap-2">
-															<Button
-																size="icon"
-																variant="outline"
-																className="h-8 w-8 text-blue-600"
-																onClick={() => handleEditUser(user)}
-															>
-																<Edit className="w-4 h-4" />
-															</Button>
-															<Button
-																size="icon"
-																variant="outline"
-																className="h-8 w-8 text-rose-600"
-																onClick={() => handleDeleteUser(user)}
-															>
-																<Trash2 className="w-4 h-4" />
-															</Button>
-														</div>
-													</TableCell>
-												</TableRow>
-											);
-										})
-									)}
-								</TableBody>
-							</Table>
-						</div>
-					</div>
-				</CardContent>
+                                <SelectItem value="principal">
+                                    <div className="flex items-center gap-2">
+                                    <CheckCircle className="w-4 h-4 text-yellow-600" />
+                                    Pengetua
+                                    </div>
+                                </SelectItem>
 
-				{/* FOOTER */}
-				<div className="border-t border-border bg-muted/20 px-6 py-4">
-					<div className="flex flex-col gap-4 text-sm">
-						<div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-							<div className="flex items-center gap-2 text-muted-foreground">
-								<div className="flex items-center gap-1">
-									<span>Menunjukkan</span>
-									<span className="font-semibold text-foreground">
-										{(currentPage - 1) * PAGE_SIZE + 1}
-										{" - "}
-										{Math.min(currentPage * PAGE_SIZE, filteredUsers.length)}{" "}
-									</span>
-									<span>daripada</span>
-									<span className="font-semibold text-foreground">{users.length}</span>
-									<span>guru</span>
-								</div>
-								{filterRole !== "all" && (
-									<Badge variant="secondary" className="ml-2">
-										{filterRole === "subject teacher"
-											? "Guru Subjek"
-											: filterRole === "teacher"
-												? "Guru Kelas"
-												: filterRole === "admin"
-													? "Admin"
-													: filterRole}
-									</Badge>
-								)}
-							</div>
-							<div className="flex items-center gap-4">
-								<div className="flex items-center gap-2 text-muted-foreground">
-									<Clock className="w-4 h-4" />
-									<span>
-										Kemas kini: <LastUpdatedTime />
-									</span>
-								</div>
-								<Button
-									variant="ghost"
-									size="sm"
-									onClick={fetchUsers}
-									disabled={loading}
-									className="h-8"
-								>
-									{loading && <Loader2 className="w-3 h-3 mr-2 animate-spin" />}
-									Muat Semula Data
-								</Button>
-							</div>
-						</div>
+                                <SelectItem value="class teacher">
+                                    <div className="flex items-center gap-2">
+                                    <Building2 className="w-4 h-4 text-blue-600" />
+                                    Guru Kelas
+                                    </div>
+                                </SelectItem>
 
-						{!loading && totalPages > 1 && (
-							<div className="flex flex-col gap-3 border-t border-border/60 pt-4">
-								<Pagination>
-									<PaginationContent>
-										<PaginationItem>
-											<PaginationPrevious
-												href="#"
-												onClick={(e) => {
-													e.preventDefault();
-													setCurrentPage((page) => Math.max(1, page - 1));
-												}}
-												className={
-													currentPage === 1 ? "pointer-events-none opacity-50" : undefined
-												}
-											/>
-										</PaginationItem>
+                                <SelectItem value="subject teacher">
+                                    <div className="flex items-center gap-2">
+                                    <BookOpen className="w-4 h-4 text-emerald-600" />
+                                    Guru Subjek
+                                    </div>
+                                </SelectItem>
 
-										{paginationItems.map((item, index) => {
-											if (typeof item !== "number") {
-												return (
-													<PaginationItem key={`${item}-${index}`}>
-														<PaginationEllipsis />
-													</PaginationItem>
-												);
-											}
+                                <SelectItem value="subject coordinator">
+                                    <div className="flex items-center gap-2">
+                                    <Award className="w-4 h-4 text-orange-600" />
+                                    Panitia Subjek
+                                    </div>
+                                </SelectItem>
+                                </SelectContent>
+                            </Select>
+                            </div>
 
-											return (
-												<PaginationItem key={item}>
-													<PaginationLink
-														href="#"
-														isActive={currentPage === item}
-														onClick={(e) => {
-															e.preventDefault();
-															setCurrentPage(item);
-														}}
-													>
-														{item}
-													</PaginationLink>
-												</PaginationItem>
-											);
-										})}
+                            <Button
+                            variant="outline"
+                            onClick={() => {
+                                setSearchQuery("");
+                                setFilterRole("all");
+                                setSortBy("name");
+                                setSortOrder("asc");
+                            }}
+                            className="h-11 rounded-lg border-border hover:bg-accent hover:text-accent-foreground"
+                            >
+                            Reset
+                            </Button>
+                        </div>
+                        </div>
 
-										<PaginationItem>
-											<PaginationNext
-												href="#"
-												onClick={(e) => {
-													e.preventDefault();
-													setCurrentPage((page) => Math.min(totalPages, page + 1));
-												}}
-												className={
-													currentPage === totalPages
-														? "pointer-events-none opacity-50"
-														: undefined
-												}
-											/>
-										</PaginationItem>
-									</PaginationContent>
-								</Pagination>
-							</div>
-						)}
-					</div>
-				</div>
-			</Card>
 
-			<EditTeacherDialog
-				open={editOpen}
-				onOpenChange={setEditOpen}
-				deleteOpen={deleteOpen}
-				onDeleteOpenChange={setDeleteOpen}
-				user={selectedUser}
-				onSuccess={fetchUsers}
-			/>
-		</div>
-	);
+                        {/* TABLE SECTION */}
+                        <div className="rounded-lg border border-border overflow-hidden">
+                            <div className="overflow-x-auto">
+                                <Table>
+                                    <TableHeader className="bg-muted/30">
+                                        <TableRow className="hover:bg-transparent border-b border-border">
+                                            <TableHead className="font-semibold text-foreground py-4 w-16 text-center">
+                                                #
+                                            </TableHead>
+                                            <TableHead className="font-semibold text-foreground py-4">
+                                                <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    onClick={() => toggleSort("name")}
+                                                    className="p-0 h-auto font-semibold hover:bg-transparent"
+                                                >
+                                                    Nama Guru
+                                                    {sortBy === "name" && (
+                                                        sortOrder === "asc" 
+                                                            ? <SortAsc className="w-3.5 h-3.5 ml-1" />
+                                                            : <SortDesc className="w-3.5 h-3.5 ml-1" />
+                                                    )}
+                                                </Button>
+                                            </TableHead>
+                                            <TableHead className="font-semibold text-foreground py-4">
+                                                No. Staff
+                                            </TableHead>
+                                            <TableHead className="font-semibold text-foreground py-4">
+                                                E-mel
+                                            </TableHead>
+                                            <TableHead className="font-semibold text-foreground py-4">
+                                                <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    onClick={() => toggleSort("roles")}
+                                                    className="p-0 h-auto font-semibold hover:bg-transparent"
+                                                >
+                                                    Jawatan
+                                                    {sortBy === "roles" && (
+                                                        sortOrder === "asc" 
+                                                            ? <SortAsc className="w-3.5 h-3.5 ml-1" />
+                                                            : <SortDesc className="w-3.5 h-3.5 ml-1" />
+                                                    )}
+                                                </Button>
+                                            </TableHead>
+                                            <TableHead className="font-semibold text-foreground py-4 text-right pr-6">
+                                                Tindakan
+                                            </TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+
+                                    <TableBody>
+                                        {loading ? (
+                                            <TableRow>
+                                                <TableCell colSpan={6} className="py-16">
+                                                    <div className="flex flex-col items-center justify-center gap-4">
+                                                        <div className="relative">
+                                                            <Loader2 className="w-10 h-10 animate-spin text-primary" />
+                                                        </div>
+                                                        <div className="text-center">
+                                                            <p className="font-semibold text-foreground">Memuatkan data guru...</p>
+                                                            <p className="text-sm text-muted-foreground mt-1">Sila tunggu sebentar</p>
+                                                        </div>
+                                                    </div>
+                                                </TableCell>
+                                            </TableRow>
+                                        ) : filteredUsers.length === 0 ? (
+                                            <TableRow>
+                                                <TableCell colSpan={6} className="py-16">
+                                                    <div className="flex flex-col items-center justify-center gap-4">
+                                                        <div className="p-4 rounded-full bg-muted/50">
+                                                            <Users className="w-12 h-12 text-muted-foreground/50" />
+                                                        </div>
+                                                        <div className="text-center">
+                                                            <p className="font-semibold text-foreground">Tiada guru dijumpai</p>
+                                                            <p className="text-sm text-muted-foreground mt-1 max-w-md">
+                                                                {searchQuery || filterRole !== "all" 
+                                                                    ? "Tiada guru yang sepadan dengan carian anda"
+                                                                    : "Mulakan dengan menambah guru pertama"}
+                                                            </p>
+                                                        </div>
+                                                        {!searchQuery && filterRole === "all" && (
+                                                            <AddTeacherDialog onSuccess={fetchUsers}>
+                                                                <Button className="bg-primary hover:bg-primary/90 text-primary-foreground">
+                                                                    <UserPlus className="w-4 h-4 mr-2" />
+                                                                    Tambah Guru Pertama
+                                                                </Button>
+                                                            </AddTeacherDialog>
+                                                        )}
+                                                    </div>
+                                                </TableCell>
+                                            </TableRow>
+                                        ) : (
+                                           paginatedUsers.map((user, index) => {
+  return (
+    <TableRow
+      key={user.id}
+      className="hover:bg-muted/50 transition-colors border-b border-border last:border-0 group"
+    >
+      {/* # Column (Clickable) */}
+      <TableCell
+        className="py-4 text-center cursor-pointer"
+        onClick={() => handleEditUser(user)}
+      >
+        <div className="font-medium text-muted-foreground hover:text-primary transition-colors">
+          {(currentPage - 1) * PAGE_SIZE + index + 1}
+        </div>
+      </TableCell>
+
+      {/* Nama Guru (Clickable) */}
+      <TableCell
+        className="py-4 cursor-pointer"
+        onClick={() => handleEditUser(user)}
+      >
+                <div className="flex items-center gap-3">
+                  <div className="relative">
+                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary/20 to-primary/10 border border-primary/20 flex items-center justify-center shadow-xs">
+                      <span className="font-semibold text-primary text-sm">
+                {user.name.toUpperCase().charAt(0)}
+                      </span>
+                    </div>
+                  </div>
+                  <div>
+                    <div className="font-semibold text-foreground hover:text-primary transition-colors">
+              {user.name.toUpperCase()}
+                    </div>
+                    {user.subjects && user.subjects.length > 0 && (
+                      <div className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
+                        <BookOpen className="w-3 h-3" />
+                        {user.subjects.slice(0, 2).join(", ")}
+                {user.subjects.length > 2 && "..."}
+              </div>
+            )}
+          </div>
+        </div>
+      </TableCell>
+
+      {/* No. Staff */}
+      <TableCell className="py-4">
+        <div className="font-mono bg-muted/30 px-3 py-1.5 rounded-md text-foreground border border-border">
+          {user.identifier}
+        </div>
+      </TableCell>
+
+      {/* E-mel */}
+      <TableCell className="py-4">
+        <div className="flex items-center gap-2 text-muted-foreground">
+          {user.email ? (
+            <>
+              <Mail className="w-3.5 h-3.5 flex-shrink-0" />
+              <span className="truncate">{user.email}</span>
+            </>
+          ) : (
+            <span className="text-muted-foreground/70">-</span>
+          )}
+        </div>
+      </TableCell>
+
+      {/* Peranan */}
+      <TableCell className="py-4">
+        <div className="flex flex-wrap gap-2">
+          {user.roles.map((roles) => {
+            const roleColors = getRoleColor(roles);
+
+            return (
+              <Badge
+                key={roles}
+                className={`px-3 py-1.5 rounded-md font-medium border
+                  ${roleColors.bg}
+                  ${roleColors.text}
+                  ${roleColors.border}`}
+              >
+                {roleColors.icon}
+                {roles === "subject teacher"
+                  ? "Guru Subjek"
+                  : roles === "class teacher"
+                  ? "Guru Kelas"
+                  : roles === "subject coordinator"
+                  ? "Panitia Subjek"
+                  : roles === "principal"
+                  ? "Pengetua"
+                  : roles}
+              </Badge>
+            );
+          })}
+        </div>
+      </TableCell>
+
+      {/* Tindakan */}
+      <TableCell className="py-4 text-right pr-6">
+        <div className="flex justify-end gap-2">
+          <Button
+            size="icon"
+            variant="outline"
+            className="h-8 w-8 text-blue-600"
+            onClick={() => handleEditUser(user)}
+          >
+            <Edit className="w-4 h-4" />
+          </Button>
+          <Button
+            size="icon"
+            variant="outline"
+            className="h-8 w-8 text-rose-600"
+            onClick={() => handleDeleteUser(user)}
+          >
+            <Trash2 className="w-4 h-4" />
+          </Button>
+        </div>
+      </TableCell>
+    </TableRow>
+  );
+})
+
+                                        )}
+                                    </TableBody>
+                                </Table>
+                            </div>
+                        </div>
+
+                    </CardContent>
+
+                    {/* FOOTER */}
+                    <div className="border-t border-border bg-muted/20 px-6 py-4">
+                        <div className="flex flex-col gap-4 text-sm">
+                            <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+                                <div className="flex items-center gap-2 text-muted-foreground">
+                                    <div className="flex items-center gap-1">
+                                        <span>Menunjukkan</span>
+                                        <span className="font-semibold text-foreground">{(currentPage - 1) * PAGE_SIZE + 1}
+                                        {" - "}
+                                        {Math.min(currentPage * PAGE_SIZE, filteredUsers.length)} </span>
+                                        <span>daripada</span>
+                                        <span className="font-semibold text-foreground">{users.length}</span>
+                                        <span>guru</span>
+                                    </div>
+                                    {filterRole !== "all" && (
+                                        <Badge variant="secondary" className="ml-2">
+                                            {filterRole === "subject teacher" ? "Guru Subjek" : 
+                                             filterRole === "teacher" ? "Guru Kelas" : 
+                                             filterRole === "admin" ? "Admin" : filterRole}
+                                        </Badge>
+                                    )}
+                                </div>
+                                <div className="flex items-center gap-4">
+                                    <div className="flex items-center gap-2 text-muted-foreground">
+                                        <Clock className="w-4 h-4" />
+                                        <span>Kemas kini: <LastUpdatedTime /></span>
+                                    </div>
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={fetchUsers}
+                                        disabled={loading}
+                                        className="h-8"
+                                    >
+                                        {loading && <Loader2 className="w-3 h-3 mr-2 animate-spin" />}
+                                        Muat Semula Data
+                                    </Button>
+                                </div>
+                            </div>
+
+                            {!loading && totalPages > 1 && (
+                                <div className="flex flex-col gap-3 border-t border-border/60 pt-4">
+                                    <Pagination>
+                                        <PaginationContent>
+                                            <PaginationItem>
+                                                <PaginationPrevious
+                                                    href="#"
+                                                    onClick={(e) => {
+                                                        e.preventDefault();
+                                                        setCurrentPage((page) => Math.max(1, page - 1));
+                                                    }}
+                                                    className={
+                                                        currentPage === 1
+                                                            ? "pointer-events-none opacity-50"
+                                                            : undefined
+                                                    }
+                                                />
+                                            </PaginationItem>
+
+                                            {paginationItems.map((item, index) => {
+                                                if (typeof item !== "number") {
+                                                    return (
+                                                        <PaginationItem key={`${item}-${index}`}>
+                                                            <PaginationEllipsis />
+                                                        </PaginationItem>
+                                                    );
+                                                }
+
+                                                return (
+                                                    <PaginationItem key={item}>
+                                                        <PaginationLink
+                                                            href="#"
+                                                            isActive={currentPage === item}
+                                                            onClick={(e) => {
+                                                                e.preventDefault();
+                                                                setCurrentPage(item);
+                                                            }}
+                                                        >
+                                                            {item}
+                                                        </PaginationLink>
+                                                    </PaginationItem>
+                                                );
+                                            })}
+
+                                            <PaginationItem>
+                                                <PaginationNext
+                                                    href="#"
+                                                    onClick={(e) => {
+                                                        e.preventDefault();
+                                                        setCurrentPage((page) =>
+                                                            Math.min(totalPages, page + 1)
+                                                        );
+                                                    }}
+                                                    className={
+                                                        currentPage === totalPages
+                                                            ? "pointer-events-none opacity-50"
+                                                            : undefined
+                                                    }
+                                                />
+                                            </PaginationItem>
+                                        </PaginationContent>
+                                    </Pagination>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </Card>
+
+                {/* FOOTER NOTES */}
+                <div className="text-center pt-6">
+                    <div className="inline-flex items-center gap-2 text-sm text-muted-foreground bg-card/50 backdrop-blur-sm px-4 py-2 rounded-full border border-border">
+                        <Shield className="w-4 h-4" />
+                        <span>Sistem Pemarkahan Pelajar v2.0 • Akses terkawal sepenuhnya</span>
+                    </div>
+                </div>
+                <EditTeacherDialog
+                    open={editOpen}
+                    onOpenChange={setEditOpen}
+                    deleteOpen={deleteOpen}
+                    onDeleteOpenChange={setDeleteOpen}
+                    user={selectedUser}
+                    onSuccess={fetchUsers}
+                    />
+
+            </div>
+        </div>
+    );
 }

@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
@@ -527,7 +527,10 @@ export function SubjectTeacherDashboard({ teacherId }: { teacherId: string }) {
 		if (names.length <= 2) return names.join(", ");
 		return `${names.slice(0, 2).join(", ")} +${names.length - 2} lagi`;
 	}, [assignments]);
-	const subjectWelcomeTitle = `Selamat Datang, ${teacherInfo?.name || "Guru Subjek"}`;
+	const subjectWelcomeTitle =
+		subjectSummary === "Belum ada subjek"
+			? "Selamat Datang, Guru Subjek"
+			: `Selamat Datang, Guru Subjek ${subjectSummary}`;
 
 	const subjectOptions = useMemo(() => {
 		const byId = new Map<string, string>();
@@ -600,17 +603,33 @@ export function SubjectTeacherDashboard({ teacherId }: { teacherId: string }) {
 	}
 
 	return (
-		<div className="flex flex-col gap-8 p-6 md:p-8">
-			<div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between border-b border-border/40 pb-6">
-				<div className="flex flex-col gap-1">
-					<p className="text-xs font-semibold tracking-[0.2em] uppercase text-primary">Guru Subjek</p>
-					<h1 className="!text-[36px] font-black leading-tight text-foreground">
-						{subjectWelcomeTitle}
-					</h1>
-					<p className="mt-1 text-sm text-muted-foreground">
-						Ringkasan tugasan pemarkahan, kelas diajar dan tarikh akhir hantar markah
-					</p>
-				</div>
+		<div className="min-h-screen bg-background p-4 md:p-6">
+			<div className="w-full max-w-none space-y-8">
+				<div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+					<div className="space-y-3">
+						<div className="flex items-center gap-4">
+							<div className="p-3 rounded-2xl bg-gradient-to-br from-primary/10 to-primary/5 border border-primary/20 shadow-sm">
+								<LayoutDashboard className="w-7 h-7 text-primary" />
+							</div>
+							<div>
+								<h1 className="text-2xl font-bold text-foreground tracking-tight">
+									{subjectWelcomeTitle}
+								</h1>
+								<p className="text-muted-foreground font-medium mt-1">
+									Ringkasan tugasan pemarkahan, kelas diajar dan tarikh akhir hantar markah
+								</p>
+							</div>
+						</div>
+						<div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
+							<div className="w-1 h-1 rounded-full bg-muted" />
+							<div className="flex items-center gap-1">
+								<Clock className="w-3.5 h-3.5" />
+								<span>
+									Kemas kini: <LastUpdatedTime />
+								</span>
+							</div>
+						</div>
+					</div>
 
 					<div className="flex flex-col gap-3 sm:flex-row sm:items-center">
 						<Button
@@ -629,24 +648,30 @@ export function SubjectTeacherDashboard({ teacherId }: { teacherId: string }) {
 					</div>
 				</div>
 
-				<div className="grid grid-cols-1 gap-px rounded-xl border border-border bg-border/40 overflow-hidden sm:grid-cols-3">
-					<div className="flex flex-col gap-1.5 bg-card p-6">
-						<p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Subjek Diajar</p>
-						<p className="!text-[36px] font-black leading-none text-primary">{subjectCount}</p>
-					</div>
-					<div className="flex flex-col gap-1.5 bg-card p-6">
-						<p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Jumlah Kelas</p>
-						<p className="!text-[36px] font-black leading-none text-primary">{classCount}</p>
-					</div>
-					<div className="flex flex-col gap-1.5 bg-card p-6">
-						<p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Tugasan</p>
-						<p className="!text-[36px] font-black leading-none text-primary">{assignments.length}</p>
-					</div>
+				<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+					<DashboardStatCard
+						label="Subjek Diajar"
+						value={subjectCount}
+						icon={BookOpen}
+						tone="primary"
+					/>
+					<DashboardStatCard
+						label="Jumlah Kelas"
+						value={classCount}
+						icon={Users}
+						tone="emerald"
+					/>
+					<DashboardStatCard
+						label="Tugasan"
+						value={assignments.length}
+						icon={ClipboardList}
+						tone="blue"
+					/>
 				</div>
 
 				<div className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:items-start">
 					<div className="space-y-6 lg:col-span-2">
-						<Card className="border-border bg-card shadow-sm rounded-xl overflow-hidden">
+						<Card className="border-border bg-card shadow-md rounded-xl overflow-hidden">
 							<CardContent className="grid grid-cols-1 gap-4 p-6 md:grid-cols-2">
 								<div className="space-y-2">
 									<div className="text-sm font-medium text-muted-foreground">Peperiksaan</div>
@@ -687,8 +712,8 @@ export function SubjectTeacherDashboard({ teacherId }: { teacherId: string }) {
 							</CardContent>
 						</Card>
 
-						<Card className="border-border bg-card shadow-sm rounded-xl overflow-hidden">
-						<CardHeader className="border-b border-border px-6 py-5">
+						<Card className="border-border bg-card shadow-md rounded-xl overflow-hidden">
+						<CardHeader className="border-b border-border bg-gradient-to-r from-card to-card/80 px-6 py-5">
 							<div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
 								<div>
 									<CardTitle className="text-xl font-bold text-foreground flex items-center gap-2">
@@ -880,8 +905,8 @@ export function SubjectTeacherDashboard({ teacherId }: { teacherId: string }) {
 					</div>
 
 					<div className="space-y-6">
-						<Card className="border-border bg-card shadow-sm rounded-xl overflow-hidden h-fit">
-							<CardHeader className="border-b border-border px-6 py-5">
+						<Card className="border-border bg-card shadow-md rounded-xl overflow-hidden h-fit">
+							<CardHeader className="border-b border-border bg-gradient-to-r from-card to-card/80 px-6 py-5">
 								<CardTitle className="text-xl font-bold text-foreground">
 									Maklumat Guru Subjek
 								</CardTitle>
@@ -894,8 +919,8 @@ export function SubjectTeacherDashboard({ teacherId }: { teacherId: string }) {
 							</CardContent>
 						</Card>
 
-						<Card className="border-border bg-card shadow-sm rounded-xl overflow-hidden h-fit">
-							<CardHeader className="border-b border-border px-6 py-5">
+						<Card className="border-border bg-card shadow-md rounded-xl overflow-hidden h-fit">
+							<CardHeader className="border-b border-border bg-gradient-to-r from-card to-card/80 px-6 py-5">
 								<CardTitle className="text-xl font-bold text-foreground">
 									Peringatan
 								</CardTitle>
@@ -971,6 +996,7 @@ export function SubjectTeacherDashboard({ teacherId }: { teacherId: string }) {
 					</div>
 				</div>
 			</div>
+		</div>
 	);
 
 }
@@ -1171,17 +1197,33 @@ export function ClassTeacherDashboard({ teacherId }: { teacherId: string }) {
 	}
 
 	return (
-		<div className="flex flex-col gap-8 p-6 md:p-8">
-			<div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between border-b border-border/40 pb-6">
-				<div className="flex flex-col gap-1">
-					<p className="text-xs font-semibold tracking-[0.2em] uppercase text-primary">Guru Kelas</p>
-					<h1 className="!text-[36px] font-black leading-tight text-foreground">
-						Selamat Datang, {data?.teacher?.name || "Guru Kelas"}
-					</h1>
-					<p className="mt-1 text-sm text-muted-foreground">
-						Ringkasan kelas, pelajar terbaik, dan senarai pelajar untuk semakan markah.
-					</p>
-				</div>
+		<div className="min-h-screen bg-background p-4 md:p-6">
+			<div className="w-full max-w-none space-y-8">
+				<div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
+					<div className="space-y-3">
+						<div className="flex items-center gap-4">
+							<div className="p-3 rounded-2xl bg-gradient-to-br from-primary/10 to-primary/5 border border-primary/20 shadow-sm">
+								<LayoutDashboard className="w-7 h-7 text-primary" />
+							</div>
+							<div>
+								<h1 className="text-2xl font-bold text-foreground tracking-tight">
+									Selamat Datang, Guru Kelas {classLabel}
+								</h1>
+								<p className="text-muted-foreground font-medium mt-1">
+									Ringkasan kelas, pelajar terbaik, dan senarai pelajar untuk semakan markah.
+								</p>
+							</div>
+						</div>
+						<div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
+							<div className="w-1 h-1 rounded-full bg-muted" />
+							<div className="flex items-center gap-1">
+								<Clock className="w-3.5 h-3.5" />
+								<span>
+									Kemas kini: <LastUpdatedTime />
+								</span>
+							</div>
+						</div>
+					</div>
 					<div className="flex flex-col gap-3 sm:flex-row sm:items-center">
 						<div className="inline-flex h-10 w-full items-center gap-2 rounded-md border border-border bg-background px-4 text-sm font-medium text-foreground shadow-xs sm:w-auto sm:max-w-[260px]">
 							<School className="h-4 w-4 shrink-0 text-primary" />
@@ -1206,7 +1248,7 @@ export function ClassTeacherDashboard({ teacherId }: { teacherId: string }) {
 				<div className="grid grid-cols-1 gap-6 md:grid-cols-3">
 					{quickAccess.map((item) => (
 						<Link key={item.title} href={item.href} className="group">
-							<Card className="h-full border-border bg-card shadow-sm rounded-xl overflow-hidden transition-all hover:-translate-y-0.5 hover:shadow-sm">
+							<Card className="h-full border-border bg-card shadow-md rounded-xl overflow-hidden transition-all hover:-translate-y-0.5 hover:shadow-lg">
 								<CardContent className="flex items-start gap-4 p-6">
 									<div className={`rounded-xl border p-3 ${item.accent}`}>
 										<item.icon className="h-6 w-6" />
@@ -1227,8 +1269,8 @@ export function ClassTeacherDashboard({ teacherId }: { teacherId: string }) {
 
 				<div className="grid grid-cols-1 gap-6 lg:grid-cols-3 lg:items-start">
 					<div className="space-y-6 lg:col-span-2">
-						<Card className="border-border bg-card shadow-sm rounded-xl overflow-hidden">
-							<CardHeader className="border-b border-border px-6 py-5">
+						<Card className="border-border bg-card shadow-md rounded-xl overflow-hidden">
+							<CardHeader className="border-b border-border bg-gradient-to-r from-card to-card/80 px-6 py-5">
 								<div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
 									<div>
 										<CardTitle className="flex items-center gap-2 text-xl font-bold">
@@ -1326,8 +1368,8 @@ export function ClassTeacherDashboard({ teacherId }: { teacherId: string }) {
 					</div>
 
 					<div className="space-y-6">
-						<Card className="border-border bg-card shadow-sm rounded-xl overflow-hidden">
-							<CardHeader className="border-b border-border px-6 py-5">
+						<Card className="border-border bg-card shadow-md rounded-xl overflow-hidden">
+							<CardHeader className="border-b border-border bg-gradient-to-r from-card to-card/80 px-6 py-5">
 								<CardTitle className="text-xl font-bold">Maklumat Guru Kelas</CardTitle>
 							</CardHeader>
 							<CardContent className="space-y-4 p-6">
@@ -1338,8 +1380,8 @@ export function ClassTeacherDashboard({ teacherId }: { teacherId: string }) {
 							</CardContent>
 						</Card>
 
-						<Card className="border-border bg-card shadow-sm rounded-xl overflow-hidden">
-							<CardHeader className="border-b border-border px-6 py-5">
+						<Card className="border-border bg-card shadow-md rounded-xl overflow-hidden">
+							<CardHeader className="border-b border-border bg-gradient-to-r from-card to-card/80 px-6 py-5">
 								<CardTitle className="flex items-center gap-2 text-xl font-bold">
 									<Trophy className="h-5 w-5 text-primary" />
 									Top 3 Pelajar Terbaik
@@ -1374,6 +1416,7 @@ export function ClassTeacherDashboard({ teacherId }: { teacherId: string }) {
 						</Card>
 					</div>
 				</div>
+			</div>
 
 			<Dialog
 				open={Boolean(selectedStudent)}
@@ -1394,7 +1437,7 @@ export function ClassTeacherDashboard({ teacherId }: { teacherId: string }) {
 					</DialogHeader>
 
 					<div className="space-y-4 px-1 pb-2">
-						<Card className="overflow-hidden rounded-xl border-border bg-card shadow-sm">
+						<Card className="overflow-hidden rounded-xl border-border bg-card shadow-md">
 							<CardHeader className="border-b border-border px-6 py-5">
 								<CardTitle className="flex items-center gap-2 text-base font-bold">
 									<FileSpreadsheet className="h-5 w-5 text-primary" />
@@ -1435,7 +1478,7 @@ export function ClassTeacherDashboard({ teacherId }: { teacherId: string }) {
 							</CardContent>
 						</Card>
 
-						<Card className="overflow-hidden rounded-xl border-border bg-card shadow-sm">
+						<Card className="overflow-hidden rounded-xl border-border bg-card shadow-md">
 							<CardHeader className="border-b border-border px-6 py-5">
 								<CardTitle className="flex items-center gap-2 text-base font-bold">
 									<MessageSquareText className="h-5 w-5 text-primary" />
@@ -1535,18 +1578,39 @@ export function ClassTeacherAnalyticsDashboard({ teacherId }: { teacherId: strin
 	}, [summary?.categoryBreakdown]);
 
 	return (
-		<div className="flex flex-col gap-8 p-6 md:p-8">
-			<div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between border-b border-border/40 pb-6">
-				<div className="flex flex-col gap-1">
-					<p className="text-xs font-semibold tracking-[0.2em] uppercase text-primary">Guru Kelas</p>
-					<h1 className="!text-[36px] font-black leading-tight text-foreground">
-						Laporan Kelas
-					</h1>
-					<p className="mt-1 text-sm text-muted-foreground">
-						Tingkatan {grade || "-"} · Kelas{" "}
-						<span className="font-semibold text-foreground">{className || "Belum ditetapkan"}</span>
-					</p>
-				</div>
+		<div className="min-h-screen bg-background p-4 md:p-6">
+			<div className="w-full max-w-none space-y-8">
+				<div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
+					<div className="space-y-3">
+						<div className="flex items-center gap-4">
+							<BarChart3 className="h-7 w-7 shrink-0 text-primary" />
+							<div>
+								<h1 className="text-2xl font-bold text-foreground tracking-tight">
+									Laporan Kelas
+								</h1>
+								<p className="text-muted-foreground font-medium mt-1">
+									Tingkatan {grade || "-"} | Guru Kelas:{" "}
+									<span className="text-primary font-bold">
+										{className || "Belum ditetapkan"}
+									</span>
+								</p>
+								{selectedExam && (
+									<p className="text-xs text-muted-foreground mt-1">
+										{selectedExam.name} ({selectedExam.academic_year})
+									</p>
+								)}
+							</div>
+						</div>
+						<div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
+							<div className="w-1 h-1 rounded-full bg-muted" />
+							<div className="flex items-center gap-1">
+								<Clock className="w-3.5 h-3.5" />
+								<span>
+									Kemas kini: <LastUpdatedTime />
+								</span>
+							</div>
+						</div>
+					</div>
 
 					<div className="flex flex-col gap-3 sm:flex-row sm:items-center">
 						<Select value={selectedExamId} onValueChange={setSelectedExamId}>
@@ -1567,7 +1631,7 @@ export function ClassTeacherAnalyticsDashboard({ teacherId }: { teacherId: strin
 				<div className="grid grid-cols-1 gap-6">
 					<div className="space-y-6">
 						{loading ? (
-							<Card className="border-border bg-card shadow-sm">
+							<Card className="border-border bg-card shadow-lg">
 								<CardContent className="py-20 text-center">
 									<Loader2 className="w-10 h-10 animate-spin text-primary mx-auto" />
 									<p className="text-sm text-muted-foreground mt-4">
@@ -1576,7 +1640,7 @@ export function ClassTeacherAnalyticsDashboard({ teacherId }: { teacherId: strin
 								</CardContent>
 							</Card>
 						) : !summary ? (
-							<Card className="border-border bg-card shadow-sm">
+							<Card className="border-border bg-card shadow-lg">
 								<CardContent className="py-16 text-center">
 									<p className="font-semibold">Tiada data keputusan diluluskan lagi.</p>
 									<p className="text-sm text-muted-foreground mt-1">
@@ -1586,24 +1650,30 @@ export function ClassTeacherAnalyticsDashboard({ teacherId }: { teacherId: strin
 							</Card>
 						) : (
 							<>
-								<div className="grid grid-cols-1 gap-px rounded-xl border border-border bg-border/40 overflow-hidden sm:grid-cols-3">
-									<div className="flex flex-col gap-1.5 bg-card p-6">
-										<p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Purata Kelas</p>
-										<p className="!text-[36px] font-black leading-none text-primary">{classAverage}%</p>
-									</div>
-									<div className="flex flex-col gap-1.5 bg-card p-6">
-										<p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Pelajar Perlu Perhatian</p>
-										<p className="!text-[36px] font-black leading-none text-primary">{attentionCount}</p>
-									</div>
-									<div className="flex flex-col gap-1.5 bg-card p-6">
-										<p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Jumlah Pelajar</p>
-										<p className="!text-[36px] font-black leading-none text-primary">{data?.totalStudents ?? 0}</p>
-									</div>
+								<div className="grid grid-cols-1 gap-6 md:grid-cols-3">
+									<DashboardStatCard
+										label="Purata Kelas"
+										value={`${classAverage}%`}
+										icon={BarChart3}
+										tone="primary"
+									/>
+									<DashboardStatCard
+										label="Pelajar Perlu Perhatian"
+										value={attentionCount}
+										icon={AlertTriangle}
+										tone="blue"
+									/>
+									<DashboardStatCard
+										label="Jumlah Pelajar"
+										value={data?.totalStudents ?? 0}
+										icon={Users}
+										tone="emerald"
+									/>
 								</div>
 
 								<div className="grid grid-cols-1 gap-6 lg:grid-cols-[320px_1fr]">
-									<Card className="border-border bg-card shadow-sm rounded-xl overflow-hidden">
-										<CardHeader className="border-b border-border px-6 py-5">
+									<Card className="border-border bg-card shadow-md rounded-xl overflow-hidden">
+										<CardHeader className="border-b border-border bg-gradient-to-r from-card to-card/80 px-6 py-5">
 											<CardTitle className="flex items-center gap-2 text-xl font-bold text-foreground">
 												<ChartPie className="h-5 w-5 text-primary" />
 												Analisis Gred
@@ -1649,8 +1719,8 @@ export function ClassTeacherAnalyticsDashboard({ teacherId }: { teacherId: strin
 										</CardContent>
 									</Card>
 
-									<Card className="border-border bg-card shadow-sm rounded-xl overflow-hidden">
-										<CardHeader className="border-b border-border px-6 py-5">
+									<Card className="border-border bg-card shadow-md rounded-xl overflow-hidden">
+										<CardHeader className="border-b border-border bg-gradient-to-r from-card to-card/80 px-6 py-5">
 											<CardTitle className="flex items-center gap-2 text-xl font-bold text-foreground">
 												<TrendingUp className="h-5 w-5 text-primary" />
 												Trend Prestasi
@@ -1681,8 +1751,8 @@ export function ClassTeacherAnalyticsDashboard({ teacherId }: { teacherId: strin
 								</div>
 
 								<div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-									<Card className="border-border bg-card shadow-sm rounded-xl overflow-hidden">
-								<CardHeader className="border-b border-border px-6 py-5">
+									<Card className="border-border bg-card shadow-md rounded-xl overflow-hidden">
+								<CardHeader className="border-b border-border bg-gradient-to-r from-card to-card/80 px-6 py-5">
 									<CardTitle className="flex items-center gap-2">
 										<Trophy className="w-5 h-5 text-primary" />
 										3 Pelajar Terbaik Kelas 
@@ -1715,8 +1785,8 @@ export function ClassTeacherAnalyticsDashboard({ teacherId }: { teacherId: strin
 								</CardContent>
 							</Card>
 
-							<Card className="border-border bg-card shadow-sm rounded-xl overflow-hidden xl:col-span-2">
-								<CardHeader className="border-b border-border px-6 py-5">
+							<Card className="border-border bg-card shadow-md rounded-xl overflow-hidden xl:col-span-2">
+								<CardHeader className="border-b border-border bg-gradient-to-r from-card to-card/80 px-6 py-5">
 									<CardTitle className="flex items-center gap-2 text-xl font-bold text-foreground">
 										<BarChart3 className="h-5 w-5 text-primary" />
 										Perbandingan Prestasi Subjek
@@ -1746,8 +1816,8 @@ export function ClassTeacherAnalyticsDashboard({ teacherId }: { teacherId: strin
 						</div>
 
 						<div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-							<Card className="border-border bg-card shadow-sm rounded-xl overflow-hidden">
-								<CardHeader className="border-b border-border px-6 py-5">
+							<Card className="border-border bg-card shadow-md rounded-xl overflow-hidden">
+								<CardHeader className="border-b border-border bg-gradient-to-r from-card to-card/80 px-6 py-5">
 									<CardTitle className="flex items-center gap-2">
 										<AlertTriangle className="w-5 h-5 text-primary" />
 										Pelajar Perlu Perhatian
@@ -1800,8 +1870,8 @@ export function ClassTeacherAnalyticsDashboard({ teacherId }: { teacherId: strin
 									</div>
 								</CardContent>
 							</Card>
-							<Card className="border-border bg-card shadow-sm rounded-xl overflow-hidden">
-								<CardHeader className="border-b border-border px-6 py-5">
+							<Card className="border-border bg-card shadow-md rounded-xl overflow-hidden">
+								<CardHeader className="border-b border-border bg-gradient-to-r from-card to-card/80 px-6 py-5">
 									<CardTitle className="flex items-center gap-2 text-xl font-bold text-foreground">
 										<ChartPie className="h-5 w-5 text-primary" />
 										Pecahan Kategori Prestasi
@@ -1845,8 +1915,8 @@ export function ClassTeacherAnalyticsDashboard({ teacherId }: { teacherId: strin
 							</Card>
 						</div>
 
-						<Card className="border-border bg-card shadow-sm rounded-xl overflow-hidden">
-							<CardHeader className="border-b border-border px-6 py-5">
+						<Card className="border-border bg-card shadow-md rounded-xl overflow-hidden">
+							<CardHeader className="border-b border-border bg-gradient-to-r from-card to-card/80 px-6 py-5">
 								<CardTitle className="flex items-center gap-2">
 									<Lightbulb className="w-5 h-5 text-primary" />
 									Analisis Kelas
@@ -1862,6 +1932,7 @@ export function ClassTeacherAnalyticsDashboard({ teacherId }: { teacherId: strin
 						)}
 					</div>
 				</div>
+			</div>
 		</div>
 	);
 }
@@ -1885,7 +1956,7 @@ function DashboardStatCard({
 				: "text-primary bg-primary/10 border-primary/20";
 
 	return (
-		<Card className="border-border bg-card shadow-sm rounded-xl overflow-hidden">
+		<Card className="border-border bg-card shadow-md rounded-xl overflow-hidden">
 			<CardContent className="flex items-center justify-between p-5">
 				<div className="min-w-0 pr-4">
 					<p className="text-sm text-muted-foreground">{label}</p>

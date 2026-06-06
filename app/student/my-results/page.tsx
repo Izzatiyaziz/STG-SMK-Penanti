@@ -9,9 +9,15 @@ import {
     TableHeader,
     TableRow,
 } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { FileText } from "lucide-react";
+import {
+    BarChart3,
+    TrendingUp,
+    FileText,
+    ClipboardList,
+    Percent,
+    Trophy,
+} from "lucide-react";
 import Link from "next/link";
 import PerformanceTrendChart from "./performance-trend-chart";
 
@@ -21,17 +27,8 @@ type SubjectResult = {
     grade: string;
 };
 
-function gradeColor(grade: string) {
-    switch (String(grade ?? "").trim().toUpperCase()) {
-        case "A":  return "bg-emerald-100 text-emerald-700 border-emerald-200";
-        case "B":  return "bg-sky-100 text-sky-700 border-sky-200";
-        case "C":  return "bg-amber-100 text-amber-700 border-amber-200";
-        case "D":  return "bg-orange-100 text-orange-700 border-orange-200";
-        default:   return "bg-rose-100 text-rose-700 border-rose-200";
-    }
-}
-
 export default function MyResultsPage() {
+    // ================= DUMMY DATA =================
     const summary = {
         exam: "UPSA 2025",
         average: 37.5,
@@ -52,79 +49,117 @@ export default function MyResultsPage() {
         advice: "Prestasi keseluruhan adalah sederhana. Pelajar disarankan memberi tumpuan kepada subjek Matematik melalui latihan berterusan dan bimbingan tambahan.",
     };
 
-    const stats = [
-        { label: "Peperiksaan",     value: summary.exam },
-        { label: "Purata Markah",   value: `${summary.average}%` },
-        { label: "Kedudukan Kelas", value: summary.classRank },
-    ];
-
     return (
-        <div className="flex flex-col gap-8 p-6 md:p-8">
-            {/* PAGE HEADER */}
-            <div className="flex flex-col gap-1 border-b border-border/40 pb-6">
-                <p className="text-xs font-semibold tracking-[0.2em] uppercase text-primary">
-                    Pelajar
-                </p>
-                <h1 className="!text-[36px] font-black leading-tight text-foreground">
-                    Keputusan Saya
-                </h1>
-                <p className="mt-1 text-sm text-muted-foreground">
-                    Paparan ringkas keputusan peperiksaan dan analisis prestasi.
-                </p>
-            </div>
-
-            {/* STAT GRID */}
-            <div className="grid grid-cols-1 gap-px bg-border/40 sm:grid-cols-3">
-                {stats.map((stat) => (
-                    <div key={stat.label} className="flex flex-col gap-1.5 bg-card p-6">
-                        <span className="!text-[36px] font-black leading-none text-primary">
-                            {stat.value}
-                        </span>
-                        <span className="text-sm text-muted-foreground">{stat.label}</span>
+        <div className="min-h-screen bg-gradient-to-b from-background to-muted/20 p-4 md:p-6">
+            <div className="max-w-7xl mx-auto space-y-6">
+                {/* ================= HEADER ================= */}
+                <div className="space-y-1">
+                    <div className="flex items-center gap-3">
+                        <div className="p-2 rounded-xl bg-primary/10">
+                            <BarChart3 className="w-6 h-6 text-primary" />
+                        </div>
+                        <h1 className="text-3xl font-bold tracking-tight">
+                            Keputusan Saya
+                        </h1>
                     </div>
-                ))}
-            </div>
-
-            {/* TREND CHART */}
-            <div>
-                <div className="mb-3 flex items-baseline gap-3">
-                    <h2 className="font-semibold text-foreground">Trend Prestasi Akademik</h2>
-                    <span className="text-xs text-muted-foreground">
-                        Perbandingan peratus pencapaian bagi setiap peperiksaan
-                    </span>
+                    <p className="text-muted-foreground">
+                        Paparan ringkas keputusan peperiksaan dan analisis
+                        prestasi.
+                    </p>
                 </div>
-                <Card className="border-border bg-card shadow-sm">
+
+                {/* ================= SUMMARY CARDS (DENGAN ICON) ================= */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    {/* Peperiksaan */}
+                    <Card className="shadow-lg border border-border/50">
+                        <CardContent className="flex items-center justify-between gap-4 p-6">
+                            <div className="min-w-0">
+                                <p className="text-sm text-muted-foreground">
+                                    Peperiksaan
+                                </p>
+                                <h3 className="font-semibold mt-2">
+                                    {summary.exam}
+                                </h3>
+                            </div>
+                            <div className="p-3 rounded-full bg-primary/10">
+                                <ClipboardList className="w-6 h-6 text-primary" />
+                            </div>
+                        </CardContent>
+                    </Card>
+
+                    {/* Purata Markah */}
+                    <Card className="shadow-lg border border-border/50">
+                        <CardContent className="flex items-center justify-between gap-4 p-6">
+                            <div className="min-w-0">
+                                <p className="text-sm text-muted-foreground">
+                                    Purata Markah
+                                </p>
+                                <h3 className="text-2xl font-bold mt-2 text-primary">
+                                    {summary.average}%
+                                </h3>
+                            </div>
+                            <div className="p-3 rounded-full bg-secondary/10">
+                                <Percent className="w-6 h-6 text-secondary" />
+                            </div>
+                        </CardContent>
+                    </Card>
+
+                    {/* Kedudukan Kelas */}
+                    <Card className="shadow-lg border border-border/50">
+                        <CardContent className="flex items-center justify-between gap-4 p-6">
+                            <div className="min-w-0">
+                                <p className="text-sm text-muted-foreground">
+                                    Kedudukan Kelas
+                                </p>
+                                <h3 className="text-xl font-semibold mt-2">
+                                    {summary.classRank}
+                                </h3>
+                            </div>
+                            <div className="p-3 rounded-full bg-accent/10">
+                                <Trophy className="w-6 h-6 text-accent" />
+                            </div>
+                        </CardContent>
+                    </Card>
+                </div>
+
+                {/* ================= TREND GRAPH ================= */}
+                <Card className="shadow-lg border border-border/50">
                     <CardContent className="p-6">
+                        <h2 className="text-xl font-semibold mb-1">
+                            Trend Prestasi Akademik
+                        </h2>
+                        <p className="text-sm text-muted-foreground mb-4">
+                            Perbandingan peratus pencapaian bagi setiap
+                            peperiksaan.
+                        </p>
                         <PerformanceTrendChart />
                     </CardContent>
                 </Card>
-            </div>
 
-            {/* SUBJECT TABLE */}
-            <div>
-                <div className="mb-3 flex items-baseline gap-3">
-                    <h2 className="font-semibold text-foreground">Keputusan Subjek</h2>
-                    <span className="text-xs text-muted-foreground">{summary.exam}</span>
-                </div>
-                <Card className="overflow-hidden border-border bg-card shadow-sm">
+                {/* ================= SUBJECT TABLE ================= */}
+                <Card className="shadow-lg border border-border/50">
                     <CardContent className="p-0">
                         <Table>
                             <TableHeader>
                                 <TableRow>
                                     <TableHead>Mata Pelajaran</TableHead>
-                                    <TableHead className="text-center">Markah</TableHead>
-                                    <TableHead className="text-center">Gred</TableHead>
+                                    <TableHead className="text-center">
+                                        Markah
+                                    </TableHead>
+                                    <TableHead className="text-center">
+                                        Gred
+                                    </TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
                                 {subjects.map((s, i) => (
                                     <TableRow key={i}>
-                                        <TableCell className="font-medium">{s.subject}</TableCell>
-                                        <TableCell className="text-center">{s.mark}</TableCell>
+                                        <TableCell>{s.subject}</TableCell>
                                         <TableCell className="text-center">
-                                            <Badge variant="outline" className={gradeColor(s.grade)}>
-                                                {s.grade}
-                                            </Badge>
+                                            {s.mark}
+                                        </TableCell>
+                                        <TableCell className="text-center">
+                                            {s.grade}
                                         </TableCell>
                                     </TableRow>
                                 ))}
@@ -132,36 +167,37 @@ export default function MyResultsPage() {
                         </Table>
                     </CardContent>
                 </Card>
-            </div>
 
-            {/* AI INSIGHT */}
-            <div>
-                <div className="mb-3">
-                    <h2 className="font-semibold text-foreground">Sorotan Prestasi AI</h2>
-                </div>
-                <Card className="border-border bg-card shadow-sm">
-                    <CardContent className="space-y-2 p-6">
+                {/* ================= AI INSIGHT ================= */}
+                <Card className="shadow-lg border border-border/50">
+                    <CardContent className="p-6 space-y-2">
+                         <div className="flex items-center gap-2">
+                             <TrendingUp className="w-5 h-5 text-primary" />
+                             <h2 className="text-lg font-semibold">
+                                 Sorotan Prestasi AI
+                             </h2>
+                         </div>
                         <p className="text-sm">
-                            <span className="font-semibold text-foreground">Kekuatan: </span>
-                            <span className="text-muted-foreground">{aiInsight.strength}</span>
+                            <b>Kekuatan:</b> {aiInsight.strength}
                         </p>
                         <p className="text-sm">
-                            <span className="font-semibold text-foreground">Perlu Penambahbaikan: </span>
-                            <span className="text-muted-foreground">{aiInsight.weakness}</span>
+                            <b>Perlu Penambahbaikan:</b> {aiInsight.weakness}
                         </p>
-                        <p className="text-sm italic text-muted-foreground">{aiInsight.advice}</p>
+                        <p className="text-sm italic text-muted-foreground">
+                            {aiInsight.advice}
+                        </p>
                     </CardContent>
                 </Card>
-            </div>
 
-            {/* CTA */}
-            <div className="flex justify-end">
-                <Link href="/student/report-card">
-                    <Button>
-                        <FileText className="mr-2 h-4 w-4" />
-                        Lihat Slip Keputusan
-                    </Button>
-                </Link>
+                {/* ================= ACTION ================= */}
+                <div className="flex justify-end">
+                    <Link href="/student/report-card">
+                        <Button className="w-full sm:w-auto">
+                            <FileText className="w-4 h-4 mr-2" />
+                            Lihat Slip Keputusan
+                        </Button>
+                    </Link>
+                </div>
             </div>
         </div>
     );
