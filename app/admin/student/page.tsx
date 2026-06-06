@@ -67,6 +67,7 @@ import {
     formatMalaysiaTime,
     getMalaysiaDateInputValue,
 } from "@/lib/date-utils";
+import { exportStudentsPDF } from "@/lib/export-pdf";
 
 type ClassRow = { id: string; name: string; grade: number };
 
@@ -324,9 +325,21 @@ export default function AdminStudentsPage() {
 
     // ================= ACTIONS =================
     const handleExport = () => {
-        toast.success("Data pelajar berjaya dieksport", {
-            description: "Fail sedang dimuat turun...",
-        });
+        if (filteredStudents.length === 0) {
+            toast.error("Tiada data untuk dieksport");
+            return;
+        }
+        const parts: string[] = [];
+        if (filterLevel !== "all" && filterLevel !== "default-level-1") {
+            parts.push(`Tingkatan ${filterLevel}`);
+        } else if (filterLevel === "default-level-1") {
+            parts.push("Tingkatan 1");
+        }
+        if (filterClassName !== "all") {
+            parts.push(filterClassName === "__unassigned__" ? "Belum Tetap" : filterClassName);
+        }
+        exportStudentsPDF(filteredStudents, parts.length ? parts.join(", ") : undefined);
+        toast.success("PDF sedang dimuat turun...");
     };
 
 

@@ -53,6 +53,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
 import { EditTeacherDialog } from "./edit-teacher-dialog";
 import { formatMalaysiaTime } from "@/lib/date-utils";
+import { exportTeachersPDF } from "@/lib/export-pdf";
 
 type User = {
     id: string;
@@ -259,9 +260,24 @@ export default function UsersPage() {
 
     // ================= ACTIONS =================
     const handleExport = () => {
-        toast.success("Data guru berjaya dieksport", {
-            description: "Fail sedang dimuat turun...",
-        });
+        if (filteredUsers.length === 0) {
+            toast.error("Tiada data untuk dieksport");
+            return;
+        }
+        const filterLabel =
+            filterRole === "all"
+                ? undefined
+                : filterRole === "class teacher"
+                    ? "Guru Kelas"
+                    : filterRole === "subject teacher"
+                        ? "Guru Subjek"
+                        : filterRole === "subject coordinator"
+                            ? "Panitia Subjek"
+                            : filterRole === "principal"
+                                ? "Pengetua"
+                                : filterRole;
+        exportTeachersPDF(filteredUsers, filterLabel);
+        toast.success("PDF sedang dimuat turun...");
     };
 
     const handleEditUser = (user: User) => {
