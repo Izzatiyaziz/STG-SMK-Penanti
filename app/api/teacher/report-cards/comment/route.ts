@@ -88,9 +88,11 @@ function buildPromptInput(params: {
 
 async function generateAiComment(prompt_input: string) {
     const reportAiServiceUrl =
-      process.env.REPORT_AI_SERVICE_URL ||
-      process.env.OMR_SERVICE_URL ||
-      "https://stg-smk-penanti-omr.fly.dev";
+      process.env.NODE_ENV === "production"
+        ? "https://stg-smk-penanti-omr.fly.dev"
+        : process.env.REPORT_AI_SERVICE_URL ||
+          process.env.OMR_SERVICE_URL ||
+          "http://127.0.0.1:8000";
     const res = await fetch(`${reportAiServiceUrl}/report-comment`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
