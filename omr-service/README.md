@@ -109,6 +109,22 @@ The configured machine uses `shared-cpu-1x` with 1 GB RAM. It stops when idle
 and starts when a request arrives. Fly.io still charges for actual usage and
 stopped-machine root filesystem storage.
 
+### Fly.io GitHub deployment settings
+
+The repository root also contains `Dockerfile.fly` and `fly.toml` specifically
+for Fly.io's GitHub deployment flow. Use:
+
+```text
+Working directory: ./
+Config path: fly.toml
+Internal port: 8080
+Memory: 1GB
+```
+
+The root `fly.toml` explicitly selects `Dockerfile.fly`, which copies and builds
+only the Python OMR service. This prevents Fly's GitHub launcher from generating
+and building a Next.js Dockerfile.
+
 ## Endpoint
 
 - `POST /grade`

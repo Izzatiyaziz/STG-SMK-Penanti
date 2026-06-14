@@ -49,6 +49,7 @@ export async function POST(req: Request) {
         warped_image_base64: image_base64,
         corners_found: false,
         fallback_used: true,
+        image_is_canonical: false,
       });
     }
 
@@ -56,7 +57,8 @@ export async function POST(req: Request) {
       success: true,
       warped_image_base64: serviceData.warped_image_base64,
       corners_found: serviceData.corners_found ?? false,
-      fallback_used: !serviceData.corners_found,
+      fallback_used: false,
+      image_is_canonical: true,
     });
   } catch (err) {
     console.error("POST teacher/omr/warp FAILED:", err);

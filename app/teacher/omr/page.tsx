@@ -146,6 +146,46 @@ function getCameraErrorMessage(error: unknown) {
   return "Kamera tidak dapat diakses. Cuba semula atau guna Kamera Sistem.";
 }
 
+function AnswerZoneOverlay() {
+  const template = buildSpmTemplateBundle(MAX_SPM_TEMPLATE_QUESTIONS, "camera").template as Record<
+    string,
+    Record<string, { x: number; y: number; r: number }>
+  >;
+
+  return (
+    <div className="pointer-events-none absolute inset-0">
+      <div
+        className="absolute rounded-sm border-2 border-dashed border-sky-400 bg-sky-400/5"
+        style={{
+          left: `${(350 / 955) * 100}%`,
+          top: `${(300 / 1280) * 100}%`,
+          width: `${(580 / 955) * 100}%`,
+          height: `${(900 / 1280) * 100}%`,
+        }}
+      >
+        <span className="absolute left-1/2 top-2 -translate-x-1/2 whitespace-nowrap rounded bg-black/75 px-2 py-1 text-[9px] font-semibold text-sky-100">
+          Pastikan cincin tepat di atas bulatan jawapan
+        </span>
+      </div>
+      {Object.entries(template).flatMap(([questionNo, options]) =>
+        Object.entries(options).map(([option, point]) => (
+          <span
+            key={`${questionNo}-${option}`}
+            className="absolute rounded-full border border-emerald-400 bg-emerald-400/10"
+            style={{
+              left: `${(point.x / 955) * 100}%`,
+              top: `${(point.y / 1280) * 100}%`,
+              width: `${((point.r * 2) / 955) * 100}%`,
+              aspectRatio: "1",
+              transform: "translate(-50%, -50%)",
+            }}
+          />
+        ))
+      )}
+    </div>
+  );
+}
+
 async function optimizeOmrImage(imageDataUrl: string) {
   const image = document.createElement("img");
   image.decoding = "async";
@@ -213,6 +253,7 @@ export default function OMRScanPage() {
   const [scanFlowState, setScanFlowState] = useState<ScanFlowState>("idle");
   const [warpedImage, setWarpedImage] = useState<string | null>(null);
   const [cornersFound, setCornersFound] = useState(false);
+  const [warpedImageIsCanonical, setWarpedImageIsCanonical] = useState(false);
   const [capturedImageIsWarped, setCapturedImageIsWarped] = useState(false);
   const [autoCapture, setAutoCapture] = useState<boolean>(() => {
     if (typeof window === "undefined") return true;
@@ -476,7 +517,7 @@ export default function OMRScanPage() {
     return () => { stopCamera(); };
   }, [activeTab, isMobileScanDevice, startCamera, stopCamera]);
 
-  async function callWarp(imageBase64: string): Promise<{ warped: string; cornersFound: boolean }> {
+  async function callWarp(imageBase64: string): Promise<{ warped: string; cornersFound: boolean; isCanonical: boolean }> {
     try {
       const res = await fetch("/api/teacher/omr/warp", {
         method: "POST",
@@ -485,11 +526,15 @@ export default function OMRScanPage() {
       });
       const json = await res.json();
       if (!res.ok || !json?.success) {
-        return { warped: imageBase64, cornersFound: false };
+        return { warped: imageBase64, cornersFound: false, isCanonical: false };
       }
-      return { warped: json.warped_image_base64, cornersFound: !!json.corners_found };
+      return {
+        warped: json.warped_image_base64,
+        cornersFound: !!json.corners_found,
+        isCanonical: json.image_is_canonical === true,
+      };
     } catch {
-      return { warped: imageBase64, cornersFound: false };
+      return { warped: imageBase64, cornersFound: false, isCanonical: false };
     }
   }
 
@@ -504,9 +549,10 @@ export default function OMRScanPage() {
       setImageProcessingProfile(profile);
       stopCamera();
       setScanFlowState("warping");
-      const { warped, cornersFound: cf } = await callWarp(optimizedImage);
+      const { warped, cornersFound: cf, isCanonical } = await callWarp(optimizedImage);
       setWarpedImage(warped);
       setCornersFound(cf);
+      setWarpedImageIsCanonical(isCanonical);
       setScanFlowState("preview");
     } catch {
       toast.error("Gagal memproses imej");
@@ -521,7 +567,7 @@ export default function OMRScanPage() {
   function confirmWarp() {
     if (!warpedImage) return;
     setCapturedImage(warpedImage);
-    setCapturedImageIsWarped(cornersFound);
+    setCapturedImageIsWarped(warpedImageIsCanonical);
     setScanFlowState("idle");
   }
 
@@ -530,6 +576,7 @@ export default function OMRScanPage() {
     setCapturedImage(null);
     setCapturedImageIsWarped(false);
     setWarpedImage(null);
+    setWarpedImageIsCanonical(false);
     captureInProgressRef.current = false;
     startCamera();
   }
@@ -992,18 +1039,25 @@ export default function OMRScanPage() {
                   <p className="text-sm font-medium text-white">Membetulkan perspektif...</p>
                 </div>
               ) : scanFlowState === "preview" ? (
-                <div className="relative" style={{ minHeight: "min(70dvh, 520px)" }}>
-                  <Image
-                    src={warpedImage ?? capturedImage ?? ""}
-                    alt="Pratonton kertas OMR — perspektif dibetulkan"
-                    width={955}
-                    height={1280}
-                    unoptimized
-                    className="w-full object-contain bg-black"
-                    style={{ maxHeight: "min(70dvh, 520px)" }}
-                  />
+                <div className="relative flex justify-center bg-black" style={{ minHeight: "min(70dvh, 520px)" }}>
+                  <div className="relative my-auto w-fit max-w-full">
+                    <Image
+                      src={warpedImage ?? capturedImage ?? ""}
+                      alt="Pratonton kertas OMR selepas pelarasan"
+                      width={955}
+                      height={1280}
+                      unoptimized
+                      className="block h-auto w-auto max-w-full object-contain"
+                      style={{ maxHeight: "min(70dvh, 520px)" }}
+                    />
+                    {warpedImageIsCanonical && <AnswerZoneOverlay />}
+                  </div>
                   <div className="absolute top-3 left-1/2 -translate-x-1/2 rounded-full px-3 py-1 text-[11px] font-semibold text-white shadow backdrop-blur-sm bg-black/60">
-                    {cornersFound ? "Perspektif dibetulkan — sahkan?" : "Sudut tidak dikesan — guna imej asal"}
+                    {cornersFound
+                      ? "Perspektif dibetulkan. Semak zon jawapan."
+                      : warpedImageIsCanonical
+                        ? "Imej diselaraskan. Semak kedudukan bulatan."
+                        : "Pelarasan gagal. Ambil semula gambar."}
                   </div>
                   <div className="absolute bottom-0 inset-x-0 flex items-center justify-center gap-3 pb-5 pt-10 bg-gradient-to-t from-black/70 to-transparent">
                     <Button
@@ -1017,29 +1071,39 @@ export default function OMRScanPage() {
                     </Button>
                     <Button size="sm" onClick={confirmWarp} className="gap-1.5">
                       <CheckCircle2 className="h-4 w-4" />
-                      Guna Imej Ini
+                      {warpedImageIsCanonical ? "Guna Imej Ini" : "Guna Tanpa Pelarasan"}
                     </Button>
                   </div>
                 </div>
               ) : (
                 /* Confirmed captured image view */
-                <div className="relative" style={{ minHeight: "min(70dvh, 520px)" }}>
-                  <Image
-                    src={capturedImage}
-                    alt="Pratonton kertas OMR"
-                    width={1280}
-                    height={960}
-                    unoptimized
-                    className="w-full object-contain"
-                    style={{ maxHeight: "min(70dvh, 520px)" }}
-                  />
+                <div className="relative flex justify-center bg-black" style={{ minHeight: "min(70dvh, 520px)" }}>
+                  <div className="relative my-auto w-fit max-w-full">
+                    <Image
+                      src={capturedImage}
+                      alt="Pratonton kertas OMR"
+                      width={capturedImageIsWarped ? 955 : 1280}
+                      height={capturedImageIsWarped ? 1280 : 960}
+                      unoptimized
+                      className="block h-auto w-auto max-w-full object-contain"
+                      style={{ maxHeight: "min(70dvh, 520px)" }}
+                    />
+                    {capturedImageIsWarped && <AnswerZoneOverlay />}
+                  </div>
                   {/* Captured overlay actions */}
                   <div className="absolute bottom-0 inset-x-0 flex items-center justify-center gap-3 pb-5 pt-10 bg-gradient-to-t from-black/70 to-transparent">
                     <Button
                       variant="outline"
                       size="sm"
                       className="bg-white/10 border-white/30 text-white hover:bg-white/20"
-                      onClick={() => { setCapturedImage(null); setImageSourceLabel(""); startCamera(); }}
+                      onClick={() => {
+                        setCapturedImage(null);
+                        setCapturedImageIsWarped(false);
+                        setWarpedImage(null);
+                        setWarpedImageIsCanonical(false);
+                        setImageSourceLabel("");
+                        startCamera();
+                      }}
                     >
                       <RotateCw className="mr-1.5 h-4 w-4" />
                       Ambil Semula
@@ -1247,7 +1311,19 @@ export default function OMRScanPage() {
                       <p className="text-xs text-muted-foreground text-center">{imageSourceLabel}</p>
                     )}
                     <div className="flex gap-3">
-                      <Button variant="outline" className="flex-1 gap-2" onClick={() => { setCapturedImage(null); setImageSourceLabel(""); setWarpedImage(null); setScanFlowState("idle"); captureInProgressRef.current = false; }}>
+                      <Button
+                        variant="outline"
+                        className="flex-1 gap-2"
+                        onClick={() => {
+                          setCapturedImage(null);
+                          setCapturedImageIsWarped(false);
+                          setImageSourceLabel("");
+                          setWarpedImage(null);
+                          setWarpedImageIsCanonical(false);
+                          setScanFlowState("idle");
+                          captureInProgressRef.current = false;
+                        }}
+                      >
                         <RotateCw className="h-4 w-4" />
                         Ganti Imej
                       </Button>
