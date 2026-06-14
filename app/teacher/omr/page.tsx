@@ -129,18 +129,10 @@ function buildSpmTemplateBundle(
 
 type TemplateMode = "auto-spm" | "custom" | "test";
 
-type ScanFlowState = "idle" | "adjusting" | "warping" | "preview";
+type ScanFlowState = "idle" | "warping" | "preview";
 type ImageProcessingProfile = "upload" | "camera";
-type CornerKey = "top_left" | "top_right" | "bottom_right" | "bottom_left";
-type NormalizedCorners = Record<CornerKey, { x: number; y: number }>;
 const MAX_OMR_IMAGE_DIMENSION = 1600;
 const OMR_JPEG_QUALITY = 0.82;
-const DEFAULT_CORNERS: NormalizedCorners = {
-  top_left: { x: 0.02, y: 0.02 },
-  top_right: { x: 0.98, y: 0.02 },
-  bottom_right: { x: 0.98, y: 0.98 },
-  bottom_left: { x: 0.02, y: 0.98 },
-};
 
 function getCameraErrorMessage(error: unknown) {
   if (!window.isSecureContext) {
@@ -215,100 +207,7 @@ async function optimizeOmrImage(imageDataUrl: string) {
   const context = canvas.getContext("2d");
   if (!context) throw new Error("Canvas tidak tersedia");
   context.drawImage(image, 0, 0, width, height);
-  return {
-    dataUrl: canvas.toDataURL("image/jpeg", OMR_JPEG_QUALITY),
-    width,
-    height,
-  };
-}
-
-function CornerEditor({
-  image,
-  imageSize,
-  corners,
-  onCornersChange,
-}: {
-  image: string;
-  imageSize: { width: number; height: number };
-  corners: NormalizedCorners;
-  onCornersChange: (corners: NormalizedCorners) => void;
-}) {
-  const [zoom, setZoom] = useState(1);
-  const imageAreaRef = useRef<HTMLDivElement>(null);
-  const labels: Record<CornerKey, string> = {
-    top_left: "Kiri atas",
-    top_right: "Kanan atas",
-    bottom_right: "Kanan bawah",
-    bottom_left: "Kiri bawah",
-  };
-  const orderedKeys: CornerKey[] = ["top_left", "top_right", "bottom_right", "bottom_left"];
-
-  function moveCorner(key: CornerKey, clientX: number, clientY: number) {
-    const rect = imageAreaRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    const x = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
-    const y = Math.max(0, Math.min(1, (clientY - rect.top) / rect.height));
-    onCornersChange({ ...corners, [key]: { x, y } });
-  }
-
-  return (
-    <div className="flex h-full min-h-[min(70dvh,520px)] flex-col bg-black">
-      <div className="flex items-center justify-between gap-3 bg-black/90 px-3 py-2 text-white">
-        <p className="text-xs font-medium">Seret 4 titik ke penjuru luar kertas</p>
-        <div className="flex gap-2">
-          <Button type="button" variant="outline" size="sm" className="h-8 bg-white/10 text-white" onClick={() => setZoom((value) => Math.max(1, value - 0.25))}>
-            −
-          </Button>
-          <Button type="button" variant="outline" size="sm" className="h-8 bg-white/10 text-white" onClick={() => setZoom((value) => Math.min(3, value + 0.25))}>
-            +
-          </Button>
-        </div>
-      </div>
-      <div className="flex-1 overflow-auto">
-        <div className="mx-auto" style={{ width: `${zoom * 100}%` }}>
-          <div ref={imageAreaRef} className="relative">
-            <Image
-              src={image}
-              alt="Laraskan penjuru kertas OMR"
-              width={imageSize.width || 1600}
-              height={imageSize.height || 1200}
-              unoptimized
-              className="block h-auto w-full"
-            />
-            <svg className="pointer-events-none absolute inset-0 h-full w-full" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
-              <polygon
-                points={orderedKeys.map((key) => `${corners[key].x * 100},${corners[key].y * 100}`).join(" ")}
-                fill="rgba(14,165,233,0.12)"
-                stroke="#38bdf8"
-                strokeWidth="0.7"
-                strokeDasharray="2 1"
-                vectorEffect="non-scaling-stroke"
-              />
-            </svg>
-            {orderedKeys.map((key) => (
-              <button
-                key={key}
-                type="button"
-                aria-label={labels[key]}
-                title={labels[key]}
-                className="absolute h-8 w-8 -translate-x-1/2 -translate-y-1/2 touch-none rounded-full border-4 border-white bg-sky-500 shadow-md"
-                style={{ left: `${corners[key].x * 100}%`, top: `${corners[key].y * 100}%` }}
-                onPointerDown={(event) => {
-                  event.currentTarget.setPointerCapture(event.pointerId);
-                  moveCorner(key, event.clientX, event.clientY);
-                }}
-                onPointerMove={(event) => {
-                  if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-                    moveCorner(key, event.clientX, event.clientY);
-                  }
-                }}
-              />
-            ))}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
+  return canvas.toDataURL("image/jpeg", OMR_JPEG_QUALITY);
 }
 
 function toId(v: unknown) {
@@ -362,8 +261,6 @@ export default function OMRScanPage() {
   const [cornersFound, setCornersFound] = useState(false);
   const [warpedImageIsCanonical, setWarpedImageIsCanonical] = useState(false);
   const [capturedImageIsWarped, setCapturedImageIsWarped] = useState(false);
-  const [manualCorners, setManualCorners] = useState<NormalizedCorners>(DEFAULT_CORNERS);
-  const [capturedImageSize, setCapturedImageSize] = useState({ width: 0, height: 0 });
   const [autoCapture, setAutoCapture] = useState<boolean>(() => {
     if (typeof window === "undefined") return true;
     return localStorage.getItem("stg_omr_autocapture") !== "false";
@@ -626,15 +523,12 @@ export default function OMRScanPage() {
     return () => { stopCamera(); };
   }, [activeTab, isMobileScanDevice, startCamera, stopCamera]);
 
-  async function callWarp(
-    imageBase64: string,
-    corners?: Record<CornerKey, [number, number]>,
-  ): Promise<{ warped: string; cornersFound: boolean; isCanonical: boolean }> {
+  async function callWarp(imageBase64: string): Promise<{ warped: string; cornersFound: boolean; isCanonical: boolean }> {
     try {
       const res = await fetch("/api/teacher/omr/warp", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ image_base64: imageBase64, corners }),
+        body: JSON.stringify({ image_base64: imageBase64 }),
       });
       const json = await res.json();
       if (!res.ok || !json?.success) {
@@ -655,16 +549,19 @@ export default function OMRScanPage() {
     captureInProgressRef.current = true;
     try {
       const optimizedImage = await optimizeOmrImage(rawImage);
-      setCapturedImage(optimizedImage.dataUrl);
-      setCapturedImageSize({ width: optimizedImage.width, height: optimizedImage.height });
+      setCapturedImage(optimizedImage);
       setCapturedImageIsWarped(false);
-      setManualCorners(DEFAULT_CORNERS);
       setImageSourceLabel(label);
       setImageProcessingProfile(profile);
       stopCamera();
-      setScanFlowState("adjusting");
+      setScanFlowState("warping");
+      const { warped, cornersFound: cf, isCanonical } = await callWarp(optimizedImage);
+      setWarpedImage(warped);
+      setCornersFound(cf);
+      setWarpedImageIsCanonical(isCanonical);
+      setScanFlowState("preview");
     } catch {
-      toast.error("Gagal menyediakan imej");
+      toast.error("Gagal memproses imej");
       setScanFlowState("idle");
       setCapturedImage(null);
       startCamera();
@@ -672,30 +569,6 @@ export default function OMRScanPage() {
       captureInProgressRef.current = false;
     }
   }, [stopCamera, startCamera]);
-
-  async function applyManualWarp() {
-    if (!capturedImage || !capturedImageSize.width || !capturedImageSize.height) return;
-    setScanFlowState("warping");
-    try {
-      const corners = Object.fromEntries(
-        Object.entries(manualCorners).map(([key, point]) => [
-          key,
-          [
-            Math.round(point.x * capturedImageSize.width),
-            Math.round(point.y * capturedImageSize.height),
-          ],
-        ]),
-      ) as Record<CornerKey, [number, number]>;
-      const { warped, cornersFound: cf, isCanonical } = await callWarp(capturedImage, corners);
-      setWarpedImage(warped);
-      setCornersFound(cf);
-      setWarpedImageIsCanonical(isCanonical);
-      setScanFlowState("preview");
-    } catch {
-      toast.error("Gagal membetulkan perspektif imej");
-      setScanFlowState("adjusting");
-    }
-  }
 
   function confirmWarp() {
     if (!warpedImage) return;
@@ -710,8 +583,6 @@ export default function OMRScanPage() {
     setCapturedImageIsWarped(false);
     setWarpedImage(null);
     setWarpedImageIsCanonical(false);
-    setManualCorners(DEFAULT_CORNERS);
-    setCapturedImageSize({ width: 0, height: 0 });
     captureInProgressRef.current = false;
     startCamera();
   }
@@ -1165,25 +1036,6 @@ export default function OMRScanPage() {
                     </div>
                   )}
                 </>
-              ) : scanFlowState === "adjusting" ? (
-                <div className="relative">
-                  <CornerEditor image={capturedImage} imageSize={capturedImageSize} corners={manualCorners} onCornersChange={setManualCorners} />
-                  <div className="absolute inset-x-0 bottom-0 flex items-center justify-center gap-3 bg-gradient-to-t from-black/80 to-transparent pb-5 pt-12">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="border-white/30 bg-white/10 text-white hover:bg-white/20"
-                      onClick={retakeCapture}
-                    >
-                      <RotateCw className="mr-1.5 h-4 w-4" />
-                      Ambil Semula
-                    </Button>
-                    <Button size="sm" onClick={applyManualWarp} className="gap-1.5">
-                      <Scan className="h-4 w-4" />
-                      Betulkan Perspektif
-                    </Button>
-                  </div>
-                </div>
               ) : scanFlowState === "warping" ? (
                 <div
                   className="flex flex-col items-center justify-center gap-3 bg-black"
@@ -1218,10 +1070,10 @@ export default function OMRScanPage() {
                       variant="outline"
                       size="sm"
                       className="bg-white/10 border-white/30 text-white hover:bg-white/20"
-                      onClick={() => setScanFlowState("adjusting")}
+                      onClick={retakeCapture}
                     >
                       <RotateCw className="mr-1.5 h-4 w-4" />
-                      Laraskan Penjuru
+                      Ambil Semula
                     </Button>
                     <Button size="sm" onClick={confirmWarp} className="gap-1.5">
                       <CheckCircle2 className="h-4 w-4" />
@@ -1444,53 +1296,6 @@ export default function OMRScanPage() {
                     </Button>
                   </div>
                 </div>
-              ) : scanFlowState === "adjusting" ? (
-                <Card className="overflow-hidden rounded-xl border border-border/50 shadow-sm">
-                  <CornerEditor image={capturedImage} imageSize={capturedImageSize} corners={manualCorners} onCornersChange={setManualCorners} />
-                  <div className="flex gap-3 border-t bg-card p-4">
-                    <Button variant="outline" className="flex-1 gap-2" onClick={retakeCapture}>
-                      <RotateCw className="h-4 w-4" />
-                      Ganti Imej
-                    </Button>
-                    <Button className="flex-1 gap-2" onClick={applyManualWarp}>
-                      <Scan className="h-4 w-4" />
-                      Betulkan Perspektif
-                    </Button>
-                  </div>
-                </Card>
-              ) : scanFlowState === "warping" ? (
-                <Card className="flex min-h-[420px] items-center justify-center rounded-xl border border-border/50 shadow-sm">
-                  <div className="space-y-3 text-center">
-                    <Loader2 className="mx-auto h-10 w-10 animate-spin text-primary" />
-                    <p className="text-sm font-medium">Membetulkan perspektif...</p>
-                  </div>
-                </Card>
-              ) : scanFlowState === "preview" ? (
-                <Card className="overflow-hidden rounded-xl border border-border/50 shadow-sm">
-                  <div className="relative flex justify-center bg-black">
-                    <div className="relative w-fit max-w-full">
-                      <Image
-                        src={warpedImage ?? capturedImage}
-                        alt="Pratonton OMR selepas pelarasan"
-                        width={955}
-                        height={1280}
-                        unoptimized
-                        className="block h-auto max-h-[520px] w-auto max-w-full"
-                      />
-                      {warpedImageIsCanonical && <AnswerZoneOverlay />}
-                    </div>
-                  </div>
-                  <div className="flex gap-3 border-t bg-card p-4">
-                    <Button variant="outline" className="flex-1 gap-2" onClick={() => setScanFlowState("adjusting")}>
-                      <RotateCw className="h-4 w-4" />
-                      Laraskan Penjuru
-                    </Button>
-                    <Button className="flex-1 gap-2" onClick={confirmWarp}>
-                      <CheckCircle2 className="h-4 w-4" />
-                      Guna Imej Ini
-                    </Button>
-                  </div>
-                </Card>
               ) : (
                 <Card className="shadow-sm border border-border/50 rounded-xl overflow-hidden">
                   <CardHeader className="border-b border-border px-6 py-4">
