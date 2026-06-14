@@ -1,0 +1,10 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "fluid": true,
+  "functions": {
+    "app.py": {
+      "maxDuration": 300,
+      "excludeFiles": "{.venv/**,__pycache__/**,debug/**,*debug*.png,_debug_*.png,tmp_*.png,hough_*.png,RUN-LOCAL.md}"
+    }
+  }
+}

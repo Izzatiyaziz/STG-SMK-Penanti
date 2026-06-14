@@ -22,6 +22,47 @@ Health check:
 curl http://127.0.0.1:8000/health
 ```
 
+## Deploy manually to Vercel
+
+Deploy this folder as its own Vercel project, separate from the Next.js app:
+
+```powershell
+cd C:\stg-penanti\omr-service
+npx vercel@latest login
+npx vercel@latest
+```
+
+Test the preview URL returned by Vercel:
+
+```powershell
+curl.exe https://YOUR-PREVIEW-URL.vercel.app/health
+```
+
+Deploy the tested version to production:
+
+```powershell
+npx vercel@latest --prod
+```
+
+Set the production URL in the Next.js Vercel project's environment variables,
+then redeploy the Next.js project:
+
+```env
+OMR_SERVICE_URL=https://YOUR-OMR-PROJECT.vercel.app
+REPORT_AI_SERVICE_URL=https://YOUR-OMR-PROJECT.vercel.app
+```
+
+Useful deployment diagnostics:
+
+```powershell
+npx vercel@latest ls
+npx vercel@latest inspect YOUR-DEPLOYMENT-URL --logs
+npx vercel@latest logs YOUR-DEPLOYMENT-URL
+```
+
+Vercel Functions limit request and response payloads to 4.5 MB. Keep uploaded
+images below approximately 3 MB before base64 encoding.
+
 ## Endpoint
 
 - `POST /grade`

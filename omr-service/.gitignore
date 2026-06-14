@@ -1,0 +1,9 @@
+.vercel/
+.venv/
+__pycache__/
+debug/
+*.pyc
+*debug*.png
+_debug_*.png
+tmp_*.png
+hough_*.png
