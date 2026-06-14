@@ -28,7 +28,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ message: "Imej terlalu besar" }, { status: 413 });
     }
 
-    const omrServiceUrl = process.env.OMR_SERVICE_URL || "http://127.0.0.1:8000";
+    const omrServiceUrl = process.env.OMR_SERVICE_URL || "https://stg-smk-penanti-omr.fly.dev";
 
     let serviceData: WarpServiceResponse;
     try {

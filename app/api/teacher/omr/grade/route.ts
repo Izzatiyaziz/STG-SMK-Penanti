@@ -179,7 +179,7 @@ export async function POST(req: Request) {
             Object.entries(template).filter(([questionId]) => allowedQuestionIds.has(questionId))
         ) as OMRTemplateMap;
 
-        const omrServiceUrl = process.env.OMR_SERVICE_URL || "http://127.0.0.1:8000";
+        const omrServiceUrl = process.env.OMR_SERVICE_URL || "https://stg-smk-penanti-omr.fly.dev";
         if (Object.keys(filteredTemplate).length === 0) {
             return NextResponse.json(
                 { message: "Template OMR tidak sepadan dengan skema jawapan semasa" },
