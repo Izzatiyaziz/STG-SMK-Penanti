@@ -35,10 +35,12 @@ import {
   CheckCircle2,
   Loader2,
   History,
+  LayoutDashboard,
   Zap,
   ZapOff,
 } from "lucide-react";
 import { useDocumentDetection } from "@/hooks/use-document-detection";
+import { HeaderLastUpdated } from "@/components/header-last-updated";
 
 type Assignment = {
   id: string;
@@ -70,7 +72,8 @@ type TemplateBundle = {
 const MAX_SPM_TEMPLATE_QUESTIONS = 80;
 
 function buildSpmTemplateBundle(
-  questionCount: number
+  questionCount: number,
+  profile: "upload" | "camera" = "upload"
 ): Required<Pick<TemplateBundle, "template_width" | "template_height" | "template" | "answer_region">> {
   const safeQuestionCount = Math.max(
     1,
@@ -83,8 +86,8 @@ function buildSpmTemplateBundle(
     { A: 592, B: 633, C: 673, D: 713 },
     { A: 795, B: 835, C: 877, D: 917 },
   ] as const;
-  const baseY = [320, 343, 366, 388, 410];
-  const groupOffsets = [0, 156, 312, 468, 623, 778];
+  const baseY = profile === "camera" ? [411, 432, 453, 475, 496] : [411, 432, 453, 475, 496];
+  const groupOffsets = profile === "camera" ? [0, 143, 282, 423, 564, 705] : [0, 143, 282, 423, 564, 705];
   const rowY = groupOffsets.flatMap((offset) => baseY.map((y) => y + offset));
   const radius = 11;
 
@@ -121,6 +124,7 @@ function buildSpmTemplateBundle(
 type TemplateMode = "auto-spm" | "custom" | "test";
 
 type ScanFlowState = "idle" | "warping" | "preview";
+type ImageProcessingProfile = "upload" | "camera";
 
 function toId(v: unknown) {
   return typeof v === "string" ? v.trim() : v == null ? "" : String(v).trim();
@@ -161,13 +165,17 @@ export default function OMRScanPage() {
   const [isStartingCamera, setIsStartingCamera] = useState(false);
   const [cameraError, setCameraError] = useState<string>("");
   const [imageSourceLabel, setImageSourceLabel] = useState<string>("");
+  const [imageProcessingProfile, setImageProcessingProfile] = useState<ImageProcessingProfile>("camera");
   const [detailsOpen, setDetailsOpen] = useState(true);
-  const [activeTab, setActiveTab] = useState<"scan" | "upload">("scan");
+  const [activeTab, setActiveTab] = useState<"scan" | "upload">("upload");
+  const [isMobileScanDevice, setIsMobileScanDevice] = useState(false);
+  const [desktopScanMessage, setDesktopScanMessage] = useState(false);
   const [advancedOpen, setAdvancedOpen] = useState(false);
 
   const [scanFlowState, setScanFlowState] = useState<ScanFlowState>("idle");
   const [warpedImage, setWarpedImage] = useState<string | null>(null);
   const [cornersFound, setCornersFound] = useState(false);
+  const [capturedImageIsWarped, setCapturedImageIsWarped] = useState(false);
   const [autoCapture, setAutoCapture] = useState<boolean>(() => {
     if (typeof window === "undefined") return true;
     return localStorage.getItem("stg_omr_autocapture") !== "false";
@@ -186,6 +194,8 @@ export default function OMRScanPage() {
   const [templateMode, setTemplateMode] = useState<TemplateMode>("auto-spm");
   const [objectiveQuestionCount, setObjectiveQuestionCount] = useState<number>(MAX_SPM_TEMPLATE_QUESTIONS);
   const [isTemplateMetaLoading, setIsTemplateMetaLoading] = useState(false);
+  const [isApprovalLocked, setIsApprovalLocked] = useState(false);
+  const [approvalLockMessage, setApprovalLockMessage] = useState("");
   const [templateMetaMessage, setTemplateMetaMessage] = useState<string>(
     "Pilih kelas, subjek, dan peperiksaan untuk jana template automatik."
   );
@@ -207,6 +217,24 @@ export default function OMRScanPage() {
       return;
     }
   }, [router]);
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia("(max-width: 767px)");
+    const syncDeviceMode = () => {
+      const isMobile = mediaQuery.matches;
+      setIsMobileScanDevice(isMobile);
+      setActiveTab((current) => {
+        if (isMobile && current === "upload") return "scan";
+        if (!isMobile && current === "scan") return "upload";
+        return current;
+      });
+      if (isMobile) setDesktopScanMessage(false);
+    };
+
+    syncDeviceMode();
+    mediaQuery.addEventListener("change", syncDeviceMode);
+    return () => mediaQuery.removeEventListener("change", syncDeviceMode);
+  }, []);
 
   useEffect(() => {
     async function loadLookups() {
@@ -327,6 +355,37 @@ export default function OMRScanPage() {
   }, [assignments, selectedAssignmentId, selectedExamId, teacherId]);
 
   useEffect(() => {
+    const assignment = assignments.find((item) => item.id === selectedAssignmentId);
+    const classId = toId(assignment?.class_id);
+    const subjectId = toId(assignment?.subject_id);
+    const examId = toId(selectedExamId);
+    if (!classId || !subjectId || !examId) {
+      setIsApprovalLocked(false);
+      setApprovalLockMessage("");
+      return;
+    }
+
+    let cancelled = false;
+    fetch(`/api/teacher/omr/status?class_id=${encodeURIComponent(classId)}&subject_id=${encodeURIComponent(subjectId)}&exam_id=${encodeURIComponent(examId)}`, {
+      cache: "no-store",
+    })
+      .then((response) => response.json())
+      .then((json) => {
+        if (cancelled) return;
+        setIsApprovalLocked(Boolean(json?.locked));
+        setApprovalLockMessage(String(json?.message ?? ""));
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setIsApprovalLocked(false);
+        setApprovalLockMessage("");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [assignments, selectedAssignmentId, selectedExamId]);
+
+  useEffect(() => {
     if (templateMode !== "auto-spm") return;
     setTemplateJson(JSON.stringify(buildSpmTemplateBundle(objectiveQuestionCount), null, 2));
   }, [objectiveQuestionCount, templateMode]);
@@ -370,13 +429,13 @@ export default function OMRScanPage() {
   }, [stopCamera]);
 
   useEffect(() => {
-    if (activeTab === "scan") {
+    if (activeTab === "scan" && isMobileScanDevice) {
       startCamera();
     } else {
       stopCamera();
     }
     return () => { stopCamera(); };
-  }, [activeTab, startCamera, stopCamera]);
+  }, [activeTab, isMobileScanDevice, startCamera, stopCamera]);
 
   async function callWarp(imageBase64: string): Promise<{ warped: string; cornersFound: boolean }> {
     try {
@@ -387,21 +446,21 @@ export default function OMRScanPage() {
       });
       const json = await res.json();
       if (!res.ok || !json?.success) {
-        toast.warning("Perkhidmatan warp gagal, imej asal digunakan");
         return { warped: imageBase64, cornersFound: false };
       }
-      if (!json.corners_found) toast.warning(json.warning || "Sudut kertas tidak dikesan");
       return { warped: json.warped_image_base64, cornersFound: !!json.corners_found };
     } catch {
       return { warped: imageBase64, cornersFound: false };
     }
   }
 
-  const handleCaptureAndWarp = useCallback(async (rawImage: string, label: string) => {
+  const handleCaptureAndWarp = useCallback(async (rawImage: string, label: string, profile: ImageProcessingProfile) => {
     if (captureInProgressRef.current) return;
     captureInProgressRef.current = true;
     setCapturedImage(rawImage);
+    setCapturedImageIsWarped(false);
     setImageSourceLabel(label);
+    setImageProcessingProfile(profile);
     stopCamera();
     setScanFlowState("warping");
     try {
@@ -417,18 +476,19 @@ export default function OMRScanPage() {
     } finally {
       captureInProgressRef.current = false;
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stopCamera, startCamera]);
 
   function confirmWarp() {
     if (!warpedImage) return;
     setCapturedImage(warpedImage);
+    setCapturedImageIsWarped(cornersFound);
     setScanFlowState("idle");
   }
 
   function retakeCapture() {
     setScanFlowState("idle");
     setCapturedImage(null);
+    setCapturedImageIsWarped(false);
     setWarpedImage(null);
     captureInProgressRef.current = false;
     startCamera();
@@ -453,7 +513,7 @@ export default function OMRScanPage() {
     canvas.height = video.videoHeight;
     ctx?.drawImage(video, 0, 0, canvas.width, canvas.height);
     const raw = canvas.toDataURL("image/png");
-    void handleCaptureAndWarp(raw, "Diambil automatik — kertas dikesan");
+    void handleCaptureAndWarp(raw, "Diambil automatik — kertas dikesan", "camera");
   }, [autoCapture, handleCaptureAndWarp]);
 
   const { detectionState } = useDocumentDetection({
@@ -473,11 +533,13 @@ export default function OMRScanPage() {
     canvas.height = video.videoHeight;
     ctx?.drawImage(video, 0, 0, canvas.width, canvas.height);
     const raw = canvas.toDataURL("image/png");
-    void handleCaptureAndWarp(raw, "Diambil melalui pratonton kamera");
+    void handleCaptureAndWarp(raw, "Diambil melalui pratonton kamera", "camera");
   }
 
   function handlePickImage() { fileInputRef.current?.click(); }
-  function handlePhoneCameraCapture() { cameraInputRef.current?.click(); }
+  function handlePhoneCameraCapture() {
+    cameraInputRef.current?.click();
+  }
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -491,7 +553,8 @@ export default function OMRScanPage() {
       stopCamera();
       void handleCaptureAndWarp(
         result,
-        isCameraFile ? "Diambil melalui kamera telefon" : "Dimuat naik daripada fail"
+        isCameraFile ? "Diambil melalui kamera telefon" : "Dimuat naik daripada fail",
+        isCameraFile ? "camera" : "upload"
       );
     };
     reader.onerror = () => { toast.error("Gagal membaca fail imej"); };
@@ -500,6 +563,10 @@ export default function OMRScanPage() {
   }
 
   async function processOMR() {
+    if (isApprovalLocked) {
+      toast.error(approvalLockMessage || "Markah telah diluluskan. Imbasan OMR tidak dibenarkan.");
+      return;
+    }
     if (!capturedImage) { toast.error("Sila ambil gambar atau muat naik imej terlebih dahulu"); return; }
     const assignment = assignments.find((a) => a.id === selectedAssignmentId);
     const subject_id = toId(assignment?.subject_id);
@@ -513,7 +580,13 @@ export default function OMRScanPage() {
     let answer_region: TemplateBundle["answer_region"] | undefined = undefined;
     let template: unknown = null;
     try {
-      const parsed = (templateJson.trim() ? JSON.parse(templateJson) : buildSpmTemplateBundle(objectiveQuestionCount)) as TemplateBundle;
+      const parsed = (
+        templateMode === "auto-spm"
+          ? buildSpmTemplateBundle(objectiveQuestionCount, imageProcessingProfile)
+          : templateJson.trim()
+            ? JSON.parse(templateJson)
+            : buildSpmTemplateBundle(objectiveQuestionCount, imageProcessingProfile)
+      ) as TemplateBundle;
       template_width = Number(parsed?.template_width ?? 1400);
       template_height = Number(parsed?.template_height ?? 2000);
       answer_region = parsed?.answer_region;
@@ -532,6 +605,8 @@ export default function OMRScanPage() {
         body: JSON.stringify({
           teacher_id: teacherId, student_id, subject_id, exam_id, class_id,
           image_base64: capturedImage, template_width, template_height, answer_region, template,
+          already_warped: capturedImageIsWarped,
+          processing_profile: imageProcessingProfile,
           min_mark_threshold: Number(minMarkThreshold) || 0.30,
           ambiguity_gap: Number(ambiguityGap) || 0.06,
           search_radius: Number(searchRadius) || 6,
@@ -551,7 +626,7 @@ export default function OMRScanPage() {
     }
   }
 
-  const readyToProcess = !!(selectedExamId && selectedAssignmentId && selectedStudentId && capturedImage);
+  const readyToProcess = !!(selectedExamId && selectedAssignmentId && selectedStudentId && capturedImage && !isApprovalLocked);
 
   /* ================= SHARED DETAILS FORM ================= */
   const DetailsForm = () => (
@@ -570,6 +645,13 @@ export default function OMRScanPage() {
           </SelectContent>
         </Select>
       </div>
+
+      {isApprovalLocked ? (
+        <div className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-3 text-sm text-amber-900">
+          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>{approvalLockMessage || "Markah peperiksaan ini telah diluluskan. Imbasan OMR baharu tidak dibenarkan."}</span>
+        </div>
+      ) : null}
 
       {selectedExamId && assignments.length > 0 && (
         <div className="space-y-2">
@@ -632,28 +714,47 @@ export default function OMRScanPage() {
       <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handleFileChange} />
 
       {/* Page header — hidden on mobile to save space */}
-      <div className="hidden md:flex flex-col gap-1 border-b border-border/40 pb-6">
-        <p className="text-xs font-semibold tracking-[0.2em] uppercase text-primary">Guru Subjek</p>
-        <div className="flex items-center gap-3">
-          <h1 className="!text-[36px] font-black leading-tight text-foreground">Pengimbas OMR</h1>
-          <Button variant="outline" size="sm" onClick={() => router.push("/teacher/omr/history")} className="gap-1.5 self-end mb-1">
-            <History className="h-4 w-4" />
-            Sejarah Imbasan
-          </Button>
+      <div className="hidden items-center justify-between gap-4 md:flex">
+        <div className="flex items-center gap-4">
+          <div className="rounded-2xl border border-primary/20 bg-gradient-to-br from-primary/10 to-primary/5 p-3 shadow-sm">
+            <LayoutDashboard className="h-7 w-7 text-primary" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight text-foreground">Pengimbas OMR</h1>
+            <p className="mt-1 font-medium text-muted-foreground">
+              Muat naik imej kertas OMR pelajar. Fungsi kamera Imbas tersedia melalui telefon.
+            </p>
+            <HeaderLastUpdated />
+          </div>
         </div>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Imbas kertas OMR pelajar terus melalui kamera. Template SPM dijana automatik ikut skema jawapan.
-        </p>
+        <Button variant="outline" size="sm" onClick={() => router.push("/teacher/omr/history")} className="shrink-0 gap-1.5">
+          <History className="h-4 w-4" />
+          Sejarah Imbasan
+        </Button>
       </div>
 
-      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "scan" | "upload")} className="flex flex-col gap-0 md:gap-6">
+      <Tabs
+        value={activeTab}
+        onValueChange={(value) => {
+          const nextTab = value as "scan" | "upload";
+          if (nextTab === "scan" && !isMobileScanDevice) {
+            setDesktopScanMessage(true);
+            setActiveTab("upload");
+            return;
+          }
+          setDesktopScanMessage(false);
+          setActiveTab(nextTab);
+        }}
+        className="flex flex-col gap-0 md:gap-6"
+      >
 
         {/* Tab bar — sticky on mobile */}
         <div className="sticky top-0 z-10 bg-background border-b border-border/40 px-4 py-2 md:static md:bg-transparent md:border-none md:p-0">
           <div className="flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
+            <div className="flex flex-col">
               {/* Mobile title */}
               <h1 className="text-lg font-black text-foreground md:hidden">Pengimbas OMR</h1>
+              <HeaderLastUpdated className="mt-1 md:hidden" />
             </div>
             <TabsList className="h-9 rounded-lg">
               <TabsTrigger value="scan" className="gap-1.5 px-3 text-xs">
@@ -667,6 +768,18 @@ export default function OMRScanPage() {
             </TabsList>
           </div>
         </div>
+
+        {desktopScanMessage && (
+          <div className="mx-4 flex items-start gap-3 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 md:mx-0 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-100">
+            <Smartphone className="mt-0.5 h-4 w-4 shrink-0" />
+            <div>
+              <p className="font-semibold">Fungsi Imbas hanya tersedia pada telefon</p>
+              <p className="mt-1 text-xs opacity-80">
+                Buka halaman ini melalui telefon untuk menggunakan kamera. Pada laptop, sila gunakan pilihan Muat Naik.
+              </p>
+            </div>
+          </div>
+        )}
 
         {/* ========== SCAN TAB ========== */}
         <TabsContent value="scan" className="mt-0 flex flex-col gap-0 md:gap-6 md:grid md:grid-cols-3">
@@ -708,33 +821,50 @@ export default function OMRScanPage() {
                   )}
 
                   {/* Detection state indicator */}
-                  {isCameraActive && detectionState === "stable" && (
-                    <div className="absolute top-3 left-1/2 -translate-x-1/2 rounded-full bg-green-500/90 px-3 py-1 text-[11px] font-semibold text-white shadow">
-                      Kertas dikesan ✓
+                  {isCameraActive && (
+                    <div
+                      className={`absolute left-1/2 top-3 z-10 -translate-x-1/2 rounded-full px-3 py-1.5 text-[11px] font-semibold text-white shadow transition-colors ${
+                        detectionState === "stable" ? "bg-green-600/90" : "bg-amber-500/90"
+                      }`}
+                    >
+                      {detectionState === "stable" ? "Kedudukan sesuai, boleh tangkap" : "Selaraskan kertas dalam penanda"}
                     </div>
                   )}
 
                   {/* Alignment guide */}
-                  <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                  <div className="pointer-events-none absolute inset-0 flex items-center justify-center px-8 py-12">
                     <div
-                      className="border-2 border-dashed border-white/50 rounded-sm relative"
-                      style={{ width: "72%", height: "88%" }}
+                      className={`relative h-full max-h-[92%] aspect-[955/1280] border transition-colors ${
+                        detectionState === "stable"
+                          ? "border-green-400/90 bg-green-400/5"
+                          : "border-white/55 bg-black/5"
+                      }`}
                     >
-                      <div className="absolute -top-6 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-black/60 px-3 py-1 text-[11px] text-white/80">
-                        Letak kertas dalam bingkai
+                      <div className="absolute -top-7 left-1/2 -translate-x-1/2 rounded-t-md bg-black/70 px-3 py-1 text-[10px] font-semibold tracking-wide text-white">
+                        ATAS KERTAS
                       </div>
                       {["top-0 left-0", "top-0 right-0", "bottom-0 left-0", "bottom-0 right-0"].map((pos) => (
                         <span
                           key={pos}
-                          className={`absolute ${pos} h-5 w-5 border-white`}
+                          className={`absolute ${pos} h-8 w-8 ${
+                            detectionState === "stable" ? "border-green-400" : "border-white"
+                          }`}
                           style={{
-                            borderTopWidth: pos.includes("top") ? 3 : 0,
-                            borderBottomWidth: pos.includes("bottom") ? 3 : 0,
-                            borderLeftWidth: pos.includes("left") ? 3 : 0,
-                            borderRightWidth: pos.includes("right") ? 3 : 0,
+                            borderTopWidth: pos.includes("top") ? 4 : 0,
+                            borderBottomWidth: pos.includes("bottom") ? 4 : 0,
+                            borderLeftWidth: pos.includes("left") ? 4 : 0,
+                            borderRightWidth: pos.includes("right") ? 4 : 0,
                           }}
                         />
                       ))}
+                      <div className="absolute bottom-[6%] left-[36.5%] right-[2.5%] top-[23.5%] rounded-sm border border-dashed border-sky-300/80 bg-sky-400/5">
+                        <span className="absolute left-1/2 top-2 -translate-x-1/2 whitespace-nowrap rounded bg-black/60 px-2 py-0.5 text-[9px] font-medium text-sky-100">
+                          Semua bulatan jawapan dalam zon ini
+                        </span>
+                      </div>
+                      <div className="absolute inset-x-3 bottom-3 rounded bg-black/60 px-2 py-1 text-center text-[9px] text-white/90">
+                        Pastikan empat penjuru kertas kelihatan dan kamera selari
+                      </div>
                     </div>
                   </div>
 
@@ -761,7 +891,7 @@ export default function OMRScanPage() {
                               </Button>
                               <Button variant="outline" size="sm" onClick={handlePhoneCameraCapture} className="bg-white/10 border-white/20 text-white hover:bg-white/20">
                                 <Smartphone className="mr-2 h-4 w-4" />
-                                Kamera Telefon
+                                Kamera Sistem
                               </Button>
                             </div>
                           </>
@@ -776,10 +906,10 @@ export default function OMRScanPage() {
                       <button
                         onClick={handlePhoneCameraCapture}
                         className="flex flex-col items-center gap-1 text-white/80 hover:text-white transition-colors"
-                        title="Kamera telefon"
+                        title="Buka kamera sistem tanpa penanda"
                       >
                         <Smartphone className="h-6 w-6" />
-                        <span className="text-[10px]">Telefon</span>
+                        <span className="text-[10px]">Tanpa penanda</span>
                       </button>
 
                       {/* Main capture button */}
@@ -867,7 +997,7 @@ export default function OMRScanPage() {
                     <Button
                       size="sm"
                       onClick={processOMR}
-                      disabled={isProcessing || !readyToProcess}
+                      disabled={isProcessing || !readyToProcess || isApprovalLocked}
                       className="gap-1.5"
                     >
                       {isProcessing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Scan className="h-4 w-4" />}
@@ -887,7 +1017,9 @@ export default function OMRScanPage() {
             {!capturedImage && isCameraActive && (
               <div className="hidden md:flex items-start gap-3 px-1 pt-3 text-sm text-muted-foreground">
                 <Camera className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-                <span>Pastikan kertas rata, pencahayaan mencukupi, dan semua bulatan jawapan dalam bingkai sebelum mengimbas.</span>
+                <span>
+                  Kamera dalam paparan ini ialah kamera telefon dengan penanda aktif. Gunakan butang tangkap bulat di tengah selepas status bertukar hijau.
+                </span>
               </div>
             )}
           </div>
@@ -934,7 +1066,7 @@ export default function OMRScanPage() {
               <div className="md:hidden sticky bottom-0 z-10 border-t border-border/40 bg-background/95 backdrop-blur px-4 py-3">
                 <Button
                   onClick={processOMR}
-                  disabled={isProcessing || !readyToProcess}
+                  disabled={isProcessing || !readyToProcess || isApprovalLocked}
                   className="w-full gap-2"
                   size="lg"
                 >
@@ -1022,7 +1154,7 @@ export default function OMRScanPage() {
             <div className="m-4 md:m-0">
               {!capturedImage ? (
                 <div
-                  className="flex flex-col items-center justify-center gap-4 rounded-xl border-2 border-dashed border-border/60 bg-muted/20 px-6 py-16 text-center hover:border-primary/40 hover:bg-muted/30 transition-colors cursor-pointer"
+                  className="flex flex-col items-center justify-center gap-4 rounded-xl border-2 border-dashed border-border bg-card px-6 py-16 text-center hover:border-primary/40 transition-colors cursor-pointer"
                   onClick={handlePickImage}
                 >
                   <div className="flex h-16 w-16 items-center justify-center rounded-full bg-primary/10">
@@ -1069,7 +1201,7 @@ export default function OMRScanPage() {
                         <RotateCw className="h-4 w-4" />
                         Ganti Imej
                       </Button>
-                      <Button className="flex-1 gap-2" onClick={processOMR} disabled={isProcessing || !readyToProcess}>
+                      <Button className="flex-1 gap-2" onClick={processOMR} disabled={isProcessing || !readyToProcess || isApprovalLocked}>
                         {isProcessing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Scan className="h-4 w-4" />}
                         {isProcessing ? "Memproses..." : "Proses OMR"}
                       </Button>

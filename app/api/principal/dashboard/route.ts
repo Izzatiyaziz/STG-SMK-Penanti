@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import supabase from "@/lib/supabase";
 import { requireApiRole } from "@/lib/auth";
+import { gradeFromTotal, gradeScaleForLevels } from "@/lib/grade-utils";
 
 export const runtime = "nodejs";
 
@@ -28,15 +29,12 @@ function toNumber(value: unknown) {
 	return Number.isFinite(n) ? n : 0;
 }
 
-function normalizeGrade(value: unknown, total: number) {
+function normalizeGrade(value: unknown, total: number, level: number) {
 	const grade = toId(value).toUpperCase();
-	if (grade === "E") return "F";
-	if (["A", "B", "C", "D", "F"].includes(grade)) return grade;
-	if (total >= 80) return "A";
-	if (total >= 65) return "B";
-	if (total >= 50) return "C";
-	if (total >= 40) return "D";
-	return "F";
+	const allowed = level >= 4
+		? ["A+", "A", "A-", "B+", "B", "C+", "C", "D", "E", "G"]
+		: ["A", "B", "C", "D", "E", "F"];
+	return allowed.includes(grade) ? grade : gradeFromTotal(total, level);
 }
 
 export async function GET(req: Request) {
@@ -147,17 +145,23 @@ export async function GET(req: Request) {
 				class_name: classInfo?.name ?? "-",
 				grade_level: classInfo?.grade ?? 0,
 				total,
-				grade: normalizeGrade(row.grade, total),
+				grade: normalizeGrade(row.grade, total, classInfo?.grade ?? 0),
 			};
 		});
 
-		const filteredRows = allRows.filter((row) => {
+		const approvedExamIds = new Set(allRows.map((row) => row.exam_id).filter(Boolean));
+		const approvedExams = Array.from(examById.entries()).filter(([examId]) =>
+			approvedExamIds.has(examId),
+		);
+		const hasSelectedGrade = Boolean(gradeFilter && gradeFilter !== "select-grade");
+		const hasSelectedExam = Boolean(examFilter && examFilter !== "all");
+		const filteredRows = hasSelectedGrade && hasSelectedExam ? allRows.filter((row) => {
 			const subjectMatch = !subjectFilter || subjectFilter === "all" || row.subject_id === subjectFilter;
 			const examMatch = !examFilter || examFilter === "all" || row.exam_id === examFilter;
-			const gradeMatch = !gradeFilter || gradeFilter === "all" || row.grade_level === Number(gradeFilter);
+			const gradeMatch = row.grade_level === Number(gradeFilter);
 			const classMatch = !classFilter || classFilter === "all" || row.class_id === classFilter;
 			return subjectMatch && examMatch && gradeMatch && classMatch;
-		});
+		}) : [];
 
 		const marks = filteredRows.map((row) => row.total);
 		const averageMark = marks.length ? Math.round(marks.reduce((sum, mark) => sum + mark, 0) / marks.length) : 0;
@@ -165,7 +169,9 @@ export async function GET(req: Request) {
 			? Math.round((filteredRows.filter((row) => row.total >= 40).length / filteredRows.length) * 100)
 			: 0;
 
-		const gradeDistribution = ["A", "B", "C", "D", "F"].map((grade) => ({
+		const gradeDistribution = gradeScaleForLevels(
+			filteredRows.map((row) => row.grade_level),
+		).map((grade) => ({
 			grade,
 			value: filteredRows.filter((row) => row.grade === grade).length,
 		}));
@@ -215,8 +221,14 @@ export async function GET(req: Request) {
 			}))
 			.sort((a, b) => a.gradeLevel - b.gradeLevel || a.className.localeCompare(b.className));
 
-		const trend = Array.from(examById.entries()).map(([examId, exam]) => {
-			const examMarks = filteredRows.filter((row) => row.exam_id === examId).map((row) => row.total);
+		const trendScopedRows = hasSelectedGrade ? allRows.filter((row) => {
+			const subjectMatch = !subjectFilter || subjectFilter === "all" || row.subject_id === subjectFilter;
+			const gradeMatch = row.grade_level === Number(gradeFilter);
+			const classMatch = !classFilter || classFilter === "all" || row.class_id === classFilter;
+			return subjectMatch && gradeMatch && classMatch;
+		}) : [];
+		const trend = approvedExams.map(([examId, exam]) => {
+			const examMarks = trendScopedRows.filter((row) => row.exam_id === examId).map((row) => row.total);
 			return {
 				exam: exam.name,
 				year: exam.year,
@@ -248,7 +260,7 @@ export async function GET(req: Request) {
 					subjects: ((subjects ?? []) as SubjectRow[])
 						.map((row) => ({ id: toId(row.subject_id), name: toId(row.subject_name) }))
 						.filter((row) => row.id),
-					exams: Array.from(examById.entries()).map(([id, exam]) => ({ id, name: exam.name, year: exam.year })),
+					exams: approvedExams.map(([id, exam]) => ({ id, name: exam.name, year: exam.year })),
 					grades: Array.from(new Set(((classes ?? []) as ClassRow[]).map((row) => toNumber(row.grade)).filter(Boolean))).sort((a, b) => a - b),
 					classes: ((classes ?? []) as ClassRow[]).map((row) => ({
 						id: toId(row.class_id),

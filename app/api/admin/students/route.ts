@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
-import supabase from "@/lib/supabase";
+import supabase from "@/lib/supabase-admin";
 import { requireApiRole } from "@/lib/auth";
+import { getClientIp, looksLikeXssAttempt, sanitizePlainText, sanitizeSearchTerm } from "@/lib/security";
+import { logSecurityEvent } from "@/lib/security-events";
 
 export const runtime = "nodejs";
 
@@ -90,7 +92,21 @@ export async function GET(req: Request) {
             });
         }
 
-        const search = String(searchParams.get("search") ?? "").trim();
+        // PostgREST .or() uses its own filter grammar, so user input must not
+        // contain filter-control characters before being interpolated.
+        const rawSearch = String(searchParams.get("search") ?? "").trim();
+        const search = sanitizeSearchTerm(rawSearch);
+        if (rawSearch && rawSearch !== search) {
+            await logSecurityEvent({
+                eventType: "filter_injection",
+                severity: "high",
+                ipAddress: getClientIp(req),
+                identifier: guard.session.user_id,
+                role: "admin",
+                endpoint: "/api/admin/students",
+                details: { reason: "Aksara kawalan penapis PostgREST dikesan" },
+            });
+        }
         const page = Math.max(1, parseInt(searchParams.get("page") ?? "1", 10));
         const pageSize = Math.min(500, Math.max(1, parseInt(searchParams.get("page_size") ?? "100", 10)));
         const from = (page - 1) * pageSize;
@@ -163,7 +179,19 @@ export async function POST(req: Request) {
 
         const body = await req.json();
 
-        const fullname = String(body?.fullname ?? "").trim().toUpperCase();
+        const rawFullname = String(body?.fullname ?? "").trim();
+        const fullname = sanitizePlainText(rawFullname, 150).toUpperCase();
+        if (looksLikeXssAttempt(rawFullname)) {
+            await logSecurityEvent({
+                eventType: "xss_attempt",
+                severity: "high",
+                ipAddress: getClientIp(req),
+                identifier: guard.session.user_id,
+                role: "admin",
+                endpoint: "/api/admin/students",
+                details: { reason: "Markup mencurigakan dikesan pada nama pelajar" },
+            });
+        }
         const ic_number = formatIcNumber(body?.ic_number);
         const class_id =
             body?.class_id === null || body?.class_id === undefined
@@ -239,7 +267,19 @@ export async function PUT(req: Request) {
         }
 
         const body = await req.json();
-        const fullname = String(body?.fullname ?? body?.name ?? "").trim().toUpperCase();
+        const rawFullname = String(body?.fullname ?? body?.name ?? "").trim();
+        const fullname = sanitizePlainText(rawFullname, 150).toUpperCase();
+        if (looksLikeXssAttempt(rawFullname)) {
+            await logSecurityEvent({
+                eventType: "xss_attempt",
+                severity: "high",
+                ipAddress: getClientIp(req),
+                identifier: guard.session.user_id,
+                role: "admin",
+                endpoint: "/api/admin/students",
+                details: { reason: "Markup mencurigakan dikesan pada nama pelajar" },
+            });
+        }
         const ic_number = formatIcNumber(body?.ic_number ?? body?.identifier);
         const status = body?.status ? String(body.status).trim() : undefined;
         const class_id =

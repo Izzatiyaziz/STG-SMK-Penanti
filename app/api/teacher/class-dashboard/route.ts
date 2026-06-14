@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import supabase from "@/lib/supabase";
 import { requireApiRole } from "@/lib/auth";
+import { compareExamsChronologically } from "@/lib/exam-utils";
 
 export const runtime = "nodejs";
 
@@ -128,7 +129,6 @@ export async function GET(req: Request) {
 			.from("stg_results")
 			.select("student_id, subject_id, exam_id, total, grade")
 			.eq("status", "approved")
-			.not("subjective_id", "is", null)
 			.in("student_id", studentIds);
 
 		if (resultErr) {
@@ -219,12 +219,17 @@ export async function GET(req: Request) {
 				const studentAverages = Array.from(averageByExamStudent.get(exam.id)?.values() ?? []);
 				return {
 					exam_id: exam.id,
-					exam: exam.name,
+					exam: exam.academic_year ? `${exam.name} (${exam.academic_year})` : exam.name,
 					average: round(average(studentAverages)),
 					academic_year: exam.academic_year,
 				};
 			})
-			.reverse();
+			.sort((a, b) =>
+				compareExamsChronologically(
+					{ name: a.exam, year: a.academic_year },
+					{ name: b.exam, year: b.academic_year },
+				),
+			);
 
 		const examSummaries: Record<string, unknown> = {};
 		for (const exam of examList) {

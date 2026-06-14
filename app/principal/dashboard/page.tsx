@@ -15,11 +15,9 @@ import {
 	YAxis,
 } from "recharts";
 import {
-	BarChart3,
 	BookOpen,
-	ClipboardList,
-	Clock,
 	GraduationCap,
+	LayoutDashboard,
 	RefreshCw,
 	School,
 	Trophy,
@@ -117,8 +115,8 @@ export default function PrincipalDashboardPage() {
 	const [data, setData] = useState<PrincipalData | null>(null);
 	const [loading, setLoading] = useState(false);
 	const [subjectFilter, setSubjectFilter] = useState("all");
-	const [examFilter, setExamFilter] = useState("all");
-	const [gradeFilter, setGradeFilter] = useState("1");
+	const [examFilter, setExamFilter] = useState("");
+	const [gradeFilter, setGradeFilter] = useState("");
 	const [classFilter, setClassFilter] = useState("all");
 
 	async function fetchDashboard() {
@@ -154,6 +152,7 @@ export default function PrincipalDashboardPage() {
 	}, [subjectFilter, examFilter, gradeFilter, classFilter]);
 
 	const classOptions = useMemo(() => {
+		if (!gradeFilter) return [];
 		const options = (data?.filterOptions.classes ?? []).filter((option) => option.grade === Number(gradeFilter));
 		const uniqueByName = new Map<string, { id: string; name: string; grade: number }>();
 		for (const option of options) {
@@ -174,34 +173,53 @@ export default function PrincipalDashboardPage() {
 		...row,
 		classLabel: chartLabel(row),
 	}));
-	const trendChartData = (data?.trend ?? []).map((row) => ({
-		...row,
-		examLabel: row.year ? `${row.exam} (${row.year})` : row.exam,
-	}));
+	const trendChartData = [...(data?.trend ?? [])]
+		.sort((a, b) => {
+			const yearDifference = Number(a.year) - Number(b.year);
+			if (yearDifference !== 0) return yearDifference;
+
+			const examOrder = (examName: string) => {
+				const normalizedName = examName.toLocaleLowerCase("ms-MY");
+				if (normalizedName.includes("pertengahan")) return 0;
+				if (normalizedName.includes("akhir")) return 1;
+				return 2;
+			};
+
+			return examOrder(a.exam) - examOrder(b.exam) || a.exam.localeCompare(b.exam, "ms-MY");
+		})
+		.map((row) => ({
+			...row,
+			examLabel: row.year ? `${row.exam} (${row.year})` : row.exam,
+		}));
 	const topClassRows = [...(data?.classPerformance ?? [])]
 		.sort((a, b) => b.average - a.average || b.results - a.results)
 		.slice(0, 3);
 
 	return (
 		<div className="flex flex-col gap-8 p-6 md:p-8">
-			<div className="flex flex-col gap-1 border-b border-border/40 pb-6">
-				<p className="text-xs font-semibold tracking-[0.2em] uppercase text-primary">
-					Pengetua
-				</p>
-				<div className="flex items-end justify-between">
-					<div>
-						<h1 className="!text-[36px] font-black leading-tight text-foreground">
-							Papan Pemuka
-						</h1>
-						<p className="mt-1 text-sm text-muted-foreground">
-							Kemas kini: <LastUpdatedTime />
-						</p>
+			<div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
+				<div className="space-y-3">
+					<div className="flex items-center gap-4">
+						<div className="rounded-2xl border border-primary/20 bg-primary/10 p-3 shadow-sm">
+							<LayoutDashboard className="h-7 w-7 text-primary" />
+						</div>
+						<div>
+							<h1 className="text-xl font-bold text-foreground">Selamat Datang, Pengetua</h1>
+							<p className="mt-1 font-medium text-muted-foreground">
+								Pantau prestasi akademik dan pencapaian sekolah.
+							</p>
+						</div>
 					</div>
+					<p className="text-sm text-muted-foreground">
+						Kemas kini: <LastUpdatedTime />
+					</p>
+				</div>
+				<div>
 					<Button
 						variant="outline"
 						onClick={fetchDashboard}
 						disabled={loading}
-						className="mb-1 shadow-xs"
+						className="shadow-xs"
 					>
 						<RefreshCw className={`mr-2 h-4 w-4 ${loading ? "animate-spin" : ""}`} />
 						Muat Semula
@@ -259,7 +277,7 @@ export default function PrincipalDashboardPage() {
 
 						<div className="space-y-2">
 							<div className="text-sm font-medium text-muted-foreground">Kelas</div>
-							<Select value={classFilter} onValueChange={setClassFilter}>
+							<Select value={classFilter} onValueChange={setClassFilter} disabled={!gradeFilter}>
 								<SelectTrigger className="h-11 rounded-lg border-border bg-background">
 									<SelectValue placeholder="Pilih kelas" />
 								</SelectTrigger>
@@ -280,18 +298,12 @@ export default function PrincipalDashboardPage() {
 						</div>
 
 						<div className="space-y-2">
-							<div className="text-sm font-medium text-muted-foreground">Jenis Peperiksaan</div>
+							<div className="text-sm font-medium text-muted-foreground">Peperiksaan</div>
 							<Select value={examFilter} onValueChange={setExamFilter}>
 								<SelectTrigger className="h-11 rounded-lg border-border bg-background">
 									<SelectValue placeholder="Pilih peperiksaan" />
 								</SelectTrigger>
 								<SelectContent className="rounded-lg border-border">
-									<SelectItem value="all">
-										<div className="flex items-center gap-2">
-											<ClipboardList className="h-4 w-4" />
-											Semua Peperiksaan
-										</div>
-									</SelectItem>
 									{(data?.filterOptions.exams ?? []).map((exam) => (
 										<SelectItem key={exam.id} value={exam.id}>
 											{exam.name} {exam.year ? `(${exam.year})` : ""}
@@ -329,8 +341,8 @@ export default function PrincipalDashboardPage() {
 								className="h-11 rounded-lg border-border hover:bg-accent hover:text-accent-foreground"
 								onClick={() => {
 									setSubjectFilter("all");
-									setExamFilter("all");
-									setGradeFilter("1");
+									setExamFilter("");
+									setGradeFilter("");
 									setClassFilter("all");
 								}}
 							>
@@ -341,6 +353,17 @@ export default function PrincipalDashboardPage() {
 					</CardContent>
 				</Card>
 
+				{!gradeFilter || !examFilter ? (
+					<Card className="border-dashed border-border bg-card/60 shadow-none">
+						<CardContent className="flex flex-col items-center justify-center gap-2 py-14 text-center">
+							<GraduationCap className="h-9 w-9 text-muted-foreground/60" />
+							<p className="font-semibold text-foreground">Pilih tingkatan dan peperiksaan untuk memaparkan keputusan</p>
+							<p className="text-sm text-muted-foreground">
+								Carta prestasi dan senarai kelas akan dipaparkan selepas kedua-dua filter dipilih.
+							</p>
+						</CardContent>
+					</Card>
+				) : (
 				<div className="grid gap-6 lg:grid-cols-2">
 					<ChartCard title="Prestasi Subjek" description="Purata markah bagi setiap subjek" icon={BookOpen}>
 						<ResponsiveContainer width="100%" height={280}>
@@ -373,7 +396,14 @@ export default function PrincipalDashboardPage() {
 						<ResponsiveContainer width="100%" height={280}>
 							<LineChart data={trendChartData}>
 								<CartesianGrid strokeDasharray="3 3" />
-								<XAxis dataKey="examLabel" />
+								<XAxis
+									dataKey="examLabel"
+									interval={0}
+									angle={-18}
+									textAnchor="end"
+									height={82}
+									tick={{ fontSize: 11 }}
+								/>
 								<YAxis domain={[0, 100]} />
 								<Tooltip />
 								<Line type="monotone" dataKey="average" name="Purata" stroke="#2563eb" strokeWidth={3} dot={{ r: 5, fill: "#f59e0b" }} />
@@ -381,7 +411,8 @@ export default function PrincipalDashboardPage() {
 						</ResponsiveContainer>
 					</ChartCard>
 					<TopClassesTable rows={topClassRows} />
-			</div>
+				</div>
+				)}
 		</div>
 	);
 }

@@ -1,8 +1,14 @@
 import { NextResponse } from "next/server";
 import supabase from "@/lib/supabase";
 import { requireApiRole } from "@/lib/auth";
+import { compareExamsChronologically } from "@/lib/exam-utils";
 
 export const runtime = "nodejs";
+
+type ReportCardRow = {
+    exam_id?: unknown;
+    average_mark?: unknown;
+};
 
 function toId(v: unknown) {
     return typeof v === "string" ? v.trim() : v == null ? "" : String(v).trim();
@@ -31,8 +37,8 @@ export async function GET() {
             return NextResponse.json({ message: error.message }, { status: 500 });
         }
 
-        const rows = Array.isArray(reportCards) ? reportCards : [];
-        const examIds = Array.from(new Set(rows.map((r: any) => toId(r?.exam_id)).filter(Boolean)));
+        const rows = Array.isArray(reportCards) ? (reportCards as ReportCardRow[]) : [];
+        const examIds = Array.from(new Set(rows.map((row) => toId(row.exam_id)).filter(Boolean)));
 
         const { data: exams } = examIds.length
             ? await supabase
@@ -41,28 +47,40 @@ export async function GET() {
                   .in("exam_id", examIds)
             : { data: [] as unknown[] };
 
-        const examLabelById = new Map<string, string>();
+        const examById = new Map<string, { name: string; year: string }>();
         for (const exam of Array.isArray(exams) ? exams : []) {
             const id = toId((exam as { exam_id?: unknown }).exam_id);
             const name = String((exam as { exam_name?: unknown }).exam_name ?? "").trim();
             const year = String((exam as { academic_year?: unknown }).academic_year ?? "").trim();
             if (!id) continue;
-            examLabelById.set(id, [name, year].filter(Boolean).join(" ").trim());
+            examById.set(id, { name, year });
         }
 
         const trend = rows
-            .slice()
-            .reverse()
-            .map((r: any) => ({
-                exam: examLabelById.get(toId(r?.exam_id)) ?? "Peperiksaan",
-                average: Number(toNumber(r?.average_mark).toFixed(1)),
+            .map((row) => ({
+                examId: toId(row.exam_id),
+                average: Number(toNumber(row.average_mark).toFixed(1)),
             }))
-            .filter((p) => p.exam && Number.isFinite(p.average));
+            .filter((p) => p.examId && Number.isFinite(p.average))
+            .sort((a, b) => {
+                const examA = examById.get(a.examId) ?? { name: "Peperiksaan", year: "" };
+                const examB = examById.get(b.examId) ?? { name: "Peperiksaan", year: "" };
+                return compareExamsChronologically(examA, examB);
+            })
+            .map((point) => {
+                const exam = examById.get(point.examId) ?? { name: "Peperiksaan", year: "" };
+                return {
+                    exam: [exam.name, exam.year].filter(Boolean).join(" ").trim(),
+                    average: point.average,
+                };
+            });
 
         return NextResponse.json({ success: true, data: trend });
-    } catch (err: any) {
+    } catch (err: unknown) {
         console.error("GET student performance-trend FAILED:", err);
-        return NextResponse.json({ message: err.message || "Ralat pelayan" }, { status: 500 });
+        return NextResponse.json(
+            { message: err instanceof Error ? err.message : "Ralat pelayan" },
+            { status: 500 }
+        );
     }
 }
-

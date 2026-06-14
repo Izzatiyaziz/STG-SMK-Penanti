@@ -49,6 +49,8 @@ import {
   PieChart,
   Pie,
   Cell,
+  Line,
+  LineChart,
 } from "recharts";
 import {
   BarChart3,
@@ -63,17 +65,26 @@ import {
   Eye,
   Loader2,
   MessageSquareText,
-  Printer,
+  Download,
   Users,
   Trophy,
   TrendingDown,
+  TrendingUp,
   Pencil,
   Filter,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
+import { hasConfiguredDeadlineForAssignments } from "@/lib/exam-utils";
+import { compareExamsChronologically } from "@/lib/exam-utils";
+import { HeaderLastUpdated } from "@/components/header-last-updated";
 
-type Exam = { id: string; name: string; year: string };
+type Exam = {
+  id: string;
+  name: string;
+  year: string;
+  subject_settings?: Record<string, unknown>;
+};
 
 type StudentSubject = {
   subject_id: string;
@@ -142,6 +153,14 @@ type SubjectClassSummary = {
     grade: string;
     status: string;
   }>;
+  trend?: Array<{
+    exam_id: string;
+    exam: string;
+    year: string;
+    total: number;
+    results: number;
+    average: number;
+  }>;
 };
 
 type SubjectComparisonSummary = SubjectClassSummary & {
@@ -164,6 +183,10 @@ function formatAverage(value: number) {
   return Number.isFinite(value) ? value.toFixed(1) : "0.0";
 }
 
+function formatWholeMark(value: number) {
+  return Number.isFinite(Number(value)) ? String(Math.round(Number(value))) : "0";
+}
+
 function formatClassLabel(grade: number | null | undefined, className: string) {
   const name = String(className ?? "").trim() || "-";
   return typeof grade === "number" && Number.isFinite(grade) ? `${grade} ${name}` : name;
@@ -182,6 +205,15 @@ function gradeColor(grade: string) {
     default:
       return "bg-rose-100 text-rose-700 border-rose-200";
   }
+}
+
+function getGradeDotColor(grade: number) {
+  if (grade === 1) return "bg-emerald-500";
+  if (grade === 2) return "bg-blue-500";
+  if (grade === 3) return "bg-amber-500";
+  if (grade === 4) return "bg-purple-500";
+  if (grade === 5) return "bg-rose-500";
+  return "bg-gray-500";
 }
 
 const chartConfig = {
@@ -207,7 +239,6 @@ const gradeChartColors: Record<string, string> = {
   D: "#fb7185",
   F: "#ef4444",
 };
-const pieColors = gradeDisplayOrder.map((grade) => gradeChartColors[grade]);
 const ALL_CLASSES_VALUE = "__all_classes__";
 const ALL_SUBJECTS_VALUE = "__all_subjects__";
 
@@ -221,11 +252,12 @@ export function TeacherReportContent({
   const [sessionRole, setSessionRole] = useState<string>("");
   const [isClassTeacher, setIsClassTeacher] = useState<boolean | null>(null);
   const [exams, setExams] = useState<Exam[]>([]);
+  const [classTeacherExams, setClassTeacherExams] = useState<Exam[]>([]);
   const [selectedExamId, setSelectedExamId] = useState("");
   const [report, setReport] = useState<ReportPayload | null>(null);
   const [assignments, setAssignments] = useState<TeacherAssignment[]>([]);
   const [selectedAssignmentId, setSelectedAssignmentId] = useState("");
-  const [assignmentGradeFilter, setAssignmentGradeFilter] = useState<string>("default-grade-1");
+  const [assignmentGradeFilter, setAssignmentGradeFilter] = useState<string>("select-grade");
   const [selectedSubjectId, setSelectedSubjectId] = useState<string>(ALL_SUBJECTS_VALUE);
   const [subjectSummary, setSubjectSummary] = useState<SubjectClassSummary | null>(null);
   const [subjectSummaries, setSubjectSummaries] = useState<SubjectComparisonSummary[]>([]);
@@ -241,7 +273,7 @@ export function TeacherReportContent({
   const viewMode = isClassTeacher === true ? "class_teacher" : isClassTeacher === false ? "subject_teacher" : "loading";
 
   const assignmentGradeOptions = useMemo(() => {
-    const set = new Set<number>([1]);
+    const set = new Set<number>();
     for (const assignment of assignments) {
       if (typeof assignment.grade === "number" && Number.isFinite(assignment.grade)) set.add(assignment.grade);
     }
@@ -249,7 +281,8 @@ export function TeacherReportContent({
   }, [assignments]);
 
   const gradeFilteredAssignments = useMemo(() => {
-    const effectiveAssignmentGradeFilter = assignmentGradeFilter === "default-grade-1" ? "1" : assignmentGradeFilter;
+    if (assignmentGradeFilter === "select-grade") return [];
+    const effectiveAssignmentGradeFilter = assignmentGradeFilter;
     if (effectiveAssignmentGradeFilter === "all") return assignments;
     const grade = Number(effectiveAssignmentGradeFilter);
     if (!Number.isFinite(grade)) return assignments;
@@ -391,12 +424,37 @@ export function TeacherReportContent({
   }, [teacherId]);
 
   useEffect(() => {
+    if (!teacherId || viewMode !== "class_teacher") return;
+    fetch(`/api/teacher/class-dashboard?teacher_id=${encodeURIComponent(teacherId)}`, { cache: "no-store" })
+      .then((response) => response.json())
+      .then((json) => {
+        const approvedExams = Array.isArray(json?.data?.exams)
+          ? json.data.exams.map((exam: { id: string; name: string; academic_year?: string }) => ({
+              id: exam.id,
+              name: exam.name,
+              year: String(exam.academic_year ?? ""),
+            }))
+          : [];
+        setClassTeacherExams(approvedExams);
+        setSelectedExamId((current) =>
+          approvedExams.some((exam: Exam) => exam.id === current) ? current : "",
+        );
+      })
+      .catch(() => setClassTeacherExams([]));
+  }, [teacherId, viewMode]);
+
+  useEffect(() => {
     async function loadExams() {
       if (!teacherId) return;
       try {
-        const res = await fetch("/api/teacher/exams", { cache: "no-store" });
+        const res = await fetch("/api/admin/exams", { cache: "no-store" });
         const json = await res.json();
-        const list: Exam[] = Array.isArray(json?.data) ? json.data : [];
+        const list: Exam[] = Array.isArray(json)
+          ? json.map((exam) => ({
+              ...exam,
+              year: String(exam.academic_year ?? ""),
+            }))
+          : [];
         setExams(list);
 
         const stored = localStorage.getItem("stg_marks_context");
@@ -409,11 +467,7 @@ export function TeacherReportContent({
           }
         }
 
-        if (initialExamId && list.some((exam) => exam.id === initialExamId)) {
-          setSelectedExamId(initialExamId);
-        } else if (list[0]?.id) {
-          setSelectedExamId(list[0].id);
-        }
+        if (initialExamId && list.some((exam) => exam.id === initialExamId)) setSelectedExamId(initialExamId);
       } catch {
         setExams([]);
       }
@@ -421,6 +475,18 @@ export function TeacherReportContent({
 
     loadExams();
   }, [teacherId]);
+
+  const displayedExams = useMemo(() => {
+    if (viewMode === "class_teacher") return classTeacherExams;
+    if (viewMode !== "subject_teacher") return exams;
+    return exams.filter((exam) => hasConfiguredDeadlineForAssignments(exam, assignments));
+  }, [assignments, classTeacherExams, exams, viewMode]);
+
+  useEffect(() => {
+    if (!selectedExamId || viewMode !== "subject_teacher") return;
+    if (displayedExams.some((exam) => exam.id === selectedExamId)) return;
+    setSelectedExamId("");
+  }, [displayedExams, selectedExamId, viewMode]);
 
   const fetchSubjectSummary = useCallback(async (assignment: TeacherAssignment) => {
     const res = await fetch(
@@ -619,6 +685,42 @@ export function TeacherReportContent({
     ? formatClassLabel(report.class.grade, report.class.name)
     : "";
 
+  const classSubjectPerformance = useMemo(() => {
+    const groups = new Map<string, { subject: string; marks: number[] }>();
+    for (const student of report?.students ?? []) {
+      for (const subject of student.subjects) {
+        const group = groups.get(subject.subject_id) ?? { subject: subject.name, marks: [] };
+        group.marks.push(Number(subject.mark ?? 0));
+        groups.set(subject.subject_id, group);
+      }
+    }
+    return Array.from(groups.entries())
+      .map(([subjectId, group]) => ({
+        subjectId,
+        subject: group.subject,
+        average: group.marks.length
+          ? group.marks.reduce((sum, mark) => sum + mark, 0) / group.marks.length
+          : 0,
+      }))
+      .sort((a, b) => b.average - a.average);
+  }, [report?.students]);
+
+  const classPerformanceSummary = useMemo(() => {
+    const strongest = classSubjectPerformance[0];
+    const weakest = classSubjectPerformance[classSubjectPerformance.length - 1];
+    if (!strongest || !weakest) return "Tiada keputusan untuk diringkaskan.";
+    return `${strongest.subject} mencatat purata tertinggi ${formatWholeMark(strongest.average)}%. ${weakest.subject} mencatat purata terendah ${formatWholeMark(weakest.average)}%. Purata kelas ialah ${formatWholeMark(summary.average)}%.`;
+  }, [classSubjectPerformance, summary.average]);
+
+  const classTopStudents = useMemo(
+    () => [...(report?.students ?? [])].filter((student) => student.subjects.length > 0).sort((a, b) => b.average_mark - a.average_mark).slice(0, 3),
+    [report?.students],
+  );
+  const classWeakStudents = useMemo(
+    () => [...(report?.students ?? [])].filter((student) => student.subjects.length > 0).sort((a, b) => a.average_mark - b.average_mark).slice(0, 3),
+    [report?.students],
+  );
+
   const gradeSummaryRows = useMemo(() => {
     const countByGrade = new Map(
       summary.gradeDistribution.map((row) => [String(row.grade).toUpperCase(), row.value]),
@@ -698,6 +800,56 @@ export function TeacherReportContent({
       .sort((a, b) => Number(a.total ?? 0) - Number(b.total ?? 0))
       .slice(0, 3);
   }, [subjectStudentRows]);
+
+  const subjectPerformanceSummary = useMemo(() => {
+    const rowsWithResults = subjectComparisonRows.filter((row) => row.results > 0);
+    const bestClass = [...rowsWithResults].sort((a, b) => b.average_total - a.average_total)[0];
+    const approvedRows = subjectStudentRows.filter(
+      (row) => String(row.status ?? "").toLowerCase() === "approved"
+    );
+    const passRate = approvedRows.length
+      ? (approvedRows.filter((row) => Number(row.total) >= 40).length / approvedRows.length) * 100
+      : 0;
+
+    if (!bestClass) return "Tiada keputusan untuk diringkaskan.";
+    return `Kelas ${bestClass.shortName} mencatat purata tertinggi ${formatAverage(bestClass.average_total)}%. Purata keseluruhan ialah ${formatAverage(summary.average)}% dengan kadar lulus ${formatAverage(passRate)}%.`;
+  }, [subjectComparisonRows, subjectStudentRows, summary.average]);
+
+  const subjectTrendRows = useMemo(() => {
+    const activeSummaries =
+      subjectSummaries.length > 0
+        ? subjectSummaries
+        : subjectSummary && selectedAssignment
+          ? [{ ...subjectSummary, assignment: selectedAssignment }]
+          : [];
+    const byExam = new Map<string, { exam: string; year: string; total: number; results: number }>();
+    for (const item of activeSummaries) {
+      for (const row of item.trend ?? []) {
+        const current = byExam.get(row.exam_id) ?? {
+          exam: row.exam,
+          year: row.year,
+          total: 0,
+          results: 0,
+        };
+        current.total += Number(row.total ?? 0);
+        current.results += Number(row.results ?? 0);
+        byExam.set(row.exam_id, current);
+      }
+    }
+    return Array.from(byExam.entries())
+      .map(([examId, row]) => ({
+        examId,
+        examLabel: row.year ? `${row.exam} (${row.year})` : row.exam,
+        year: row.year,
+        average: row.results ? row.total / row.results : 0,
+      }))
+      .sort((a, b) =>
+        compareExamsChronologically(
+          { name: a.examLabel, year: a.year },
+          { name: b.examLabel, year: b.year },
+        )
+      );
+  }, [selectedAssignment, subjectSummaries, subjectSummary]);
 
   const selectedSubjectLabel = useMemo(() => {
     const taughtSubjectLabel =
@@ -961,7 +1113,7 @@ export function TeacherReportContent({
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-background to-muted/20 p-4 md:p-6">
+    <div className="min-h-screen bg-background p-4 md:p-6">
       <div className="mx-auto max-w-7xl space-y-6">
        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div className="flex items-center gap-4">
@@ -981,8 +1133,9 @@ export function TeacherReportContent({
                   ? "Paparan graf dan analisis prestasi berdasarkan keputusan peperiksaan yang tersedia."
                   : viewMode === "class_teacher"
                     ? "Senarai pelajar kelas untuk semak markah diluluskan, isi ulasan, dan jana kad laporan."
-                    : "Senarai markah pelajar berdasarkan kelas dan subjek yang anda ajar."}
+                    : "Senarai markah pelajar berdasarkan kelas dan subjek yang diajar."}
               </p>
+              <HeaderLastUpdated />
             </div>
           </div>
 
@@ -1057,16 +1210,15 @@ export function TeacherReportContent({
 
         {viewMode === "class_teacher" ? (
           <Card className="overflow-hidden rounded-xl border-border bg-card shadow-md">
-            <CardContent className="grid grid-cols-1 gap-4 p-6 md:grid-cols-[auto_1fr] md:items-end">
-              <GraduationCap className="mb-3 h-5 w-5 text-primary md:mb-3" />
-              <div className="space-y-2">
+            <CardContent className="p-6">
+              <div className="max-w-md space-y-2">
                 <div className="text-sm font-medium text-muted-foreground">Peperiksaan</div>
                 <Select value={selectedExamId} onValueChange={setSelectedExamId}>
                   <SelectTrigger className="h-11 rounded-lg border-border bg-background">
                     <SelectValue placeholder="Pilih peperiksaan" />
                   </SelectTrigger>
                   <SelectContent className="rounded-lg border-border">
-                    {exams.map((exam) => (
+                    {classTeacherExams.map((exam) => (
                       <SelectItem key={exam.id} value={exam.id}>
                         {exam.name} ({exam.year})
                       </SelectItem>
@@ -1074,96 +1226,51 @@ export function TeacherReportContent({
                   </SelectContent>
                 </Select>
               </div>
+              {classTeacherExams.length === 0 ? (
+                <p className="mt-3 text-sm text-muted-foreground">
+                  Tiada peperiksaan dengan keputusan diluluskan untuk kelas ini.
+                </p>
+              ) : null}
             </CardContent>
           </Card>
         ) : null}
 
         {viewMode === "class_teacher" && activeReportPage === "analitik" ? (
-          <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.7fr_1fr]">
-            <Card className="overflow-hidden rounded-lg border-border shadow-md">
-              <CardHeader>
-                <CardTitle>Kedudukan Purata Pelajar</CardTitle>
-                <CardDescription>
-                  12 pelajar teratas mengikut purata markah untuk peperiksaan semasa.
-                </CardDescription>
+          <div className="space-y-6">
+            <Card className="overflow-hidden rounded-xl border-border bg-card shadow-md">
+              <CardHeader className="border-b border-border px-6 py-5">
+                <CardTitle className="flex items-center gap-2">
+                  <BarChart3 className="h-5 w-5 text-primary" />
+                  Perbandingan Prestasi Subjek
+                </CardTitle>
+                <CardDescription>Perbandingan purata markah subjek bagi kelas {reportClassLabel}.</CardDescription>
               </CardHeader>
-              <CardContent>
-                <ChartContainer config={chartConfig} className="h-[320px] w-full">
-                  <BarChart accessibilityLayer data={summary.chartRows}>
+              <CardContent className="p-6">
+                <ChartContainer config={chartConfig} className="h-[340px] w-full">
+                  <BarChart accessibilityLayer data={classSubjectPerformance}>
                     <CartesianGrid vertical={false} />
-                    <XAxis
-                      dataKey="shortName"
-                      tickLine={false}
-                      axisLine={false}
-                      tickMargin={10}
-                      interval={0}
-                      angle={-18}
-                      textAnchor="end"
-                      height={60}
-                    />
-                    <YAxis domain={[0, 100]} tickLine={false} axisLine={false} tickMargin={10} />
+                    <XAxis dataKey="subject" tickLine={false} axisLine={false} interval={0} angle={-18} textAnchor="end" height={70} />
+                    <YAxis domain={[0, 100]} tickLine={false} axisLine={false} />
                     <ChartTooltip content={<ChartTooltipContent />} />
-                    <Bar dataKey="average_mark" name="Purata" fill="var(--color-average_mark)" radius={8} />
+                    <Bar dataKey="average" name="Purata" fill="var(--color-average_mark)" radius={8} />
                   </BarChart>
                 </ChartContainer>
+                <div className="mt-4 rounded-lg bg-muted/40 px-4 py-3 text-sm leading-relaxed">
+                  <span className="font-semibold">Ringkasan Prestasi: </span>
+                  {classPerformanceSummary}
+                </div>
               </CardContent>
             </Card>
 
-            <Card className="overflow-hidden rounded-lg border-border shadow-md">
-              <CardHeader>
-                <CardTitle>Taburan Gred Subjek</CardTitle>
-                <CardDescription>
-                  Bilangan gred yang muncul merentas semua subjek dalam kad laporan kelas.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {summary.gradeDistribution.length > 0 ? (
-                  <>
-                    <ChartContainer config={chartConfig} className="mx-auto h-[240px] w-full max-w-[320px]">
-                      <PieChart>
-                        <Pie
-                          data={summary.gradeDistribution}
-                          dataKey="value"
-                          nameKey="grade"
-                          innerRadius={60}
-                          outerRadius={92}
-                          paddingAngle={3}
-                        >
-                          {summary.gradeDistribution.map((entry, index) => (
-                            <Cell key={entry.grade} fill={pieColors[index % pieColors.length]} />
-                          ))}
-                        </Pie>
-                        <ChartTooltip content={<ChartTooltipContent />} />
-                      </PieChart>
-                    </ChartContainer>
-                    <div className="flex flex-wrap gap-2">
-                      {summary.gradeDistribution.map((item, index) => (
-                        <Badge
-                          key={item.grade}
-                          variant="outline"
-                          className="border-transparent"
-                          style={{
-                            backgroundColor: `${pieColors[index % pieColors.length]}20`,
-                            color: pieColors[index % pieColors.length],
-                          }}
-                        >
-                          Gred {item.grade}: {item.value}
-                        </Badge>
-                      ))}
-                    </div>
-                  </>
-                ) : (
-                  <div className="rounded-lg border border-dashed p-6 text-sm text-muted-foreground">
-                    Tiada data gred untuk dipaparkan.
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+            <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+              <ClassStudentList title="Senarai Pelajar Cemerlang" description="Top 3 pelajar terbaik bagi kelas ini." rows={classTopStudents} />
+              <ClassStudentList title="Senarai Pelajar Perlu Perhatian" description="Top 3 pelajar dengan purata paling rendah." rows={classWeakStudents} attention />
+            </div>
           </div>
         ) : viewMode === "subject_teacher" ? (
           <div className="space-y-8">
             <Card className="overflow-hidden rounded-xl border-border bg-card shadow-md">
-              <CardContent className="grid grid-cols-1 gap-4 p-6 md:grid-cols-2 xl:grid-cols-4">
+              <CardContent className="grid grid-cols-1 gap-4 p-6 md:grid-cols-2 xl:grid-cols-5">
                 <div className="space-y-2">
                   <div className="text-sm font-medium text-muted-foreground">Tingkatan</div>
                   <Select value={assignmentGradeFilter} onValueChange={setAssignmentGradeFilter}>
@@ -1171,7 +1278,7 @@ export function TeacherReportContent({
                       <SelectValue placeholder="Pilih tingkatan" />
                     </SelectTrigger>
                     <SelectContent className="rounded-lg border-border">
-                      <SelectItem value="default-grade-1">
+                      <SelectItem value="select-grade">
                         <div className="flex items-center gap-2">
                           <GraduationCap className="h-4 w-4" />
                           Tingkatan
@@ -1179,7 +1286,10 @@ export function TeacherReportContent({
                       </SelectItem>
                       {assignmentGradeOptions.map((grade) => (
                         <SelectItem key={grade} value={String(grade)}>
-                          Tingkatan {grade}
+                          <div className="flex items-center gap-2">
+                            <div className={`h-2 w-2 rounded-full ${getGradeDotColor(grade)}`} />
+                            Tingkatan {grade}
+                          </div>
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -1188,7 +1298,11 @@ export function TeacherReportContent({
 
                 <div className="space-y-2">
                   <div className="text-sm font-medium text-muted-foreground">Subjek</div>
-                  <Select value={selectedSubjectId} onValueChange={setSelectedSubjectId}>
+                  <Select
+                    value={selectedSubjectId}
+                    onValueChange={setSelectedSubjectId}
+                    disabled={assignmentGradeFilter === "select-grade"}
+                  >
                     <SelectTrigger className="h-11 rounded-lg border-border bg-background">
                       <SelectValue placeholder="Pilih subjek" />
                     </SelectTrigger>
@@ -1210,7 +1324,11 @@ export function TeacherReportContent({
 
                 <div className="space-y-2">
                   <div className="text-sm font-medium text-muted-foreground">Kelas</div>
-                  <Select value={selectedAssignmentId} onValueChange={setSelectedAssignmentId}>
+                  <Select
+                    value={selectedAssignmentId}
+                    onValueChange={setSelectedAssignmentId}
+                    disabled={assignmentGradeFilter === "select-grade"}
+                  >
                     <SelectTrigger className="h-11 rounded-lg border-border bg-background">
                       <SelectValue placeholder="Pilih kelas" />
                     </SelectTrigger>
@@ -1233,19 +1351,34 @@ export function TeacherReportContent({
                 </div>
 
                 <div className="space-y-2">
-                  <div className="text-sm font-medium text-muted-foreground">Jenis Peperiksaan</div>
+                  <div className="text-sm font-medium text-muted-foreground">Peperiksaan</div>
                   <Select value={selectedExamId} onValueChange={setSelectedExamId}>
                     <SelectTrigger className="h-11 rounded-lg border-border bg-background">
                       <SelectValue placeholder="Pilih peperiksaan" />
                     </SelectTrigger>
                     <SelectContent className="rounded-lg border-border">
-                      {exams.map((exam) => (
+                      {displayedExams.map((exam) => (
                         <SelectItem key={exam.id} value={exam.id}>
                           {exam.name} ({exam.year})
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
+                </div>
+
+                <div className="flex items-end">
+                  <Button
+                    variant="outline"
+                    className="h-10 w-full border-border xl:w-auto"
+                    onClick={() => {
+                      setAssignmentGradeFilter("select-grade");
+                      setSelectedSubjectId(ALL_SUBJECTS_VALUE);
+                      setSelectedAssignmentId("");
+                      setSelectedExamId("");
+                    }}
+                  >
+                    Reset
+                  </Button>
                 </div>
               </CardContent>
             </Card>
@@ -1314,7 +1447,7 @@ export function TeacherReportContent({
                     Prestasi Mengikut Kelas
                   </CardTitle>
                   <CardDescription>
-                    Perbandingan purata markah antara kelas yang anda ajar.
+                    Perbandingan purata markah antara kelas yang diajar.
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
@@ -1342,9 +1475,41 @@ export function TeacherReportContent({
                       Tiada data perbandingan untuk dipaparkan.
                     </div>
                   )}
+                  <div className="mt-4 rounded-lg bg-muted/40 px-4 py-3 text-sm leading-relaxed text-foreground">
+                    <span className="font-semibold">Ringkasan Prestasi: </span>
+                    {subjectPerformanceSummary}
+                  </div>
                 </CardContent>
               </Card>
             </div>
+
+            <Card className="overflow-hidden rounded-xl border-border bg-card shadow-md">
+              <CardHeader className="border-b border-border bg-gradient-to-r from-card to-card/80 px-6 py-5">
+                <CardTitle className="flex items-center gap-2">
+                  <TrendingUp className="h-5 w-5 text-primary" />
+                  Trend Prestasi
+                </CardTitle>
+                <CardDescription>Perubahan purata markah mengikut peperiksaan.</CardDescription>
+              </CardHeader>
+              <CardContent className="p-6">
+                <ChartContainer config={chartConfig} className="h-[300px] w-full">
+                  <LineChart accessibilityLayer data={subjectTrendRows}>
+                    <CartesianGrid vertical={false} />
+                    <XAxis dataKey="examLabel" tickLine={false} axisLine={false} tickMargin={10} />
+                    <YAxis domain={[0, 100]} tickLine={false} axisLine={false} tickMargin={10} />
+                    <ChartTooltip content={<ChartTooltipContent />} />
+                    <Line
+                      type="monotone"
+                      dataKey="average"
+                      name="Purata"
+                      stroke="var(--color-average_total)"
+                      strokeWidth={3}
+                      dot={{ r: 4 }}
+                    />
+                  </LineChart>
+                </ChartContainer>
+              </CardContent>
+            </Card>
 
             <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
               <Card className="overflow-hidden rounded-xl border-border bg-card shadow-md">
@@ -1355,34 +1520,36 @@ export function TeacherReportContent({
                   </CardTitle>
                   <CardDescription>Top 3 pelajar terbaik bagi subjek ini.</CardDescription>
                 </CardHeader>
-                <CardContent className="space-y-3 text-sm">
-                  {displayedTopStudents.length > 0 ? (
-                    displayedTopStudents.map((row, idx) => (
-                      <div key={`${row.student_id}-${idx}`} className="flex items-center justify-between gap-3 rounded-lg border border-border bg-background p-3 transition-colors hover:bg-muted/40">
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-2">
-                            <Badge variant="secondary">#{idx + 1}</Badge>
-                            <span className="truncate font-medium">{row.student_name || "Pelajar"}</span>
-                          </div>
-                          {row.class_label ? (
-                            <div className="mt-1 text-xs text-muted-foreground">
-                              {row.class_label}
-                            </div>
-                          ) : null}
-                        </div>
-                        <div className="text-right">
-                          <div className="text-lg font-bold">{formatAverage(row.total)}%</div>
-                          <Badge variant="outline" className={gradeColor(row.grade)}>
-                            {row.grade || "-"}
-                          </Badge>
-                        </div>
-                      </div>
-                    ))
-                  ) : (
-                    <div className="rounded-lg border border-dashed p-6 text-sm text-muted-foreground">
-                      Tiada data pelajar untuk dipaparkan.
-                    </div>
-                  )}
+                <CardContent className="p-6">
+                  <div className="overflow-x-auto rounded-lg border border-border">
+                    <Table>
+                      <TableHeader className="bg-muted/30">
+                        <TableRow className="hover:bg-transparent">
+                          <TableHead className="w-16 text-center">#</TableHead>
+                          <TableHead>Pelajar</TableHead>
+                          <TableHead>Kelas</TableHead>
+                          <TableHead className="text-center">Markah</TableHead>
+                          <TableHead className="text-center">Gred</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {displayedTopStudents.map((row, idx) => (
+                          <TableRow key={`${row.student_id}-${idx}`} className="hover:bg-muted/50">
+                            <TableCell className="text-center text-muted-foreground">{idx + 1}</TableCell>
+                            <TableCell className="font-semibold">{row.student_name || "Pelajar"}</TableCell>
+                            <TableCell>{row.class_label || "-"}</TableCell>
+                            <TableCell className="text-center font-semibold">{formatWholeMark(row.total)}%</TableCell>
+                            <TableCell className="text-center">
+                              <Badge variant="outline" className={gradeColor(row.grade)}>{row.grade || "-"}</Badge>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                        {displayedTopStudents.length === 0 ? (
+                          <TableRow><TableCell colSpan={5} className="py-12 text-center text-muted-foreground">Tiada data pelajar untuk dipaparkan.</TableCell></TableRow>
+                        ) : null}
+                      </TableBody>
+                    </Table>
+                  </div>
                 </CardContent>
               </Card>
 
@@ -1392,36 +1559,38 @@ export function TeacherReportContent({
                     <TrendingDown className="h-5 w-5 text-primary" />
                     Senarai Pelajar Perlu Perhatian
                   </CardTitle>
-                  <CardDescription>Top 3 pelajar dengan markah terendah bagi filter semasa.</CardDescription>
+                  <CardDescription>Top 3 pelajar dengan markah terendah bagi subjek ini.</CardDescription>
                 </CardHeader>
-                <CardContent className="space-y-3 text-sm">
-                  {subjectWeakStudents.length > 0 ? (
-                    subjectWeakStudents.map((row, idx) => (
-                      <div key={`${row.student_id}-${idx}-${row.class_label ?? ""}`} className="flex items-center justify-between gap-3 rounded-lg border border-border bg-background p-3 transition-colors hover:bg-muted/40">
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-2">
-                            <Badge variant="secondary">#{idx + 1}</Badge>
-                            <span className="truncate font-medium">{row.student_name || "Pelajar"}</span>
-                          </div>
-                          {row.class_label ? (
-                            <div className="mt-1 text-xs text-muted-foreground">
-                              {row.class_label}
-                            </div>
-                          ) : null}
-                        </div>
-                        <div className="text-right">
-                          <div className="text-lg font-bold text-rose-600">{formatAverage(row.total)}%</div>
-                          <Badge variant="outline" className={gradeColor(row.grade)}>
-                            {row.grade || "-"}
-                          </Badge>
-                        </div>
-                      </div>
-                    ))
-                  ) : (
-                    <div className="rounded-lg border border-dashed p-6 text-sm text-muted-foreground">
-                      Tiada data pelajar perlu perhatian untuk dipaparkan.
-                    </div>
-                  )}
+                <CardContent className="p-6">
+                  <div className="overflow-x-auto rounded-lg border border-border">
+                    <Table>
+                      <TableHeader className="bg-muted/30">
+                        <TableRow className="hover:bg-transparent">
+                          <TableHead className="w-16 text-center">#</TableHead>
+                          <TableHead>Pelajar</TableHead>
+                          <TableHead>Kelas</TableHead>
+                          <TableHead className="text-center">Markah</TableHead>
+                          <TableHead className="text-center">Gred</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {subjectWeakStudents.map((row, idx) => (
+                          <TableRow key={`${row.student_id}-${idx}-${row.class_label ?? ""}`} className="hover:bg-muted/50">
+                            <TableCell className="text-center text-muted-foreground">{idx + 1}</TableCell>
+                            <TableCell className="font-semibold">{row.student_name || "Pelajar"}</TableCell>
+                            <TableCell>{row.class_label || "-"}</TableCell>
+                            <TableCell className="text-center font-semibold text-rose-600">{formatWholeMark(row.total)}%</TableCell>
+                            <TableCell className="text-center">
+                              <Badge variant="outline" className={gradeColor(row.grade)}>{row.grade || "-"}</Badge>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                        {subjectWeakStudents.length === 0 ? (
+                          <TableRow><TableCell colSpan={5} className="py-12 text-center text-muted-foreground">Tiada data pelajar perlu perhatian untuk dipaparkan.</TableCell></TableRow>
+                        ) : null}
+                      </TableBody>
+                    </Table>
+                  </div>
                 </CardContent>
               </Card>
             </div>
@@ -1687,7 +1856,7 @@ export function TeacherReportContent({
           }}
         >
           <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-4xl">
-            <DialogHeader>
+            <DialogHeader className="print:hidden">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div>
                   <DialogTitle className="flex items-center gap-2">
@@ -1704,15 +1873,15 @@ export function TeacherReportContent({
                   onClick={() => window.print()}
                   className="h-10 rounded-lg border-border bg-background px-4 font-semibold shadow-xs hover:bg-accent hover:text-accent-foreground"
                 >
-                  <Printer className="mr-2 h-4 w-4" />
+                  <Download className="mr-2 h-4 w-4" />
                   Eksport
                 </Button>
               </div>
             </DialogHeader>
 
             {reportCardPreviewStudent ? (
-              <div className="space-y-4">
-                <Card className="border border-border shadow">
+              <div className="report-card-print-root space-y-4">
+                <Card className="report-slip-header border border-border shadow">
                   <CardContent className="space-y-3 p-6 text-center">
                     <Image
                       src="/img/smkp-logo.png"
@@ -1723,14 +1892,14 @@ export function TeacherReportContent({
                     />
                     <div>
                       <h2 className="text-lg font-bold uppercase">SMK Penanti</h2>
-                      <p className="font-semibold uppercase">
+                      <p className="report-slip-title mt-3 border-y border-border py-2 font-semibold uppercase">
                         Slip Keputusan {report?.exam.name ? `- ${report.exam.name} ${report.exam.academic_year ?? ""}` : ""}
                       </p>
                     </div>
                   </CardContent>
                 </Card>
 
-                <Card className="border border-border shadow">
+                <Card className="report-slip-student border border-border shadow">
                   <CardContent className="grid grid-cols-1 gap-4 p-5 text-sm md:grid-cols-2">
                     <div className="space-y-1">
                       <p><b>Nama</b>   : {reportCardPreviewStudent.student_name}</p>
@@ -1742,7 +1911,7 @@ export function TeacherReportContent({
                   </CardContent>
                 </Card>
 
-                <Card className="overflow-hidden rounded-xl border-border bg-card shadow-md">
+                <Card className="report-slip-results overflow-hidden rounded-xl border-border bg-card shadow-md">
                   <CardContent className="p-0">
                     <div className="overflow-x-auto">
                       <Table>
@@ -1776,7 +1945,7 @@ export function TeacherReportContent({
                   </CardContent>
                 </Card>
 
-                <Card className="border border-border shadow">
+                <Card className="report-slip-summary border border-border shadow">
                   <CardContent className="grid grid-cols-1 gap-4 p-5 text-sm md:grid-cols-2">
                     <div className="space-y-1">
                       <p><b>Bilangan Mata Pelajaran</b> : {reportCardPreviewStudent.subjects.length}</p>
@@ -1804,7 +1973,7 @@ export function TeacherReportContent({
                   </CardContent>
                 </Card>
 
-                <Card className="border border-border shadow">
+                <Card className="report-slip-comment border border-border shadow">
                   <CardContent className="p-5 text-sm">
                     <p><b>Nama Guru Kelas</b> : {reportCardPreviewStudent.class_teacher_name || "-"}</p>
                     <p>
@@ -1823,6 +1992,63 @@ export function TeacherReportContent({
         ) : null}
       </div>
     </div>
+  );
+}
+
+function ClassStudentList({
+  title,
+  description,
+  rows,
+  attention = false,
+}: {
+  title: string;
+  description: string;
+  rows: StudentReport[];
+  attention?: boolean;
+}) {
+  return (
+    <Card className="overflow-hidden rounded-xl border-border bg-card shadow-md">
+      <CardHeader className="border-b border-border px-6 py-5">
+        <CardTitle className="flex items-center gap-2">
+          {attention ? <TrendingDown className="h-5 w-5 text-primary" /> : <Trophy className="h-5 w-5 text-primary" />}
+          {title}
+        </CardTitle>
+        <CardDescription>{description}</CardDescription>
+      </CardHeader>
+      <CardContent className="p-6">
+        <div className="overflow-hidden rounded-lg border border-border">
+          <Table>
+            <TableHeader className="bg-muted/30">
+              <TableRow>
+                <TableHead className="w-14 text-center">#</TableHead>
+                <TableHead>Pelajar</TableHead>
+                <TableHead className="text-center">Purata</TableHead>
+                <TableHead className="text-center">Kedudukan</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {rows.map((student, index) => (
+                <TableRow key={student.student_id}>
+                  <TableCell className="text-center text-muted-foreground">{index + 1}</TableCell>
+                  <TableCell className="font-semibold">{student.student_name}</TableCell>
+                  <TableCell className={`text-center font-semibold ${attention ? "text-rose-600" : ""}`}>
+                    {formatWholeMark(student.average_mark)}%
+                  </TableCell>
+                  <TableCell className="text-center">{student.position ?? "-"}</TableCell>
+                </TableRow>
+              ))}
+              {rows.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={4} className="py-12 text-center text-muted-foreground">
+                    Tiada keputusan untuk dipaparkan.
+                  </TableCell>
+                </TableRow>
+              ) : null}
+            </TableBody>
+          </Table>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 

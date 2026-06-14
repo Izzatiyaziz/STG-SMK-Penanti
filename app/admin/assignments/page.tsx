@@ -5,6 +5,7 @@ import { toast } from "sonner";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { HeaderLastUpdated } from "@/components/header-last-updated";
 import {
     Select,
     SelectContent,
@@ -171,6 +172,7 @@ export default function AdminAssignmentsPage() {
                         Gunakan assignment ini untuk Guru Subjek dan semakan kerja
                         mengikut kelas.
                     </p>
+                    <HeaderLastUpdated />
                 </div>
 
                 <Card className="shadow-lg border border-border/50">

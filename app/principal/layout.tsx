@@ -1,6 +1,7 @@
 import { AppSidebar } from "@/components/app-sidebar";
 import { SiteHeader } from "@/components/site-header";
 import { SystemFooter } from "@/components/system-footer";
+import { PrincipalRouteGuard } from "@/components/principal-route-guard";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { requirePageRole } from "@/lib/auth";
 
@@ -26,7 +27,7 @@ export default async function PrincipalLayout({
 				<div className="flex min-w-0 flex-1 flex-col">
 					<div className="@container/main flex min-w-0 flex-1 flex-col gap-2">
 						<div className="flex min-w-0 flex-1 flex-col">
-							{children}
+							<PrincipalRouteGuard>{children}</PrincipalRouteGuard>
 						</div>
 						<SystemFooter />
 					</div>

@@ -315,7 +315,7 @@ export function LoginForm({
                 {/* STUDENT TAB */}
                 <TabsContent value="student">
                     <form onSubmit={(e) => handleSubmit(e, "student")} {...props}>
-                        <FieldGroup>
+                        <FieldGroup className="gap-4">
                             <Field>
                                 <FieldLabel>No. IC</FieldLabel>
                                 <Input
@@ -325,9 +325,7 @@ export function LoginForm({
                                     autoComplete="off"
                                     required
                                 />
-                                <FieldDescription className="text-xs">
-                                    Masukkan nombor IC — contoh: 050101-01-1234
-                                </FieldDescription>
+                        
                             </Field>
                             <Button type="submit" className="w-full" disabled={loading}>
                                 {loading && <Loader2 size={15} className="animate-spin" />}
@@ -340,7 +338,7 @@ export function LoginForm({
                 {/* TEACHER TAB */}
                 <TabsContent value="teacher">
                     <form onSubmit={(e) => handleSubmit(e, "teacher")} {...props}>
-                        <FieldGroup>
+                        <FieldGroup className="gap-4">
                             <Field>
                                 <FieldLabel>No. Staff</FieldLabel>
                                 <Input name="username" autoComplete="username" required />
@@ -403,7 +401,7 @@ export function LoginForm({
                 {/* ADMIN TAB */}
                 <TabsContent value="admin">
                     <form onSubmit={(e) => handleSubmit(e, "admin")} {...props}>
-                        <FieldGroup>
+                        <FieldGroup className="gap-4">
                             <Field>
                                 <FieldLabel>ID Admin</FieldLabel>
                                 <Input name="admin_id" autoComplete="username" required />

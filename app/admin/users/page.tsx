@@ -4,6 +4,7 @@ import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Users, FileCheck2, FileText, FileSignature, Database, Folder } from "lucide-react";
+import { HeaderLastUpdated } from "@/components/header-last-updated";
 
 export default function AdminUsersPage() {
     return (
@@ -20,6 +21,7 @@ export default function AdminUsersPage() {
                         <p className="text-muted-foreground">
                             Urus Guru dan Pelajar dalam satu tempat.
                         </p>
+                        <HeaderLastUpdated />
                     </div>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

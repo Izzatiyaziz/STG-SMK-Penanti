@@ -2,6 +2,12 @@ import { NextResponse } from "next/server";
 import supabase from "@/lib/supabase";
 import supabaseAdmin from "@/lib/supabase-admin";
 import { requireApiRole } from "@/lib/auth";
+import { getMalaysiaDateInputValue } from "@/lib/date-utils";
+import { getDeadlineForGrade } from "@/lib/marking-template";
+import { gradeFromTotal } from "@/lib/grade-utils";
+import { isMarkingClosedForAssignment } from "@/lib/exam-utils";
+import { getClientIp, isRequestBodyTooLarge, looksLikeXssAttempt, sanitizePlainText } from "@/lib/security";
+import { logSecurityEvent } from "@/lib/security-events";
 
 export const runtime = "nodejs";
 
@@ -19,7 +25,7 @@ type SubmissionMark = {
         max_mark: number;
         included_in_total: boolean;
     }>;
-    total: number;
+    total: number | null;
     grade: string;
 };
 
@@ -37,6 +43,10 @@ type SubmissionOut = {
     academic_year: string;
     status: ApprovalStatus;
     submittedAt: string | null;
+    deadline: string | null;
+    lateDays: number;
+    rejectionReason: string | null;
+    markingClosed: boolean;
     marks: SubmissionMark[];
 };
 
@@ -47,14 +57,6 @@ function toId(val: unknown) {
 function toNumber(val: unknown) {
     const n = typeof val === "number" ? val : Number(val);
     return Number.isFinite(n) ? n : 0;
-}
-
-function gradeFromPercentage(total: number) {
-    if (total >= 80) return "A";
-    if (total >= 65) return "B";
-    if (total >= 50) return "C";
-    if (total >= 40) return "D";
-    return "E";
 }
 
 function normalizeStatus(raw: string | null): ApprovalStatus | "all" {
@@ -69,6 +71,13 @@ function statusRank(status: string | null | undefined) {
     if (status === "pending") return 2;
     if (status === "rejected") return 1;
     return 0;
+}
+
+function differenceInCalendarDays(later: string, earlier: string) {
+    const laterMs = Date.parse(`${later}T00:00:00Z`);
+    const earlierMs = Date.parse(`${earlier}T00:00:00Z`);
+    if (!Number.isFinite(laterMs) || !Number.isFinite(earlierMs)) return 0;
+    return Math.max(0, Math.round((laterMs - earlierMs) / 86_400_000));
 }
 
 export async function GET(req: Request) {
@@ -114,7 +123,7 @@ export async function GET(req: Request) {
         let resultsQuery = supabase
             .from("stg_results")
             .select(
-                "result_id, student_id, subject_id, exam_id, omr_scan_id, subjective_id, total, grade, status"
+                "result_id, student_id, subject_id, exam_id, omr_scan_id, subjective_id, total, grade, status, rejection_reason"
             )
             .in("subject_id", subjectIds)
             // Only results with submitted subjective marks should be reviewed
@@ -238,7 +247,7 @@ export async function GET(req: Request) {
                     .in("subject_id", subjectIds),
                 supabase
                     .from("stg_exams")
-                    .select("exam_id, exam_name, academic_year")
+                    .select("exam_id, exam_name, academic_year, subject_settings")
                     .in("exam_id", examIds),
                 supabase
                     .from("stg_omr_scans")
@@ -285,7 +294,10 @@ export async function GET(req: Request) {
             if (id) subjectNameById.set(id, name);
         }
 
-        const examInfoById = new Map<string, { name: string; year: string }>();
+        const examInfoById = new Map<
+            string,
+            { name: string; year: string; subjectSettings: Record<string, unknown> }
+        >();
         for (const e of Array.isArray(exams) ? exams : []) {
             if (!e || typeof e !== "object") continue;
             const id = toId((e as { exam_id?: unknown }).exam_id);
@@ -293,6 +305,8 @@ export async function GET(req: Request) {
             examInfoById.set(id, {
                 name: toId((e as { exam_name?: unknown }).exam_name),
                 year: toId((e as { academic_year?: unknown }).academic_year),
+                subjectSettings:
+                    (e as { subject_settings?: Record<string, unknown> | null }).subject_settings ?? {},
             });
         }
 
@@ -421,6 +435,20 @@ export async function GET(req: Request) {
             const teacher_id = subjectiveInfo?.teacherId ?? null;
             const teacherName = teacher_id ? teacherNameById.get(teacher_id) ?? "" : "";
             const submittedAt = subjectiveInfo?.inputDate ?? null;
+            const deadline =
+                getDeadlineForGrade(
+                    examInfo?.subjectSettings?.[subject_id] as Record<string, unknown> | undefined,
+                    classGrade,
+                ) || null;
+            const submittedDate = submittedAt
+                ? getMalaysiaDateInputValue(new Date(submittedAt))
+                : "";
+            const lateDays =
+                deadline && submittedDate > deadline
+                    ? differenceInCalendarDays(submittedDate, deadline)
+                    : 0;
+            const rejectionReason =
+                toId((row as { rejection_reason?: unknown }).rejection_reason) || null;
 
             const key = [subject_id, class_id ?? "no-class", exam_id, teacher_id ?? "no-teacher"].join("|");
 
@@ -465,6 +493,13 @@ export async function GET(req: Request) {
                     teacher: teacherName,
                     status,
                     submittedAt,
+                    deadline,
+                    lateDays,
+                    rejectionReason,
+                    markingClosed: isMarkingClosedForAssignment(
+                        { subject_settings: examInfo?.subjectSettings },
+                        { subject_id, grade: classGrade },
+                    ),
                     marks: [],
                 });
             }
@@ -474,6 +509,8 @@ export async function GET(req: Request) {
             if (submittedAt && (!group.submittedAt || submittedAt > group.submittedAt)) {
                 group.submittedAt = submittedAt;
             }
+            group.lateDays = Math.max(group.lateDays, lateDays);
+            if (rejectionReason) group.rejectionReason = rejectionReason;
 
             group.marks.push({
                 result_id,
@@ -511,6 +548,18 @@ export async function GET(req: Request) {
             const teacherName = teacher_id ? teacherNameById.get(teacher_id) ?? "" : "";
             const submittedAt =
                 subjectiveInfo?.inputDate || toId((row as { input_date?: unknown }).input_date) || null;
+            const deadline =
+                getDeadlineForGrade(
+                    examInfo?.subjectSettings?.[subject_id] as Record<string, unknown> | undefined,
+                    classGrade,
+                ) || null;
+            const submittedDate = submittedAt
+                ? getMalaysiaDateInputValue(new Date(submittedAt))
+                : "";
+            const lateDays =
+                deadline && submittedDate > deadline
+                    ? differenceInCalendarDays(submittedDate, deadline)
+                    : 0;
             const compositeKey = [student_id, subject_id, exam_id].join("|");
             const components = componentMapByCompositeKey.get(compositeKey) ?? [];
             const fallbackComponents =
@@ -546,6 +595,13 @@ export async function GET(req: Request) {
                     teacher: teacherName,
                     status: "pending",
                     submittedAt,
+                    deadline,
+                    lateDays,
+                    rejectionReason: null,
+                    markingClosed: isMarkingClosedForAssignment(
+                        { subject_settings: examInfo?.subjectSettings },
+                        { subject_id, grade: classGrade },
+                    ),
                     marks: [],
                 });
             }
@@ -555,6 +611,7 @@ export async function GET(req: Request) {
             if (submittedAt && (!group.submittedAt || submittedAt > group.submittedAt)) {
                 group.submittedAt = submittedAt;
             }
+            group.lateDays = Math.max(group.lateDays, lateDays);
             group.marks.push({
                 result_id: `subjective:${subjective_id}`,
                 student: studentInfo?.name ?? student_id,
@@ -565,11 +622,67 @@ export async function GET(req: Request) {
             });
         }
 
+        const submissionClassIds = Array.from(
+            new Set(
+                Array.from(submissionsByKey.values())
+                    .map((submission) => submission.class_id)
+                    .filter((classId): classId is string => Boolean(classId))
+            )
+        );
+        const { data: classStudents } = submissionClassIds.length
+            ? await supabase
+                  .from("stg_students")
+                  .select("student_id, fullname, class_id")
+                  .in("class_id", submissionClassIds)
+            : { data: [] as unknown[] };
+
+        const studentsByClassId = new Map<
+            string,
+            Array<{ id: string; name: string }>
+        >();
+        for (const row of Array.isArray(classStudents) ? classStudents : []) {
+            if (!row || typeof row !== "object") continue;
+            const id = toId((row as { student_id?: unknown }).student_id);
+            const name = toId((row as { fullname?: unknown }).fullname) || id;
+            const classId = toId((row as { class_id?: unknown }).class_id);
+            if (!id || !classId) continue;
+            if (!studentsByClassId.has(classId)) studentsByClassId.set(classId, []);
+            studentsByClassId.get(classId)!.push({ id, name });
+        }
+
+        for (const submission of submissionsByKey.values()) {
+            if (!submission.class_id) continue;
+            const includedStudentIds = new Set(
+                submission.marks.map((mark) => mark.student_id)
+            );
+            for (const student of studentsByClassId.get(submission.class_id) ?? []) {
+                if (includedStudentIds.has(student.id)) continue;
+                submission.marks.push({
+                    result_id: `missing:${submission.id}:${student.id}`,
+                    student: student.name,
+                    student_id: student.id,
+                    components: [],
+                    total: null,
+                    grade: "-",
+                });
+            }
+        }
+
         const submissions = Array.from(submissionsByKey.values()).sort((a, b) => {
             const aa = a.submittedAt ? new Date(a.submittedAt).getTime() : 0;
             const bb = b.submittedAt ? new Date(b.submittedAt).getTime() : 0;
             return bb - aa;
         });
+
+        for (const submission of submissions) {
+            submission.marks.sort(
+                (a, b) =>
+                    a.student.localeCompare(b.student, "ms", {
+                        sensitivity: "base",
+                        numeric: true,
+                    }) || a.student_id.localeCompare(b.student_id)
+            );
+        }
 
         return NextResponse.json({ data: submissions });
     } catch (err) {
@@ -583,12 +696,35 @@ export async function POST(req: Request) {
         const guard = await requireApiRole("subject coordinator");
         if ("response" in guard) return guard.response;
 
+        if (isRequestBodyTooLarge(req, 16_384)) {
+            return NextResponse.json({ message: "Permintaan terlalu besar" }, { status: 413 });
+        }
+
         const body = await req.json();
         const action = String(body?.action ?? "").trim();
         const subject_id = String(body?.subject_id ?? "").trim();
         const class_id = String(body?.class_id ?? "").trim();
         const exam_id = String(body?.exam_id ?? "").trim();
         const teacher_id = String(body?.teacher_id ?? "").trim();
+        const rawRejectionReason = String(body?.rejection_reason ?? "").trim();
+        const rejection_reason = sanitizePlainText(rawRejectionReason, 500);
+        if (looksLikeXssAttempt(rawRejectionReason)) {
+            await logSecurityEvent({
+                eventType: "xss_attempt",
+                severity: "high",
+                ipAddress: getClientIp(req),
+                identifier: guard.session.user_id,
+                role: "subject coordinator",
+                endpoint: "/api/coordinator/approvals",
+                details: { reason: "Markup mencurigakan dikesan pada sebab penolakan" },
+            });
+        }
+        const { data: approvalClass } = await supabaseAdmin
+            .from("stg_classes")
+            .select("grade")
+            .eq("class_id", class_id)
+            .maybeSingle();
+        const approvalClassGrade = toNumber(approvalClass?.grade);
 
         if (!action || !subject_id || !class_id || !exam_id) {
             return NextResponse.json(
@@ -607,6 +743,13 @@ export async function POST(req: Request) {
         if (nextStatus === "pending") {
             return NextResponse.json(
                 { message: "Tindakan tidak sah" },
+                { status: 400 }
+            );
+        }
+
+        if (nextStatus === "rejected" && !rejection_reason) {
+            return NextResponse.json(
+                { message: "Sebab penolakan diperlukan" },
                 { status: 400 }
             );
         }
@@ -708,8 +851,8 @@ export async function POST(req: Request) {
             })
             .filter(Boolean);
 
-        let rejectedSyntheticCount = 0;
-        if (nextStatus === "rejected" && teacher_id) {
+        let linkedSubjectiveCount = 0;
+        if (teacher_id) {
             const [{ data: teacherSubjectives, error: subjectiveErr }, { data: existingResults, error: existingResultsErr }] =
                 await Promise.all([
                     supabaseAdmin
@@ -767,7 +910,7 @@ export async function POST(req: Request) {
                 if (!subjectiveId || !studentId || referencedSubjectiveIds.has(subjectiveId)) continue;
 
                 const total = toNumber((row as { subjective_mark?: unknown }).subjective_mark);
-                const grade = gradeFromPercentage(total);
+                const grade = gradeFromTotal(total, approvalClassGrade);
                 const existingResultId = existingResultByStudentId.get(studentId);
 
                 if (existingResultId) {
@@ -777,8 +920,9 @@ export async function POST(req: Request) {
                             subjective_id: subjectiveId,
                             total,
                             grade,
-                            status: "rejected",
+                            status: nextStatus,
                             approval_date: new Date().toISOString(),
+                            rejection_reason: nextStatus === "rejected" ? rejection_reason : null,
                         })
                         .eq("result_id", existingResultId);
 
@@ -798,8 +942,9 @@ export async function POST(req: Request) {
                             subjective_id: subjectiveId,
                             total,
                             grade,
-                            status: "rejected",
+                            status: nextStatus,
                             approval_date: new Date().toISOString(),
+                            rejection_reason: nextStatus === "rejected" ? rejection_reason : null,
                         });
 
                     if (insertErr) {
@@ -810,15 +955,15 @@ export async function POST(req: Request) {
                     }
                 }
 
-                rejectedSyntheticCount += 1;
+                linkedSubjectiveCount += 1;
             }
         }
 
         if (resultIds.length === 0) {
-            if (rejectedSyntheticCount > 0) {
+            if (linkedSubjectiveCount > 0) {
                 return NextResponse.json({
                     success: true,
-                    updated: rejectedSyntheticCount,
+                    updated: linkedSubjectiveCount,
                 });
             }
 
@@ -834,6 +979,7 @@ export async function POST(req: Request) {
             .update({
                 status: nextStatus,
                 approval_date: new Date().toISOString(),
+                rejection_reason: nextStatus === "rejected" ? rejection_reason : null,
             })
             .in("result_id", resultIds)
             .select("result_id");
@@ -847,7 +993,7 @@ export async function POST(req: Request) {
 
         return NextResponse.json({
             success: true,
-            updated: (Array.isArray(updatedRows) ? updatedRows.length : 0) + rejectedSyntheticCount,
+            updated: (Array.isArray(updatedRows) ? updatedRows.length : 0) + linkedSubjectiveCount,
         });
     } catch (err) {
         console.error("COORDINATOR APPROVAL ACTION ERROR:", err);

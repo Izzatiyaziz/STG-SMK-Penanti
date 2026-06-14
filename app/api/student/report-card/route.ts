@@ -108,6 +108,22 @@ export async function GET(req: Request) {
         }
 
         const classId = toId(studentRow.class_id);
+        let availableCardsQuery = supabase
+            .from("stg_report_cards")
+            .select("exam_id, generated_date")
+            .eq("student_id", student_id)
+            .order("generated_date", { ascending: false });
+        if (classId) {
+            availableCardsQuery = (availableCardsQuery as typeof availableCardsQuery).eq("class_id", classId);
+        }
+        const { data: availableCards } = await availableCardsQuery;
+        const availableExamIds = Array.from(
+            new Set(
+                (Array.isArray(availableCards) ? availableCards : [])
+                    .map((row) => toId((row as DbRow).exam_id))
+                    .filter(Boolean),
+            ),
+        );
 
         let reportCardQuery = supabase
             .from("stg_report_cards")
@@ -142,7 +158,7 @@ export async function GET(req: Request) {
             return NextResponse.json({ message: "Slip keputusan belum dijana" }, { status: 404 });
         }
 
-        const [{ data: classRow }, { data: teacherRow }, { data: examRow }, { data: results }] = await Promise.all([
+        const [{ data: classRow }, { data: teacherRow }, { data: examRow }, { data: results }, { data: availableExamRows }] = await Promise.all([
             supabase
                 .from("stg_classes")
                 .select("class_id, class_name, grade")
@@ -164,6 +180,12 @@ export async function GET(req: Request) {
                 .eq("student_id", student_id)
                 .eq("exam_id", toId(reportCard.exam_id))
                 .eq("status", "approved"),
+            availableExamIds.length
+                ? supabase
+                      .from("stg_exams")
+                      .select("exam_id, exam_name, academic_year")
+                      .in("exam_id", availableExamIds)
+                : { data: [] as unknown[] },
         ]);
 
         const { count: totalStudents } = classId
@@ -256,6 +278,7 @@ export async function GET(req: Request) {
         return NextResponse.json({
             success: true,
             student: {
+                examId: toId(reportCard.exam_id),
                 name: String(studentRow.fullname ?? ""),
                 ic: String(studentRow.ic_number ?? ""),
                 className: formatClassLabel(classRow as { class_name?: unknown; grade?: unknown } | null),
@@ -263,6 +286,14 @@ export async function GET(req: Request) {
                 year: String(examRow?.academic_year ?? ""),
                 classTeacher: String(teacherRow?.fullname ?? ""),
             },
+            exams: (Array.isArray(availableExamRows) ? availableExamRows : [])
+                .map((row) => ({
+                    id: toId((row as DbRow).exam_id),
+                    name: String((row as DbRow).exam_name ?? "").trim(),
+                    year: String((row as DbRow).academic_year ?? "").trim(),
+                }))
+                .filter((row) => row.id)
+                .sort((a, b) => `${b.year} ${b.name}`.localeCompare(`${a.year} ${a.name}`)),
             results: subjectResults,
             summary: {
                 totalSubjects: subjectResults.length,

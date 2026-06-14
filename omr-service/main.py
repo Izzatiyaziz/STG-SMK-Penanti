@@ -64,6 +64,8 @@ class OMRGradeRequest(BaseModel):
     image_base64: str
     template_width: int = Field(default=1400, ge=800, le=4000)
     template_height: int = Field(default=2000, ge=800, le=5000)
+    already_warped: bool = False
+    processing_profile: str = "upload"
     corners: dict[str, list[int]] | None = None
     answer_region: AnswerRegion | None = None
     template: dict[str, QuestionTemplate]
@@ -159,8 +161,8 @@ def _build_spm_80_template_bundle() -> dict[str, Any]:
         1: {"A": 592, "B": 633, "C": 673, "D": 713},
         2: {"A": 795, "B": 835, "C": 877, "D": 917},
     }
-    base_y = [320, 343, 366, 388, 410]
-    group_offsets = [0, 156, 312, 468, 623, 778]
+    base_y = [411, 432, 453, 475, 496]
+    group_offsets = [0, 143, 282, 423, 564, 705]
     row_y = [base_y[row] + group_offsets[group] for group in range(6) for row in range(5)]
 
     template: dict[str, Any] = {}
@@ -491,6 +493,52 @@ def _best_fill_ratio_near(gray: np.ndarray, center: BubblePoint, search_radius: 
         shifted = BubblePoint(x=center.x + dx, y=center.y + dy, r=center.r)
         best = max(best, _fill_ratio(gray, shifted))
     return best
+
+
+def _aligned_option_ratios(
+    gray: np.ndarray,
+    question: QuestionTemplate,
+    search_radius: int,
+) -> dict[str, float]:
+    """
+    Find one shared local offset for the whole answer row.
+
+    Searching each option independently can make A/B/C/D drift onto nearby text
+    or printed lines. A shared offset follows the physical row and keeps the four
+    option scores comparable.
+    """
+    radius = max(0, int(search_radius))
+    step = 2
+    offsets = [(0, 0)]
+    for dy in range(-radius, radius + 1, step):
+        for dx in range(-radius, radius + 1, step):
+            if dx or dy:
+                offsets.append((dx, dy))
+
+    best_ratios: dict[str, float] = {}
+    best_score = float("-inf")
+    for dx, dy in offsets:
+        ratios = {
+            option: _fill_ratio(
+                gray,
+                BubblePoint(x=point.x + dx, y=point.y + dy, r=point.r),
+            )
+            for option, point in [
+                ("A", question.A),
+                ("B", question.B),
+                ("C", question.C),
+                ("D", question.D),
+            ]
+        }
+        ranked = sorted(ratios.values(), reverse=True)
+        # Prefer an offset with one clearly marked option, while slightly
+        # rewarding overall contrast to handle light pencil marks.
+        score = (ranked[0] - ranked[1]) + (ranked[0] * 0.12)
+        if score > best_score:
+            best_score = score
+            best_ratios = ratios
+
+    return best_ratios
 
 
 def _apply_answer_region_mask(gray: np.ndarray, region: AnswerRegion | None) -> np.ndarray:
@@ -858,7 +906,9 @@ def warp(req: WarpRequest) -> Any:
 def grade(req: OMRGradeRequest) -> Any:
     image = _decode_base64_image(req.image_base64)
 
-    if req.corners:
+    if req.already_warped:
+        warped = cv2.resize(image, (req.template_width, req.template_height), interpolation=cv2.INTER_AREA)
+    elif req.corners:
         try:
             ordered = OrderedCorners(
                 top_left=np.array(req.corners["top_left"], dtype=np.float32),
@@ -868,10 +918,10 @@ def grade(req: OMRGradeRequest) -> Any:
             )
         except Exception as exc:
             raise HTTPException(status_code=400, detail="Invalid corners payload") from exc
+        warped = _warp_sheet(image, ordered, req.template_width, req.template_height)
     else:
         ordered = _find_sheet_corners(image)
-
-    warped = _warp_sheet(image, ordered, req.template_width, req.template_height)
+        warped = _warp_sheet(image, ordered, req.template_width, req.template_height)
     if not _check_warp_quality(warped):
         raise HTTPException(
             status_code=422,
@@ -897,25 +947,37 @@ def grade(req: OMRGradeRequest) -> Any:
     for qid in question_ids:
         total += 1
         q_template = req.template[qid]
-        ratios = {
-            "A": _best_fill_ratio_near(gray, q_template.A, req.search_radius),
-            "B": _best_fill_ratio_near(gray, q_template.B, req.search_radius),
-            "C": _best_fill_ratio_near(gray, q_template.C, req.search_radius),
-            "D": _best_fill_ratio_near(gray, q_template.D, req.search_radius),
-        }
+        is_camera_profile = req.processing_profile == "camera"
+        effective_search_radius = (
+            0
+            if is_camera_profile and req.already_warped
+            else max(req.search_radius, 10)
+            if not is_camera_profile
+            else req.search_radius
+        )
+        ratios = _aligned_option_ratios(gray, q_template, effective_search_radius)
         ranked = sorted(ratios.items(), key=lambda item: item[1], reverse=True)
         best_opt, best_val = ranked[0]
         second_val = ranked[1][1]
         gap = best_val - second_val
+        min_mark_threshold = min(req.min_mark_threshold, 0.20 if is_camera_profile else 0.18)
+        ambiguity_gap = min(req.ambiguity_gap, 0.025 if is_camera_profile else 0.02)
 
         expected = _normalize_option(req.answer_key.get(qid))
         status = "wrong"
         detected: str | None = None
 
-        if best_val < req.min_mark_threshold:
+        if not is_camera_profile:
+            detected = best_opt
+            if detected == expected:
+                status = "correct"
+                correct += 1
+            else:
+                wrong += 1
+        elif best_val < min_mark_threshold:
             status = "blank"
             blank += 1
-        elif gap < req.ambiguity_gap:
+        elif gap < ambiguity_gap:
             status = "ambiguous"
             ambiguous += 1
         else:
@@ -930,7 +992,7 @@ def grade(req: OMRGradeRequest) -> Any:
             # keep wrong count as explicit marked wrong only
             pass
 
-        confidence = max(0.0, min(1.0, gap / max(req.ambiguity_gap, 1e-6)))
+        confidence = max(0.0, min(1.0, gap / max(ambiguity_gap, 1e-6)))
         results.append(
             QuestionResult(
                 question_no=int(qid),

@@ -25,10 +25,10 @@ const portalFeatures = [
 
 export default function LoginPage() {
 	return (
-		<main className="min-h-svh bg-background login-grid-bg">
-			<div className="grid min-h-svh lg:grid-cols-2">
+		<main className="h-svh overflow-hidden bg-background login-grid-bg">
+			<div className="grid h-full lg:grid-cols-2">
 				{/* LEFT PANEL — Hero content — desktop only */}
-				<div className="hidden lg:flex flex-col justify-between px-8 py-8 lg:px-12 xl:px-16 2xl:px-24">
+				<div className="hidden h-full flex-col justify-between px-8 py-6 lg:flex lg:px-12 xl:px-16 2xl:px-24">
 					<header className="animate-app-fade flex items-center justify-between gap-3">
 						<Link href="/" className="flex items-center gap-3">
 							<Image
@@ -47,23 +47,23 @@ export default function LoginPage() {
 						</div>
 					</header>
 
-					<div className="space-y-10 animate-app-enter text-center">
-						<div className="space-y-5">
+					<div className="animate-app-enter space-y-6 text-center">
+						<div className="space-y-3">
 							<p className="text-xs font-semibold tracking-[0.25em] uppercase text-primary">
 								Portal Akademik Sekolah
 							</p>
-							<h1 className="!text-[60px] font-black leading-[1.05] tracking-tight text-foreground xl:!text-[72px]">
+							<h1 className="!text-[48px] font-black leading-[1.02] tracking-tight text-foreground xl:!text-[60px]">
 								Sistem
 								<br />
 								Pemarkahan
 								<br />
 								<em className="italic text-primary" style={{ fontSize: "inherit" }}>
-									Akademik.
+									Automatik.
 								</em>
 							</h1>
-							<p className="mx-auto max-w-sm text-base leading-7 text-muted-foreground">
-								Satu ruang kerja untuk guru, pentadbir, pelajar, panitia, dan pengetua
-								mengurus data akademik dengan lebih tersusun.
+							<p className="mx-auto max-w-sm text-sm leading-6 text-muted-foreground">
+								Satu platform yang menyokong pengurusan data pemarkahan dan maklumat akademik bagi guru, 
+								pelajar, panitia, pentadbir, dan pengetua.
 							</p>
 						</div>
 
@@ -71,7 +71,7 @@ export default function LoginPage() {
 							{portalFeatures.map((feature, i) => (
 								<div
 									key={feature.title}
-									className={`flex items-center justify-center gap-6 py-4 animate-app-enter ${
+									className={`flex items-center justify-center gap-5 py-2.5 animate-app-enter ${
 										i === 0
 											? "animate-delay-1"
 											: i === 1
@@ -100,9 +100,9 @@ export default function LoginPage() {
 				</div>
 
 				{/* RIGHT PANEL — Login card */}
-				<div className="flex min-h-svh flex-col items-center justify-center bg-card px-5 py-10 sm:px-8 lg:col-start-2">
+				<div className="flex h-full min-h-0 flex-col items-center justify-center overflow-hidden bg-card px-5 py-5 sm:px-8 lg:col-start-2">
 					{/* Mobile header */}
-					<div className="mb-8 flex w-full max-w-sm items-center justify-between lg:hidden">
+					<div className="mb-5 flex w-full max-w-sm items-center justify-between lg:hidden">
 						<Link href="/" className="flex items-center gap-2.5">
 							<Image
 								src="/img/smkp-logo.png"
@@ -116,21 +116,21 @@ export default function LoginPage() {
 						<ModeToggle />
 					</div>
 
-					<div className="w-full max-w-[360px] space-y-8 animate-app-enter animate-delay-1">
+					<div className="w-full max-w-[360px] space-y-5 animate-app-enter animate-delay-1">
 						<div className="flex items-center justify-center">
 							<div className="hidden items-center gap-2.5 lg:flex">
 								<Image
 									src="/img/smkp-logo.png"
 									alt="SMK Penanti"
-									width={80}
-									height={80}
+									width={64}
+									height={64}
 									priority
 								/>
 							</div>
 						</div>
 
 						<div className="space-y-1.5 text-center">
-							<h2 className="!text-[32px] font-black text-foreground">Log Masuk</h2>
+							<h2 className="!text-[28px] font-black text-foreground">Log Masuk</h2>
 							<p className="text-sm text-muted-foreground">
 								Pilih jawatan dan masukkan kelayakan anda.
 							</p>
@@ -139,7 +139,7 @@ export default function LoginPage() {
 						<LoginForm />
 					</div>
 
-					<p className="mt-10 text-center text-xs text-muted-foreground">
+					<p className="mt-5 text-center text-xs text-muted-foreground">
 						Sistem akademik dalaman &mdash; SMK Penanti
 					</p>
 				</div>

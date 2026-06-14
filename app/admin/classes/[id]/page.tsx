@@ -38,6 +38,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
+import { HeaderLastUpdated } from "@/components/header-last-updated";
+import { exportTablePDF } from "@/lib/export-pdf";
 import {
     Select,
     SelectContent,
@@ -59,12 +61,24 @@ type TeacherItem = {
     email?: string | null;
 };
 
+type ClassInfo = {
+    name: string;
+    grade?: string | number | null;
+};
+
+type AdminUser = {
+    id?: unknown;
+    name?: unknown;
+    email?: unknown;
+    roles?: unknown;
+};
+
 export default function ClassDetailPage() {
     const { id } = useParams();
     const router = useRouter();
 
     const [loading, setLoading] = useState(true);
-    const [classInfo, setClassInfo] = useState<any>(null);
+    const [classInfo, setClassInfo] = useState<ClassInfo | null>(null);
     const [students, setStudents] = useState<Student[]>([]);
 
     // Edit states
@@ -116,16 +130,16 @@ export default function ClassDetailPage() {
                 return;
             }
 
-            const classTeachers: TeacherItem[] = (data || [])
+            const classTeachers: TeacherItem[] = (Array.isArray(data) ? data as AdminUser[] : [])
                 .filter(
-                    (t: any) =>
+                    (t) =>
                         Array.isArray(t.roles) &&
                         t.roles.includes("class teacher")
                 )
-                .map((t: any) => ({
-                    id: t.id,
-                    name: t.name,
-                    email: t.email ?? null,
+                .map((t) => ({
+                    id: String(t.id ?? ""),
+                    name: String(t.name ?? ""),
+                    email: t.email == null ? null : String(t.email),
                 }));
 
             setTeachers(classTeachers);
@@ -283,6 +297,27 @@ export default function ClassDetailPage() {
         (s) => s.status === "inactive"
     ).length;
 
+    function handleExportStudents() {
+        exportTablePDF({
+            title: "Senarai Pelajar Kelas",
+            subtitle: `Kelas: ${classInfo?.grade ?? ""} ${classInfo?.name ?? ""} | Jumlah: ${students.length} pelajar`,
+            fileName: `senarai-pelajar-${classInfo?.name || "kelas"}.pdf`,
+            columns: [
+                { header: "Bil.", dataKey: "no" },
+                { header: "Nama Pelajar", dataKey: "name" },
+                { header: "No. Kad Pengenalan", dataKey: "icNumber" },
+                { header: "Status", dataKey: "status" },
+            ],
+            rows: students.map((student, index) => ({
+                no: index + 1,
+                name: student.fullname,
+                icNumber: student.ic_number,
+                status: student.status === "active" ? "Aktif" : "Tidak Aktif",
+            })),
+        });
+        toast.success("PDF senarai pelajar berjaya dieksport");
+    }
+
     return (
         <div className="p-4 md:p-6 space-y-6">
             {/* Header with Back Button */}
@@ -298,9 +333,12 @@ export default function ClassDetailPage() {
                         Kembali
                     </Button>
                     <div className="h-6 w-px bg-border/60" />
-                    <h1 className="text-lg md:text-xl font-semibold text-foreground">
-                        Maklumat Kelas
-                    </h1>
+                    <div>
+                        <h1 className="text-lg md:text-xl font-semibold text-foreground">
+                            Maklumat Kelas
+                        </h1>
+                        <HeaderLastUpdated className="mt-1" />
+                    </div>
                 </div>
 
                 <div className="flex w-full gap-2 sm:w-auto">
@@ -343,14 +381,14 @@ export default function ClassDetailPage() {
                                     </div>
                                 ) : (
                                     <CardTitle className="text-xl md:text-2xl font-bold">
-                                        {classInfo.name}
+                                        {classInfo?.name ?? "-"}
                                     </CardTitle>
                                 )}
                                 <Badge
                                     variant="outline"
                                     className="rounded-lg px-3 py-1 text-sm font-medium bg-primary/5 border-primary/20"
                                 >
-                                    Tingkatan {classInfo.grade}
+                                    Tingkatan {classInfo?.grade ?? "-"}
                                 </Badge>
                             </div>
                             <CardDescription className="text-base">
@@ -489,7 +527,7 @@ export default function ClassDetailPage() {
                             <div>
                                 <CardTitle>Senarai Pelajar</CardTitle>
                                 <CardDescription>
-                                    Kesemua pelajar dalam kelas {classInfo.name}
+                                    Kesemua pelajar dalam kelas {classInfo?.name ?? "-"}
                                 </CardDescription>
                             </div>
                         </div>
@@ -596,7 +634,11 @@ export default function ClassDetailPage() {
                 </Button>
 
                 <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row">
-                    <Button className="w-full rounded-lg gap-2 sm:w-auto">
+                    <Button
+                        className="w-full rounded-lg gap-2 sm:w-auto"
+                        onClick={handleExportStudents}
+                        disabled={students.length === 0}
+                    >
                         <Users className="w-4 h-4" />
                         Eksport Senarai
                     </Button>

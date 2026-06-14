@@ -9,6 +9,7 @@ import {
 } from "@/lib/marking-template";
 import { getMalaysiaDateInputValue } from "@/lib/date-utils";
 import { gradeFromTotal as gradeFromPercentage } from "@/lib/grade-utils";
+import { isMarkingClosedForAssignment } from "@/lib/exam-utils";
 
 export const runtime = "nodejs";
 
@@ -32,11 +33,16 @@ function buildComponentPayload(
   row: InputMarkRow,
   templateComponents: MarkComponent[],
   primaryOmrKey: string | null,
-) {
+): Record<string, number | null> {
   const fromComponents =
     row.components && typeof row.components === "object"
       ? Object.fromEntries(
-          Object.entries(row.components).map(([key, value]) => [key, toNumber(value, 0)]),
+          Object.entries(row.components).map(([key, value]) => [
+            key,
+            value === null || value === undefined || String(value).trim() === ""
+              ? null
+              : toNumber(value, 0),
+          ]),
         )
       : {};
 
@@ -103,6 +109,15 @@ export async function POST(req: Request) {
     if (examErr) {
       return NextResponse.json({ message: examErr.message }, { status: 500 });
     }
+    if (isMarkingClosedForAssignment(
+      { subject_settings: exam?.subject_settings as Record<string, unknown> | undefined },
+      { subject_id, grade: Number(classRow?.grade ?? 0) },
+    )) {
+      return NextResponse.json(
+        { message: "Pemarkahan telah ditutup oleh panitia untuk peperiksaan ini." },
+        { status: 409 },
+      );
+    }
 
     const templateInfo = getGradeTemplateForClass({
       subjectSettings: (exam?.subject_settings as Record<string, unknown> | null | undefined) ?? {},
@@ -112,17 +127,17 @@ export async function POST(req: Request) {
     });
 
     const deadline = templateInfo.deadline ? String(templateInfo.deadline).trim() : "";
-    if (deadline && /^\d{4}-\d{2}-\d{2}$/.test(deadline)) {
-      const today = getMalaysiaDateInputValue();
-      if (!saveAsDraft && today > deadline) {
-        return NextResponse.json(
-          {
-            message: `Tarikh akhir penghantaran telah tamat (${deadline}). Sila hubungi Penyelaras Subjek.`,
-          },
-          { status: 403 },
-        );
-      }
-    }
+    const today = getMalaysiaDateInputValue();
+    const lateDays =
+      !saveAsDraft && deadline && /^\d{4}-\d{2}-\d{2}$/.test(deadline) && today > deadline
+        ? Math.max(
+            0,
+            Math.round(
+              (Date.parse(`${today}T00:00:00Z`) - Date.parse(`${deadline}T00:00:00Z`)) /
+                86_400_000,
+            ),
+          )
+        : 0;
 
     const primaryOmrComponent = getPrimaryOmrComponent(templateInfo.template);
 
@@ -208,7 +223,7 @@ export async function POST(req: Request) {
       }
     }
 
-    const payloadByStudent = new Map<string, Record<string, number>>();
+    const payloadByStudent = new Map<string, Record<string, number | null>>();
     for (const row of marks) {
       const sid = toId(row?.student_id);
       if (!sid) continue;
@@ -218,10 +233,30 @@ export async function POST(req: Request) {
       );
     }
 
-    for (const studentId of studentIds) {
+    const submittedStudentIds = saveAsDraft
+      ? studentIds
+      : Array.from(payloadByStudent.entries())
+          .filter(([, marksByKey]) =>
+            templateInfo.template.components.every(
+              (component) => marksByKey[component.key] !== null && marksByKey[component.key] !== undefined,
+            ),
+          )
+          .map(([studentId]) => studentId)
+          .filter((studentId) => studentIdSet.has(studentId));
+
+    if (!saveAsDraft && submittedStudentIds.length === 0) {
+      return NextResponse.json(
+        { message: "Tiada markah pelajar yang lengkap untuk dihantar" },
+        { status: 400 },
+      );
+    }
+
+    for (const studentId of submittedStudentIds) {
       const marksByKey = payloadByStudent.get(studentId) ?? {};
       for (const component of templateInfo.template.components) {
-        const mark = toNumber(marksByKey[component.key], 0);
+        const rawMark = marksByKey[component.key];
+        if (rawMark === null || rawMark === undefined) continue;
+        const mark = toNumber(rawMark, 0);
         if (mark < 0 || mark > component.max_mark) {
           return NextResponse.json(
             {
@@ -239,26 +274,44 @@ export async function POST(req: Request) {
       );
       for (const studentId of draftStudentIds) {
         const marksByKey = payloadByStudent.get(studentId) ?? {};
-        const componentRows = templateInfo.template.components.map((component) => ({
-          student_id: studentId,
-          subject_id,
-          exam_id,
-          class_id,
-          teacher_id,
-          component_key: component.key,
-          component_label: component.label,
-          component_type: component.type,
-          mark: toNumber(marksByKey[component.key], 0),
-          max_mark: component.max_mark,
-          included_in_total: component.included_in_total !== false,
-          question_count: component.question_count ?? null,
-          group_name: templateInfo.group,
-          input_date: new Date().toISOString(),
-        }));
+        const blankComponentKeys = templateInfo.template.components
+          .filter((component) => marksByKey[component.key] === null || marksByKey[component.key] === undefined)
+          .map((component) => component.key);
+        const componentRows = templateInfo.template.components
+          .filter((component) => marksByKey[component.key] !== null && marksByKey[component.key] !== undefined)
+          .map((component) => ({
+            student_id: studentId,
+            subject_id,
+            exam_id,
+            class_id,
+            teacher_id,
+            component_key: component.key,
+            component_label: component.label,
+            component_type: component.type,
+            mark: toNumber(marksByKey[component.key], 0),
+            max_mark: component.max_mark,
+            included_in_total: component.included_in_total !== false,
+            question_count: component.question_count ?? null,
+            group_name: templateInfo.group,
+            input_date: new Date().toISOString(),
+          }));
 
-        const { error: componentsErr } = await supabase.from("stg_mark_components").upsert(componentRows, {
-          onConflict: "student_id,subject_id,exam_id,component_key",
-        });
+        if (blankComponentKeys.length > 0) {
+          const { error: deleteErr } = await supabase
+            .from("stg_mark_components")
+            .delete()
+            .eq("student_id", studentId)
+            .eq("subject_id", subject_id)
+            .eq("exam_id", exam_id)
+            .in("component_key", blankComponentKeys);
+          if (deleteErr) throw deleteErr;
+        }
+
+        const { error: componentsErr } = componentRows.length > 0
+          ? await supabase.from("stg_mark_components").upsert(componentRows, {
+              onConflict: "student_id,subject_id,exam_id,component_key",
+            })
+          : { error: null };
         if (componentsErr) {
           throw new Error(
             `${componentsErr.message}. Jalankan migration stg_mark_components dahulu sebelum guna template pemarkahan baharu.`,
@@ -310,8 +363,13 @@ export async function POST(req: Request) {
       total: number;
       grade: string;
     };
-    const computed: StudentComputed[] = studentIds.map((studentId) => {
-      const marksByKey = payloadByStudent.get(studentId) ?? {};
+    const computed: StudentComputed[] = submittedStudentIds.map((studentId) => {
+      const marksByKey = Object.fromEntries(
+        templateInfo.template.components.map((component) => [
+          component.key,
+          toNumber(payloadByStudent.get(studentId)?.[component.key], 0),
+        ]),
+      );
       const summary = computeMarkSummary(templateInfo.template, marksByKey);
       const manualTotal = summary.components
         .filter((c) => c.type === "manual")
@@ -322,7 +380,7 @@ export async function POST(req: Request) {
         manualTotal,
         primaryOmrMark: primaryOmrComponent ? toNumber(marksByKey[primaryOmrComponent.key], 0) : 0,
         total: summary.percentage,
-        grade: gradeFromPercentage(summary.percentage),
+        grade: gradeFromPercentage(summary.percentage, Number(classRow?.grade ?? 0)),
       };
     });
 
@@ -354,8 +412,8 @@ export async function POST(req: Request) {
       );
     }
 
-    // Upsert subjective_marks for all students
-    const subjectiveUpsertRows = computed.map(({ studentId, manualTotal }) => ({
+    // Save subjective marks without relying on a composite unique constraint.
+    const subjectiveRowsToSave = computed.map(({ studentId, manualTotal }) => ({
       teacher_id,
       student_id: studentId,
       subject_id,
@@ -363,19 +421,43 @@ export async function POST(req: Request) {
       subjective_mark: manualTotal,
       input_date: now,
     }));
-    const { data: upsertedSubjectives, error: subjectiveErr } = await supabase
-      .from("stg_subjective_marks")
-      .upsert(subjectiveUpsertRows, { onConflict: "teacher_id,student_id,subject_id,exam_id" })
-      .select("subjective_id, student_id");
-    if (subjectiveErr) throw subjectiveErr;
 
-    const newSubjectiveByStudent = new Map<string, string>(
-      (upsertedSubjectives ?? []).map((r) => [toId(r.student_id), toId(r.subjective_id)])
+    const existingSubjectiveByStudent = new Map(
+      (existingSubjectives ?? []).map((row) => [toId(row.student_id), toId(row.subjective_id)]),
     );
-    // Merge with pre-fetched map (upsert may not return rows if no change)
-    for (const [sid, subId] of subjectiveByStudent) {
-      if (!newSubjectiveByStudent.has(sid)) newSubjectiveByStudent.set(sid, subId);
+    const subjectiveRowsToInsert = subjectiveRowsToSave.filter(
+      (row) => !existingSubjectiveByStudent.has(row.student_id),
+    );
+    const subjectiveRowsToUpdate = subjectiveRowsToSave.filter(
+      (row) => existingSubjectiveByStudent.has(row.student_id),
+    );
+
+    const newSubjectiveByStudent = new Map<string, string>(existingSubjectiveByStudent);
+
+    if (subjectiveRowsToInsert.length > 0) {
+      const { data: insertedSubjectives, error: insertSubjectiveErr } = await supabase
+        .from("stg_subjective_marks")
+        .insert(subjectiveRowsToInsert)
+        .select("subjective_id, student_id");
+      if (insertSubjectiveErr) throw insertSubjectiveErr;
+      for (const row of insertedSubjectives ?? []) {
+        newSubjectiveByStudent.set(toId(row.student_id), toId(row.subjective_id));
+      }
     }
+
+    const subjectiveUpdateResults = await Promise.all(
+      subjectiveRowsToUpdate.map((row) =>
+        supabase
+          .from("stg_subjective_marks")
+          .update({
+            subjective_mark: row.subjective_mark,
+            input_date: row.input_date,
+          })
+          .eq("subjective_id", existingSubjectiveByStudent.get(row.student_id) ?? ""),
+      ),
+    );
+    const subjectiveUpdateError = subjectiveUpdateResults.find((result) => result.error)?.error;
+    if (subjectiveUpdateError) throw subjectiveUpdateError;
 
     // Handle OMR scans: insert new ones for students without a scan
     if (primaryOmrComponent) {
@@ -414,8 +496,8 @@ export async function POST(req: Request) {
       );
     }
 
-    // Batch upsert results for all students
-    const resultUpsertRows = computed.map(({ studentId, total, grade }) => ({
+    // Save results without relying on a composite unique constraint in older databases.
+    const resultRowsToSave = computed.map(({ studentId, total, grade }) => ({
       student_id: studentId,
       subject_id,
       exam_id,
@@ -425,10 +507,44 @@ export async function POST(req: Request) {
       grade,
       status: "pending",
     }));
-    const { error: resultsErr } = await supabase
+
+    const { data: existingResultRows, error: existingResultsErr } = await supabase
       .from("stg_results")
-      .upsert(resultUpsertRows, { onConflict: "student_id,subject_id,exam_id" });
-    if (resultsErr) throw resultsErr;
+      .select("result_id, student_id")
+      .eq("subject_id", subject_id)
+      .eq("exam_id", exam_id)
+      .in("student_id", studentIds);
+    if (existingResultsErr) throw existingResultsErr;
+
+    const existingStudentIds = new Set(
+      (existingResultRows ?? []).map((row) => toId(row.student_id)).filter(Boolean),
+    );
+    const rowsToInsert = resultRowsToSave.filter((row) => !existingStudentIds.has(row.student_id));
+    const rowsToUpdate = resultRowsToSave.filter((row) => existingStudentIds.has(row.student_id));
+
+    if (rowsToInsert.length > 0) {
+      const { error } = await supabase.from("stg_results").insert(rowsToInsert);
+      if (error) throw error;
+    }
+
+    const updateResults = await Promise.all(
+      rowsToUpdate.map((row) =>
+        supabase
+          .from("stg_results")
+          .update({
+            omr_scan_id: row.omr_scan_id,
+            subjective_id: row.subjective_id,
+            total: row.total,
+            grade: row.grade,
+            status: row.status,
+          })
+          .eq("student_id", row.student_id)
+          .eq("subject_id", subject_id)
+          .eq("exam_id", exam_id),
+      ),
+    );
+    const updateError = updateResults.find((result) => result.error)?.error;
+    if (updateError) throw updateError;
 
     // Audit trail: log mark submission event (fire-and-forget)
     void Promise.resolve(supabase.from("stg_sessions").insert({
@@ -437,10 +553,15 @@ export async function POST(req: Request) {
       action: `Kemaskini Markah: ${subject_id} | Exam: ${exam_id} | Kelas: ${class_id} | ${studentIds.length} pelajar`,
     })).catch(() => {});
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true, late: lateDays > 0, late_days: lateDays });
   } catch (err: unknown) {
     console.error("POST teacher marks FAILED:", err);
-    const message = err instanceof Error ? err.message : "Ralat pelayan";
+    const message =
+      err instanceof Error
+        ? err.message
+        : err && typeof err === "object" && "message" in err
+          ? String((err as { message?: unknown }).message ?? "Ralat pelayan")
+          : "Ralat pelayan";
     return NextResponse.json({ message }, { status: 500 });
   }
 }

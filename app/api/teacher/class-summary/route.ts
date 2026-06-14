@@ -4,6 +4,18 @@ import { requireApiRole } from "@/lib/auth";
 
 export const runtime = "nodejs";
 
+type StudentRow = { student_id?: unknown; fullname?: unknown };
+type StudentIdRow = { student_id?: unknown };
+type ResultRow = {
+    student_id?: unknown;
+    total?: unknown;
+    grade?: unknown;
+    status?: unknown;
+    subjective_id?: unknown;
+};
+type TrendResultRow = { exam_id?: unknown; total?: unknown };
+type ExamRow = { exam_id?: unknown; exam_name?: unknown; academic_year?: unknown };
+
 function toId(v: unknown) {
     return typeof v === "string" ? v.trim() : v == null ? "" : String(v).trim();
 }
@@ -63,14 +75,15 @@ export async function GET(req: Request) {
                 .eq("class_id", class_id),
         ]);
 
-        const studentIds = (Array.isArray(students) ? students : [])
-            .map((s: any) => toId(s?.student_id))
+        const studentRows = (Array.isArray(students) ? students : []) as StudentRow[];
+        const studentIds = studentRows
+            .map((student) => toId(student.student_id))
             .filter(Boolean);
 
         const studentNameById = new Map<string, string>();
-        for (const student of Array.isArray(students) ? students : []) {
-            const id = toId((student as any)?.student_id);
-            const name = String((student as any)?.fullname ?? "").trim();
+        for (const student of studentRows) {
+            const id = toId(student.student_id);
+            const name = String(student.fullname ?? "").trim();
             if (id) studentNameById.set(id, name);
         }
 
@@ -93,6 +106,7 @@ export async function GET(req: Request) {
                 grades: [],
                 student_results: [],
                 top_students: [],
+                trend: [],
             });
         }
 
@@ -120,13 +134,13 @@ export async function GET(req: Request) {
             ]);
 
         const subjectiveSubmitted = new Set(
-            (Array.isArray(subjectiveMarks) ? subjectiveMarks : [])
-                .map((m: any) => toId(m?.student_id))
+            ((Array.isArray(subjectiveMarks) ? subjectiveMarks : []) as StudentIdRow[])
+                .map((mark) => toId(mark.student_id))
                 .filter(Boolean)
         );
         const omrSubmitted = new Set(
-            (Array.isArray(omrScans) ? omrScans : [])
-                .map((m: any) => toId(m?.student_id))
+            ((Array.isArray(omrScans) ? omrScans : []) as StudentIdRow[])
+                .map((scan) => toId(scan.student_id))
                 .filter(Boolean)
         );
 
@@ -145,15 +159,15 @@ export async function GET(req: Request) {
             status: string;
         }> = [];
 
-        for (const r of Array.isArray(results) ? results : []) {
+        for (const r of (Array.isArray(results) ? results : []) as ResultRow[]) {
             if (!r || typeof r !== "object") continue;
-            const grade = String((r as any).grade ?? "").trim();
-            const total = toNumber((r as any).total);
-            const st = String((r as any).status ?? "pending").trim();
-            const hasSubjective = Boolean((r as any).subjective_id);
+            const grade = String(r.grade ?? "").trim();
+            const total = toNumber(r.total);
+            const st = String(r.status ?? "pending").trim();
+            const hasSubjective = Boolean(r.subjective_id);
             if (!hasSubjective) continue;
 
-            const studentId = toId((r as any).student_id);
+            const studentId = toId(r.student_id);
             studentResults.push({
                 student_id: studentId,
                 student_name: studentNameById.get(studentId) ?? "",
@@ -178,6 +192,56 @@ export async function GET(req: Request) {
             .sort((a, b) => b.total - a.total)
             .slice(0, 3);
 
+        const { data: trendResults } = await supabaseAdmin
+            .from("stg_results")
+            .select("exam_id, total")
+            .eq("subject_id", subject_id)
+            .eq("status", "approved")
+            .not("total", "is", null)
+            .in("student_id", studentIds);
+
+        const trendExamIds = Array.from(
+            new Set(
+                ((Array.isArray(trendResults) ? trendResults : []) as TrendResultRow[])
+                    .map((row) => toId(row.exam_id))
+                    .filter(Boolean)
+            )
+        );
+        const { data: trendExams } = trendExamIds.length
+            ? await supabaseAdmin
+                .from("stg_exams")
+                .select("exam_id, exam_name, academic_year")
+                .in("exam_id", trendExamIds)
+            : { data: [] };
+        const examById = new Map(
+            ((Array.isArray(trendExams) ? trendExams : []) as ExamRow[]).map((exam) => [
+                toId(exam.exam_id),
+                {
+                    name: String(exam.exam_name ?? "").trim(),
+                    year: String(exam.academic_year ?? "").trim(),
+                },
+            ])
+        );
+        const trendGroups = new Map<string, { total: number; results: number }>();
+        for (const row of (Array.isArray(trendResults) ? trendResults : []) as TrendResultRow[]) {
+            const examId = toId(row.exam_id);
+            if (!examId) continue;
+            const current = trendGroups.get(examId) ?? { total: 0, results: 0 };
+            current.total += toNumber(row.total);
+            current.results += 1;
+            trendGroups.set(examId, current);
+        }
+        const trend = Array.from(trendGroups.entries())
+            .map(([examId, group]) => ({
+                exam_id: examId,
+                exam: examById.get(examId)?.name ?? examId,
+                year: examById.get(examId)?.year ?? "",
+                total: group.total,
+                results: group.results,
+                average: group.results ? group.total / group.results : 0,
+            }))
+            .sort((a, b) => a.year.localeCompare(b.year) || a.exam.localeCompare(b.exam, "ms-MY"));
+
         return NextResponse.json({
             class: {
                 id: class_id,
@@ -199,6 +263,7 @@ export async function GET(req: Request) {
                 .filter((g) => g.value > 0),
             student_results: studentResults,
             top_students: topStudents,
+            trend,
         });
     } catch (err) {
         console.error("GET teacher class-summary FAILED:", err);

@@ -46,6 +46,74 @@ function addDocHeader(doc: jsPDF, title: string, subtitle?: string) {
 
 type Column = { header: string; dataKey: string };
 
+export type ExportTableColumn = {
+    header: string;
+    dataKey: string;
+};
+
+type ExportTableOptions = {
+    title: string;
+    subtitle?: string;
+    columns: ExportTableColumn[];
+    rows: Record<string, string | number>[];
+    fileName: string;
+    orientation?: "portrait" | "landscape";
+};
+
+export function exportTablePDF({
+    title,
+    subtitle,
+    columns,
+    rows,
+    fileName,
+    orientation = "landscape",
+}: ExportTableOptions) {
+    const doc = new jsPDF({ orientation, unit: "mm", format: "a4" });
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(14);
+    doc.setTextColor(20, 20, 40);
+    doc.text(title, 14, 16);
+
+    let startY = 22;
+    if (subtitle) {
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(9);
+        doc.setTextColor(80, 90, 110);
+        const subtitleLines = doc.splitTextToSize(subtitle, doc.internal.pageSize.width - 28);
+        doc.text(subtitleLines, 14, 23);
+        startY = 27 + subtitleLines.length * 4;
+    }
+
+    autoTable(doc, {
+        startY,
+        columns,
+        body: rows,
+        theme: "striped",
+        styles: {
+            font: "helvetica",
+            fontSize: 9,
+            cellPadding: 3,
+            textColor: [35, 40, 55],
+            overflow: "linebreak",
+        },
+        headStyles: {
+            fillColor: [59, 130, 246],
+            textColor: [255, 255, 255],
+            fontStyle: "bold",
+        },
+        alternateRowStyles: {
+            fillColor: [242, 242, 242],
+        },
+        columnStyles: {
+            0: { halign: "center", cellWidth: 12 },
+        },
+    });
+
+    const pdfFileName = fileName.toLowerCase().endsWith(".pdf") ? fileName : `${fileName}.pdf`;
+    doc.save(pdfFileName.replace(/[<>:"/\\|?*\u0000-\u001f]/g, "-"));
+}
+
 function buildTable(
     doc: jsPDF,
     columns: Column[],

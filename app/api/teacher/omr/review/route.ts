@@ -161,7 +161,7 @@ export async function PATCH(req: Request) {
     marksByKey[componentKey] = objective_total_mark;
 
     const total = computeMarkSummary(templateInfo.template, marksByKey).percentage;
-    const grade = gradeFromTotal(total);
+    const grade = gradeFromTotal(total, Number(classRow?.grade ?? 0));
 
     await supabaseAdmin
       .from("stg_results")

@@ -61,6 +61,19 @@ export async function GET(req: Request) {
       .limit(1)
       .maybeSingle();
 
+    const [{ data: student }, { data: classRow }] = await Promise.all([
+      supabaseAdmin
+        .from("stg_students")
+        .select("fullname")
+        .eq("student_id", studentId)
+        .maybeSingle(),
+      supabaseAdmin
+        .from("stg_classes")
+        .select("class_name, grade")
+        .eq("class_id", classId)
+        .maybeSingle(),
+    ]);
+
     const scanId = toId(scan?.omr_scan_id);
     if (!scanId) {
       return NextResponse.json({
@@ -125,6 +138,9 @@ export async function GET(req: Request) {
     return NextResponse.json({
       source: "omr",
       success: true,
+      student_name: toId(student?.fullname),
+      class_name: toId(classRow?.class_name),
+      class_grade: toNumber(classRow?.grade),
       omr_scan_id: scanId,
       objective_total_mark: toNumber(scan?.objective_total_mark),
       total_questions: totalQuestions,

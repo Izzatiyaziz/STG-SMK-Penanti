@@ -2,16 +2,84 @@ import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import supabase from "@/lib/supabase";
 import { setSessionCookie } from "@/lib/auth";
+import {
+    clearRateLimit,
+    consumeRateLimit,
+    getClientIp,
+    isRequestBodyTooLarge,
+    normalizeLoginIdentifier,
+    rateLimitKey,
+} from "@/lib/security";
+import { logSecurityEvent } from "@/lib/security-events";
 
 export const runtime = "nodejs";
 
 export async function POST(req: Request) {
     try {
-        const body = await req.json();
-        const { role } = body;
+        if (isRequestBodyTooLarge(req, 8_192)) {
+            return NextResponse.json(
+                { message: "Permintaan terlalu besar" },
+                { status: 413 }
+            );
+        }
 
-        if (!role) {
+        const body = await req.json();
+        const role = normalizeLoginIdentifier(body?.role, 20).toLowerCase();
+
+        if (!["admin", "teacher", "student"].includes(role)) {
             return NextResponse.json({ message: "Jawatan diperlukan" }, { status: 400 });
+        }
+
+        const rawIdentifier =
+            role === "student"
+                ? body?.ic_number
+                : role === "admin"
+                  ? body?.admin_id
+                  : body?.username;
+        const identifier = normalizeLoginIdentifier(rawIdentifier);
+        const clientIp = getClientIp(req);
+        const ipLimitKey = `login:ip:${rateLimitKey(clientIp)}`;
+        const accountLimitKey = `login:account:${rateLimitKey(`${role}:${identifier.toLowerCase()}`)}`;
+        const ipLimit = consumeRateLimit(ipLimitKey, {
+            limit: 30,
+            windowMs: 5 * 60 * 1000,
+        });
+        const accountLimit = consumeRateLimit(accountLimitKey, {
+            limit: 6,
+            windowMs: 5 * 60 * 1000,
+        });
+
+        if (!ipLimit.allowed || !accountLimit.allowed) {
+            await logSecurityEvent({
+                eventType: "brute_force",
+                severity: "high",
+                ipAddress: clientIp,
+                identifier,
+                role,
+                endpoint: "/api/auth/login",
+                details: { reason: "Had percubaan log masuk dicapai" },
+            });
+            const retryAfterSeconds = Math.max(
+                ipLimit.retryAfterSeconds,
+                accountLimit.retryAfterSeconds
+            );
+            return NextResponse.json(
+                {
+                    message:
+                        "Terlalu banyak percubaan log masuk. Sila cuba semula sebentar lagi.",
+                },
+                {
+                    status: 429,
+                    headers: { "Retry-After": String(retryAfterSeconds) },
+                }
+            );
+        }
+
+        if (!identifier) {
+            return NextResponse.json(
+                { message: "Maklumat log masuk diperlukan" },
+                { status: 400 }
+            );
         }
 
         async function createSessionLog(params: {
@@ -40,8 +108,7 @@ export async function POST(req: Request) {
 
         // ================= STUDENT =================
         if (role === "student") {
-            const { ic_number } = body;
-            if (!ic_number) return NextResponse.json({ message: "Nombor KP diperlukan" }, { status: 400 });
+            const ic_number = identifier;
 
             const { data: student, error } = await supabase
                 .from("stg_students")
@@ -49,9 +116,33 @@ export async function POST(req: Request) {
                 .eq("ic_number", ic_number)
                 .single();
 
-            if (error || !student) return NextResponse.json({ message: "Pelajar tidak dijumpai" }, { status: 401 });
-            if (student.status !== "active") return NextResponse.json({ message: "Akaun pelajar tidak aktif" }, { status: 403 });
+            if (error || !student) {
+                await logSecurityEvent({
+                    eventType: "failed_login",
+                    severity: "medium",
+                    status: "detected",
+                    ipAddress: clientIp,
+                    identifier,
+                    role,
+                    endpoint: "/api/auth/login",
+                    details: { reason: "Maklumat log masuk tidak sah" },
+                });
+                return NextResponse.json({ message: "Maklumat log masuk tidak sah" }, { status: 401 });
+            }
+            if (student.status !== "active") {
+                await logSecurityEvent({
+                    eventType: "failed_login",
+                    severity: "medium",
+                    ipAddress: clientIp,
+                    identifier,
+                    role,
+                    endpoint: "/api/auth/login",
+                    details: { reason: "Akaun tidak aktif" },
+                });
+                return NextResponse.json({ message: "Akaun pelajar tidak aktif" }, { status: 403 });
+            }
 
+            clearRateLimit(accountLimitKey);
             const session_id = await createSessionLog({
                 user_id: String(student.student_id),
                 user_name: student.fullname ?? null,
@@ -75,8 +166,9 @@ export async function POST(req: Request) {
 
         // ================= ADMIN =================
         if (role === "admin") {
-            const { admin_id, password } = body;
-            if (!admin_id || !password) return NextResponse.json({ message: "ID & Kata Laluan diperlukan" }, { status: 400 });
+            const admin_id = identifier;
+            const password = typeof body?.password === "string" ? body.password : "";
+            if (!password || password.length > 256) return NextResponse.json({ message: "ID & Kata Laluan diperlukan" }, { status: 400 });
 
             const { data: admin, error } = await supabase
                 .from("stg_admins")
@@ -84,11 +176,36 @@ export async function POST(req: Request) {
                 .eq("admin_id", admin_id)
                 .single();
 
-            if (error || !admin) return NextResponse.json({ message: "Kelayakan tidak sah" }, { status: 401 });
+            if (error || !admin) {
+                await logSecurityEvent({
+                    eventType: "failed_login",
+                    severity: "medium",
+                    status: "detected",
+                    ipAddress: clientIp,
+                    identifier,
+                    role,
+                    endpoint: "/api/auth/login",
+                    details: { reason: "ID atau kata laluan tidak sah" },
+                });
+                return NextResponse.json({ message: "Kelayakan tidak sah" }, { status: 401 });
+            }
 
             const valid = await bcrypt.compare(password, admin.password);
-            if (!valid) return NextResponse.json({ message: "Kelayakan tidak sah" }, { status: 401 });
+            if (!valid) {
+                await logSecurityEvent({
+                    eventType: "failed_login",
+                    severity: "medium",
+                    status: "detected",
+                    ipAddress: clientIp,
+                    identifier,
+                    role,
+                    endpoint: "/api/auth/login",
+                    details: { reason: "ID atau kata laluan tidak sah" },
+                });
+                return NextResponse.json({ message: "Kelayakan tidak sah" }, { status: 401 });
+            }
 
+            clearRateLimit(accountLimitKey);
             const session_id = await createSessionLog({
                 user_id: String(admin.admin_id),
                 user_name: admin.fullname ?? null,
@@ -112,11 +229,12 @@ export async function POST(req: Request) {
 
         // ================= TEACHER =================
         if (role === "teacher") {
-            const { username, password } = body;
+            const username = identifier;
+            const password = typeof body?.password === "string" ? body.password : "";
             const selectedTeacherRole = String(body?.selected_teacher_role ?? "")
                 .toLowerCase()
                 .trim();
-            if (!username || !password) return NextResponse.json({ message: "ID & Kata Laluan diperlukan" }, { status: 400 });
+            if (!password || password.length > 256) return NextResponse.json({ message: "ID & Kata Laluan diperlukan" }, { status: 400 });
 
             const { data: teacher, error } = await supabase
                 .from("stg_teachers")
@@ -124,11 +242,36 @@ export async function POST(req: Request) {
                 .eq("username", username)
                 .single();
 
-            if (error || !teacher) return NextResponse.json({ message: "Kelayakan tidak sah" }, { status: 401 });
+            if (error || !teacher) {
+                await logSecurityEvent({
+                    eventType: "failed_login",
+                    severity: "medium",
+                    status: "detected",
+                    ipAddress: clientIp,
+                    identifier,
+                    role,
+                    endpoint: "/api/auth/login",
+                    details: { reason: "ID atau kata laluan tidak sah" },
+                });
+                return NextResponse.json({ message: "Kelayakan tidak sah" }, { status: 401 });
+            }
 
             const valid = await bcrypt.compare(password, teacher.password);
-            if (!valid) return NextResponse.json({ message: "Kelayakan tidak sah" }, { status: 401 });
+            if (!valid) {
+                await logSecurityEvent({
+                    eventType: "failed_login",
+                    severity: "medium",
+                    status: "detected",
+                    ipAddress: clientIp,
+                    identifier,
+                    role,
+                    endpoint: "/api/auth/login",
+                    details: { reason: "ID atau kata laluan tidak sah" },
+                });
+                return NextResponse.json({ message: "Kelayakan tidak sah" }, { status: 401 });
+            }
 
+            clearRateLimit(accountLimitKey);
             // Dapatkan Peranan (Role) Guru
             const { data: teacherRoles } = await supabase
                 .from("stg_teacher_roles")

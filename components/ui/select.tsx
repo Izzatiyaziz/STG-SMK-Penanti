@@ -2,7 +2,19 @@
 
 import * as React from "react"
 import * as SelectPrimitive from "@radix-ui/react-select"
-import { CheckIcon, ChevronDownIcon, ChevronUpIcon } from "lucide-react"
+import {
+  BookOpenIcon,
+  CalendarDaysIcon,
+  CheckIcon,
+  ChevronDownIcon,
+  ChevronUpIcon,
+  ClipboardListIcon,
+  FileTextIcon,
+  GraduationCapIcon,
+  ListFilterIcon,
+  SchoolIcon,
+  UserRoundIcon,
+} from "lucide-react"
 
 import { cn } from "@/lib/utils"
 
@@ -24,6 +36,51 @@ function SelectValue({
   return <SelectPrimitive.Value data-slot="select-value" {...props} />
 }
 
+function getSelectLabel(children: React.ReactNode): string {
+  return React.Children.toArray(children)
+    .map((child) => {
+      if (typeof child === "string") return child
+      if (!React.isValidElement(child)) return ""
+
+      const childProps = child.props as {
+        placeholder?: unknown
+        children?: React.ReactNode
+      }
+      const placeholder =
+        typeof childProps.placeholder === "string" ? childProps.placeholder : ""
+      return `${placeholder} ${getSelectLabel(childProps.children)}`
+    })
+    .join(" ")
+    .toLowerCase()
+}
+
+function SelectLeadingIcon({ label }: { label: string }) {
+  const iconClassName = "size-4 shrink-0 text-muted-foreground"
+
+  if (/tingkatan|grade|level/.test(label)) {
+    return <GraduationCapIcon aria-hidden="true" className={iconClassName} />
+  }
+  if (/kelas|class/.test(label)) {
+    return <SchoolIcon aria-hidden="true" className={iconClassName} />
+  }
+  if (/peperiksaan|exam|ujian/.test(label)) {
+    return <ClipboardListIcon aria-hidden="true" className={iconClassName} />
+  }
+  if (/subjek|subject/.test(label)) {
+    return <BookOpenIcon aria-hidden="true" className={iconClassName} />
+  }
+  if (/guru|teacher|pelajar|student|penyemak|reviewer|jawatan/.test(label)) {
+    return <UserRoundIcon aria-hidden="true" className={iconClassName} />
+  }
+  if (/tahun|year|tarikh|date|bulan|month/.test(label)) {
+    return <CalendarDaysIcon aria-hidden="true" className={iconClassName} />
+  }
+  if (/template|dokumen|document/.test(label)) {
+    return <FileTextIcon aria-hidden="true" className={iconClassName} />
+  }
+  return <ListFilterIcon aria-hidden="true" className={iconClassName} />
+}
+
 function SelectTrigger({
   className,
   size = "default",
@@ -32,16 +89,26 @@ function SelectTrigger({
 }: React.ComponentProps<typeof SelectPrimitive.Trigger> & {
   size?: "sm" | "default"
 }) {
+  const label = [
+    getSelectLabel(children),
+    typeof props["aria-label"] === "string" ? props["aria-label"] : "",
+    typeof props.id === "string" ? props.id : "",
+    typeof props.name === "string" ? props.name : "",
+  ]
+    .join(" ")
+    .toLowerCase()
+
   return (
     <SelectPrimitive.Trigger
       data-slot="select-trigger"
       data-size={size}
       className={cn(
-        "border-input data-[placeholder]:text-muted-foreground [&_svg:not([class*='text-'])]:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/35 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:bg-input/20 dark:hover:bg-input/40 flex w-full min-w-0 items-center justify-between gap-2 rounded-md border bg-background px-3 py-2 text-sm shadow-xs transition-[border-color,color,box-shadow,background-color] outline-none hover:border-ring/35 focus-visible:ring-[3px] disabled:cursor-not-allowed disabled:opacity-50 data-[size=default]:h-9 data-[size=sm]:h-8 *:data-[slot=select-value]:flex *:data-[slot=select-value]:min-w-0 *:data-[slot=select-value]:flex-1 *:data-[slot=select-value]:items-center *:data-[slot=select-value]:gap-2 *:data-[slot=select-value]:truncate [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+        "border-input data-[placeholder]:text-muted-foreground [&_svg:not([class*='text-'])]:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/35 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:bg-input/20 dark:hover:bg-input/40 flex w-full min-w-0 items-center justify-between gap-2 rounded-md border bg-background px-3 py-2 text-sm shadow-xs transition-[border-color,color,box-shadow,background-color] outline-none hover:border-ring/35 focus-visible:ring-[3px] disabled:cursor-not-allowed disabled:opacity-50 data-[size=default]:h-9 data-[size=sm]:h-8 *:data-[slot=select-value]:flex *:data-[slot=select-value]:min-w-0 *:data-[slot=select-value]:flex-1 *:data-[slot=select-value]:items-center *:data-[slot=select-value]:gap-2 *:data-[slot=select-value]:truncate [&_[data-slot=select-value]_svg]:hidden [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
         className
       )}
       {...props}
     >
+      <SelectLeadingIcon label={label} />
       {children}
       <SelectPrimitive.Icon asChild>
         <ChevronDownIcon className="size-4 opacity-50" />

@@ -61,6 +61,10 @@ import { formatMalaysiaTime, getMalaysiaDateInputValue } from "@/lib/date-utils"
 type SubjectOption = { id: string; name: string };
 type SubjectExamSettings = {
     deadline?: string | null;
+    deadlines?: {
+        lower?: string | null;
+        upper?: string | null;
+    };
     objective_questions?: number | string | null;
     objective_max?: number | string | null;
     subjective_max?: number | string | null;
@@ -309,7 +313,14 @@ export default function ExamsPage() {
     function loadSubjectSettings(exam: ExamWithSettings | null, subjectId: string) {
         const settings = exam?.subject_settings ?? {};
         const subjectSettings = settings[subjectId] ?? null;
-        setDeadline(String(subjectSettings?.deadline ?? ""));
+        setDeadline(
+            String(
+                subjectSettings?.deadlines?.lower ??
+                subjectSettings?.deadlines?.upper ??
+                subjectSettings?.deadline ??
+                ""
+            )
+        );
         setObjectiveQuestions(Number(subjectSettings?.objective_questions ?? 40));
         setObjectiveMax(Number(subjectSettings?.objective_max ?? Number(subjectSettings?.objective_questions ?? 40)));
         setSubjectiveMax(Number(subjectSettings?.subjective_max ?? 60));
@@ -324,7 +335,12 @@ export default function ExamsPage() {
         const subject_settings = {
             ...(settingExam.subject_settings ?? {}),
             [selectedSubjectId]: {
+                ...(settingExam.subject_settings?.[selectedSubjectId] ?? {}),
                 deadline: deadline || null,
+                deadlines: {
+                    lower: deadline || null,
+                    upper: deadline || null,
+                },
                 objective_questions: Number(objectiveQuestions) || 0,
                 objective_max: Number(objectiveMax) || 0,
                 subjective_max: Number(subjectiveMax) || 0,
@@ -627,7 +643,7 @@ export default function ExamsPage() {
                                                             </div>
                                                         </TableCell>
                                                         <TableCell className="py-4">
-                                                            <Badge className="rounded-md border border-blue-200 bg-blue-100 px-3 py-1.5 font-medium text-blue-700 hover:bg-blue-100">
+                                                            <Badge className="border border-blue-200 bg-blue-100 text-blue-700 hover:bg-blue-100">
                                                                 <CalendarDays className="mr-1 h-3 w-3" />
                                                                 {exam.academic_year}
                                                             </Badge>

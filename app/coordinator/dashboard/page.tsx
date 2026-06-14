@@ -13,6 +13,7 @@ import {
 	formatMalaysiaDate,
 	formatMalaysiaTime,
 } from "@/lib/date-utils";
+import { getDeadlineForGrade } from "@/lib/marking-template";
 import {
 	Select,
 	SelectContent,
@@ -62,7 +63,7 @@ type Exam = {
 };
 
 type DashboardData = {
-	coordinator: { id: string; name: string } | null;
+	coordinator: { id: string; name: string; email: string | null } | null;
 	subject: { id: string; name: string } | null;
 	exam: { id: string; name: string; academic_year: string } | null;
 	subject_settings: Record<string, unknown>;
@@ -102,6 +103,23 @@ type QuickAccessItem = {
 	icon: typeof Users;
 	accent: string;
 };
+
+function hasSubjectScheme(exam: Exam, subjectId: string) {
+	if (!subjectId) return false;
+	const settings = exam.subject_settings?.[subjectId];
+	if (!settings || typeof settings !== "object") return false;
+
+	const record = settings as Record<string, unknown>;
+	const deadlines =
+		record.deadlines && typeof record.deadlines === "object"
+			? (record.deadlines as Record<string, unknown>)
+			: {};
+	const hasDeadline = [record.deadline, deadlines.lower, deadlines.upper].some(
+		(value) => typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value.trim()),
+	);
+
+	return hasDeadline;
+}
 
 function getTimeLabel() {
 	return formatMalaysiaTime();
@@ -160,7 +178,7 @@ function getCoordinatorTaskBadge(row: DashboardData["classSummaries"][number]) {
 		};
 	}
 
-	if (approved > 0 && row.total_students > 0 && approved >= row.total_students) {
+	if (approved > 0 && row.results_count > 0 && approved >= row.results_count) {
 		return {
 			label: "Diluluskan",
 			className: "border-emerald-200 bg-emerald-100 text-emerald-700",
@@ -287,7 +305,6 @@ export default function SubjectCoordinatorDashboard() {
 				setSubjects(sList);
 				setExams(eList);
 				if (!subjectId && sList.length > 0) setSubjectId(sList[0].id);
-				if (!examId && eList.length > 0) setExamId(eList[0].id);
 			} catch {
 				if (cancelled) return;
 				setSubjects([]);
@@ -301,6 +318,17 @@ export default function SubjectCoordinatorDashboard() {
 		};
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [session?.user_id]);
+
+	const configuredExams = useMemo(
+		() => exams.filter((exam) => hasSubjectScheme(exam, subjectId)),
+		[exams, subjectId],
+	);
+
+	useEffect(() => {
+		if (configuredExams.some((exam) => exam.id === examId)) return;
+		setExamId(configuredExams[0]?.id ?? "");
+		if (configuredExams.length === 0) setData(null);
+	}, [configuredExams, examId]);
 
 	async function fetchDashboard() {
 		if (!session || !subjectId || !examId) return;
@@ -331,23 +359,32 @@ export default function SubjectCoordinatorDashboard() {
 
 	const subjectName = data?.subject?.name ?? subjects[0]?.name ?? "Matematik";
 	const coordinatorName = data?.coordinator?.name ?? "Penyelaras Matematik";
-	const selectedExam = data?.exam ?? exams.find((exam) => exam.id === examId) ?? null;
-	const deadline = data?.subject_settings?.deadline ?? "-";
+	const coordinatorEmail = data?.coordinator?.email?.trim() || "Belum tersedia";
+	const selectedExam = data?.exam ?? configuredExams.find((exam) => exam.id === examId) ?? null;
 	const classSummaries = useMemo(
 		() => data?.classSummaries ?? [],
 		[data?.classSummaries],
 	);
 	const effectiveGradeFilter = gradeFilter === "default-grade-1" ? "1" : gradeFilter;
+	const deadline =
+		getDeadlineForGrade(data?.subject_settings, Number(effectiveGradeFilter)) || "-";
 
 	const gradeOptions = useMemo(() => {
 		return Array.from(
 			new Set(
-				["1", ...classSummaries
+				classSummaries
+					.filter((row) => row.submitted_count > 0)
 					.map((row) => String(row.grade || "").trim())
-					.filter(Boolean)],
+					.filter(Boolean),
 			),
 		).sort((a, b) => Number(a) - Number(b));
 	}, [classSummaries]);
+
+	useEffect(() => {
+		if (gradeOptions.length === 0) return;
+		if (gradeOptions.includes(effectiveGradeFilter)) return;
+		setGradeFilter(gradeOptions[0]);
+	}, [effectiveGradeFilter, gradeOptions]);
 
 	const classOptions = useMemo(() => {
 		const options = new Map<string, string>();
@@ -391,11 +428,10 @@ export default function SubjectCoordinatorDashboard() {
 			return true;
 		});
 	}, [classFilter, classSummaries, effectiveGradeFilter, teacherFilter]);
-
 	const quickAccess: QuickAccessItem[] = [
 		{
 			title: "Pengurusan Guru",
-			description: "Tambah atau kemas kini maklumat guru",
+			description: "Tetapkan guru kelas kepada kelas tertentu",
 			href: "/coordinator/assignments",
 			icon: UserCog,
 			accent: "bg-blue-100 text-blue-700 border-blue-200",
@@ -424,8 +460,10 @@ export default function SubjectCoordinatorDashboard() {
 	];
 
 	const importantDates = [
-		{ label: "Tarikh akhir hantar", value: formatMalaysiaDate(deadline) },
-		{ label: "Tarikh akhir kelulusan", value: formatMalaysiaDate(addDays(deadline, 3)) },
+		{
+			label: `Tarikh akhir hantar Tingkatan ${Number(effectiveGradeFilter) >= 4 ? "4-5" : "1-3"}`,
+			value: formatMalaysiaDate(deadline),
+		},
 		{
 			label: "Jenis peperiksaan",
 			value: selectedExam
@@ -454,11 +492,11 @@ export default function SubjectCoordinatorDashboard() {
 								</p>
 							</div>
 						</div>
-						<div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
+						<div className="flex items-center gap-4 text-muted-foreground">
 							<div className="w-1 h-1 rounded-full bg-muted" />
 							<div className="flex items-center gap-1">
 								<Clock className="w-3.5 h-3.5" />
-								<span>Kemas kini: <LastUpdatedTime /></span>
+								<span>Kemas kini: <LastUpdatedTime /></span>.
 							</div>
 						</div>
 					</div>
@@ -507,8 +545,8 @@ export default function SubjectCoordinatorDashboard() {
 					))}
 				</div>
 
-				<div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_360px]">
-					<div className="space-y-6">
+				<div className="grid grid-cols-1 gap-6 xl:grid-cols-4">
+					<div className="space-y-6 xl:col-span-3">
 						<Card className="border-border bg-card shadow-md rounded-xl overflow-hidden">
 							<CardContent className="grid grid-cols-1 gap-4 p-6 md:grid-cols-2 xl:grid-cols-4">
 								<div className="space-y-2">
@@ -560,12 +598,16 @@ export default function SubjectCoordinatorDashboard() {
 
 								<div className="space-y-2">
 									<div className="text-sm font-medium text-muted-foreground">Jenis Peperiksaan</div>
-									<Select value={examId} onValueChange={setExamId}>
+									<Select
+										value={examId || undefined}
+										onValueChange={setExamId}
+										disabled={configuredExams.length === 0}
+									>
 										<SelectTrigger className="h-11 rounded-lg border-border bg-background">
 											<SelectValue placeholder="Pilih peperiksaan" />
 										</SelectTrigger>
 										<SelectContent className="rounded-lg border-border">
-											{exams.map((exam) => (
+											{configuredExams.map((exam) => (
 												<SelectItem key={exam.id} value={exam.id}>
 													{exam.name} ({exam.academic_year})
 												</SelectItem>
@@ -768,7 +810,7 @@ export default function SubjectCoordinatorDashboard() {
 							<CardContent className="space-y-4 p-6">
 								<ProfileRow label="Nama" value={coordinatorName} />
 								<ProfileRow label="Subjek" value={subjectName} />
-								<ProfileRow label="E-mel" value="Belum tersedia" icon={Mail} />
+								<ProfileRow label="E-mel" value={coordinatorEmail} icon={Mail} />
 								<ProfileRow label="Sesi akademik" value={selectedExam?.academic_year ?? "-"} />
 							</CardContent>
 						</Card>

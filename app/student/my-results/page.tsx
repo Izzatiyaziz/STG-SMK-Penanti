@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import PerformanceTrendChart from "./performance-trend-chart";
+import { HeaderLastUpdated } from "@/components/header-last-updated";
 
 type SubjectResult = {
     subject: string;
@@ -66,6 +67,7 @@ export default function MyResultsPage() {
                         Paparan ringkas keputusan peperiksaan dan analisis
                         prestasi.
                     </p>
+                    <HeaderLastUpdated />
                 </div>
 
                 {/* ================= SUMMARY CARDS (DENGAN ICON) ================= */}

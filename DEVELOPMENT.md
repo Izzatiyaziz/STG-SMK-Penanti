@@ -331,7 +331,7 @@ Folders requested but not present:
 
 1. Teacher chooses AI comment mode from report card workflow.
 2. Next API builds a structured Bahasa Melayu prompt payload from student, class, exam, and performance data.
-3. Next API calls `${REPORT_AI_SERVICE_URL || OMR_SERVICE_URL || "http://127.0.0.1:8001"}/report-comment`.
+3. Next API calls `${REPORT_AI_SERVICE_URL || OMR_SERVICE_URL || "http://127.0.0.1:8000"}/report-comment`.
 4. FastAPI uses JamAI if `JAMAI_PROJECT_ID` and `JAMAI_PAT` are configured.
 5. If JamAI is unavailable, FastAPI generates a deterministic fallback comment.
 
@@ -655,7 +655,7 @@ SUPABASE_SERVICE_ROLE_KEY=
 STG_SESSION_SECRET=
 EMAIL_USER=
 EMAIL_PASS=
-OMR_SERVICE_URL=http://127.0.0.1:8001
+OMR_SERVICE_URL=http://127.0.0.1:8000
 ```
 
 ## Database Setup
@@ -704,20 +704,20 @@ py -3.12 -m venv .venv
 .venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
 pip install -r requirements.txt
-uvicorn main:app --host 0.0.0.0 --port 8001 --reload
+uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
 Health check:
 
 ```bash
-curl http://127.0.0.1:8001/health
+curl http://127.0.0.1:8000/health
 ```
 
 Useful service URLs:
 
 ```text
-http://127.0.0.1:8001/demo
-http://127.0.0.1:8001/docs
+http://127.0.0.1:8000/demo
+http://127.0.0.1:8000/docs
 ```
 
 ## Deployment

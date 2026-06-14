@@ -171,13 +171,25 @@ export default function TeacherProfilePage() {
     if (!session) return null;
 
     const teacherRoleLabel = formatTeacherRole(session.role);
+    const normalizedRole = String(session.role ?? "").toLowerCase().trim();
     const accessItems =
-        String(session.role ?? "").toLowerCase().trim() === "subject coordinator"
+        normalizedRole === "principal"
+            ? [
+                  { label: "Dashboard", icon: UserCheck },
+              ]
+        : normalizedRole === "subject coordinator"
             ? [
                   { label: "Dashboard", icon: UserCheck },
                   { label: "Pengurusan Guru", icon: UserCog },
                   { label: "Kelulusan Markah", icon: ListChecks },
                   { label: "Skema Jawapan", icon: FileSignature },
+                  { label: "Laporan", icon: FileText },
+              ]
+            : normalizedRole === "class teacher"
+              ? [
+                  { label: "Dashboard", icon: UserCheck },
+                  { label: "Pengurusan Pelajar", icon: GraduationCap },
+                  { label: "Kad Laporan", icon: ClipboardList },
                   { label: "Laporan", icon: FileText },
               ]
             : [

@@ -41,6 +41,7 @@ import {
 } from "@/lib/marking-template";
 import { getMalaysiaDateInputValue } from "@/lib/date-utils";
 import { isLowerFormOnlySubject, isUpperFormOnlySubject } from "@/lib/subject-rules";
+import { HeaderLastUpdated } from "@/components/header-last-updated";
 
 type Session = {
   user_id: string;
@@ -118,7 +119,10 @@ export default function AnswerSchemesPage() {
   const [gradeGroup, setGradeGroup] = useState<TemplateGroup>("lower");
   const [omrGrade, setOmrGrade] = useState("1");
 
-  const [deadlineInput, setDeadlineInput] = useState<string>("");
+  const [deadlines, setDeadlines] = useState<Record<TemplateGroup, string>>({
+    lower: "",
+    upper: "",
+  });
   const [templates, setTemplates] = useState<Record<TemplateGroup, GradeTemplate>>({
     lower: buildSubjectTemplatePreset("", "lower"),
     upper: buildSubjectTemplatePreset("", "upper"),
@@ -163,6 +167,7 @@ export default function AnswerSchemesPage() {
   const activeOmrGrade = omrGradeOptions.includes(Number(omrGrade)) ? omrGrade : String(omrGradeOptions[0]);
   const activeOmrGradeGroup = `tingkatan-${activeOmrGrade}`;
   const activeTemplate = templates[activeGradeGroup];
+  const deadlineInput = deadlines[activeGradeGroup];
   const presetTemplate = buildSubjectTemplatePreset(selectedSubject?.name ?? "", activeGradeGroup);
   const primaryOmrComponent = getPrimaryOmrComponent(activeTemplate);
   const primaryOmrIndex = activeTemplate.components.findIndex((component) => component.type === "omr");
@@ -237,7 +242,10 @@ export default function AnswerSchemesPage() {
     } else if (isLowerOnlySubject(selectedSubject.name)) {
       setGradeGroup("lower");
     }
-    setDeadlineInput(typeof settings.deadline === "string" ? settings.deadline : "");
+    setDeadlines({
+      lower: settings.deadlines?.lower || settings.deadline || "",
+      upper: settings.deadlines?.upper || settings.deadline || "",
+    });
   }, [selectedExam, selectedSubject]);
 
   useEffect(() => {
@@ -301,7 +309,10 @@ export default function AnswerSchemesPage() {
           coordinator_teacher_id: session.user_id,
           exam_id: examId,
           subject_id: subjectId,
-          deadline: deadlineInput.trim(),
+          deadlines: {
+            lower: deadlines.lower.trim(),
+            upper: deadlines.upper.trim(),
+          },
           grade_templates: {
             lower: serializeTemplateForStorage(normalizeSystemTemplate(templates.lower)),
             upper: serializeTemplateForStorage(normalizeSystemTemplate(templates.upper)),
@@ -315,7 +326,12 @@ export default function AnswerSchemesPage() {
         return;
       }
 
-      toast.success("Template pemarkahan disimpan", { id: toastId });
+      if (json?.cancelled) {
+        setAnswers({});
+        toast.success("Skema dan tarikh akhir telah dibatalkan", { id: toastId });
+      } else {
+        toast.success("Template pemarkahan disimpan", { id: toastId });
+      }
       await loadOptions();
     } catch {
       toast.error("Ralat sistem", { id: toastId });
@@ -422,15 +438,16 @@ export default function AnswerSchemesPage() {
               <p className="text-muted-foreground">
                 Tetapkan struktur markah mengikut subjek, kertas, dan skema OMR bila diperlukan.
               </p>
+              <HeaderLastUpdated />
             </div>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Badge variant="outline" className="border-violet-200 bg-violet-50 text-violet-700">
-              <Pencil className="mr-1 h-3.5 w-3.5" />
+            <Badge variant="outline" className="h-8 rounded-full border-violet-200 bg-violet-50 px-3 text-sm font-medium text-violet-700">
+              <Pencil className="mr-1.5 h-3.5 w-3.5" />
               {manualComponents.length} manual
             </Badge>
-            <Badge variant="outline" className="border-sky-200 bg-sky-50 text-sky-700">
-              <ScanLine className="mr-1 h-3.5 w-3.5" />
+            <Badge variant="outline" className="h-8 rounded-full border-sky-200 bg-sky-50 px-3 text-sm font-medium text-sky-700">
+              <ScanLine className="mr-1.5 h-3.5 w-3.5" />
               {omrComponents.length} OMR
             </Badge>
           </div>
@@ -523,7 +540,12 @@ export default function AnswerSchemesPage() {
   <Input
     type="date"
     value={deadlineInput}
-    onChange={(event) => setDeadlineInput(event.target.value)}
+    onChange={(event) =>
+      setDeadlines((current) => ({
+        ...current,
+        [activeGradeGroup]: event.target.value,
+      }))
+    }
     min={getMalaysiaDateInputValue()}
   />
 </div>
@@ -576,7 +598,10 @@ export default function AnswerSchemesPage() {
                         </div>
                       </div>
                       </div>
-                      <Badge variant="outline" className={componentTypeMeta(component.type).badge}>
+                      <Badge
+                        variant="outline"
+                        className={`h-8 rounded-full px-3 text-sm font-medium ${componentTypeMeta(component.type).badge}`}
+                      >
                         {componentTypeMeta(component.type).label}
                       </Badge>
                     </div>
@@ -647,21 +672,21 @@ export default function AnswerSchemesPage() {
             <div className="flex flex-wrap items-center gap-2">
               <Badge
                 variant="outline"
-                className="h-8 rounded-full border-blue-200 bg-blue-50 px-3 text-sm font-semibold text-blue-700 shadow-xs"
+                className="h-8 rounded-full border-blue-200 bg-blue-50 px-3 text-sm font-medium text-blue-700"
               >
                 <Settings2 className="mr-1.5 h-3.5 w-3.5" />
                 Komponen: {activeTemplate.components.length}
               </Badge>
               <Badge
                 variant="outline"
-                className="h-8 rounded-full border-emerald-200 bg-emerald-50 px-3 text-sm font-semibold text-emerald-700 shadow-xs"
+                className="h-8 rounded-full border-emerald-200 bg-emerald-50 px-3 text-sm font-medium text-emerald-700"
               >
                 <ClipboardCheck className="mr-1.5 h-3.5 w-3.5" />
                 Jumlah: {totalIncludedMax(activeTemplate)}
               </Badge>
               <Badge
                 variant="outline"
-                className="h-8 rounded-full border-violet-200 bg-violet-50 px-3 text-sm font-semibold text-violet-700 shadow-xs"
+                className="h-8 rounded-full border-violet-200 bg-violet-50 px-3 text-sm font-medium text-violet-700"
               >
                 <ScanLine className="mr-1.5 h-3.5 w-3.5" />
                 OMR: {primaryOmrComponent ? primaryOmrLabel : "Tiada"}
@@ -671,7 +696,7 @@ export default function AnswerSchemesPage() {
             <div className="flex justify-end">
               <Button onClick={handleSaveSettings} disabled={loading || savingSettings || !examId || !subjectId}>
                 <Save className="mr-2 h-4 w-4" />
-                Simpan Template
+                {deadlines.lower.trim() || deadlines.upper.trim() ? "Simpan Template" : "Batalkan Skema"}
               </Button>
             </div>
           </CardContent>
@@ -690,8 +715,8 @@ export default function AnswerSchemesPage() {
                     Isi jawapan A, B, C atau D mengikut bilangan soalan objektif yang ditetapkan.
                   </p>
                 </div>
-                <Badge variant="outline" className="border-sky-200 bg-sky-50 text-sky-700">
-                  <Filter className="mr-1 h-3 w-3" />
+                <Badge variant="outline" className="h-8 rounded-full border-sky-200 bg-sky-50 px-3 text-sm font-medium text-sky-700">
+                  <Filter className="mr-1.5 h-3.5 w-3.5" />
                   {answeredCount}/{answerQuestionCount} lengkap
                 </Badge>
               </div>
@@ -700,9 +725,15 @@ export default function AnswerSchemesPage() {
               <>
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div className="flex flex-wrap items-center gap-2">
-                    <Badge variant="outline">{primaryOmrLabel}</Badge>
-                    <Badge variant="outline">{answerQuestionCount} soalan</Badge>
-                    <Badge variant="outline">Tingkatan {activeOmrGrade}</Badge>
+                    <Badge variant="outline" className="h-8 rounded-full px-3 text-sm font-medium">
+                      {primaryOmrLabel}
+                    </Badge>
+                    <Badge variant="outline" className="h-8 rounded-full px-3 text-sm font-medium">
+                      {answerQuestionCount} soalan
+                    </Badge>
+                    <Badge variant="outline" className="h-8 rounded-full px-3 text-sm font-medium">
+                      Tingkatan {activeOmrGrade}
+                    </Badge>
                   </div>
                   <div className="w-full sm:w-[190px]">
                     <Select value={activeOmrGrade} onValueChange={setOmrGrade}>

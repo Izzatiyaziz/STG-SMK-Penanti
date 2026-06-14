@@ -13,6 +13,15 @@ import {
     TableRow,
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
+import { Download } from "lucide-react";
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select";
+import { HeaderLastUpdated } from "@/components/header-last-updated";
 
 type SubjectResult = {
     subject: string;
@@ -22,6 +31,7 @@ type SubjectResult = {
 
 type ReportCardPayload = {
     student: {
+        examId: string;
         name: string;
         ic: string;
         className: string;
@@ -29,6 +39,7 @@ type ReportCardPayload = {
         year: string;
         classTeacher: string;
     };
+    exams: Array<{ id: string; name: string; year: string }>;
     results: SubjectResult[];
     summary: {
         totalSubjects: number;
@@ -62,13 +73,15 @@ export default function ReportCardPage() {
     const [data, setData] = useState<ReportCardPayload | null>(null);
     const [error, setError] = useState("");
     const [loading, setLoading] = useState(true);
+    const [selectedExamId, setSelectedExamId] = useState("");
 
     useEffect(() => {
         async function loadReportCard() {
             setLoading(true);
             setError("");
             try {
-                const res = await fetch("/api/student/report-card", { cache: "no-store" });
+                const params = selectedExamId ? `?exam_id=${encodeURIComponent(selectedExamId)}` : "";
+                const res = await fetch(`/api/student/report-card${params}`, { cache: "no-store" });
                 const json = await res.json();
                 if (!res.ok) {
                     setData(null);
@@ -76,6 +89,7 @@ export default function ReportCardPage() {
                     return;
                 }
                 setData(json);
+                setSelectedExamId((current) => current || String(json?.student?.examId ?? ""));
             } catch {
                 setData(null);
                 setError("Gagal memuatkan slip keputusan");
@@ -85,7 +99,7 @@ export default function ReportCardPage() {
         }
 
         loadReportCard();
-    }, []);
+    }, [selectedExamId]);
 
     const student = data?.student;
     const results = data?.results ?? [];
@@ -93,8 +107,38 @@ export default function ReportCardPage() {
 
     return (
         <div className="min-h-screen bg-muted/30 p-4 md:p-6">
-            <div className="max-w-7xl mx-auto space-y-6">
-                <Card className="border border-border shadow">
+            <div className="mx-auto mb-6 max-w-[900px] print:hidden">
+                <h1 className="text-2xl font-bold tracking-tight text-foreground">Kad Laporan Pelajar</h1>
+                <p className="mt-1 text-sm font-medium text-muted-foreground">
+                    Pilih peperiksaan dan eksport slip keputusan pelajar.
+                </p>
+                <HeaderLastUpdated />
+            </div>
+            <Card className="mx-auto mb-6 max-w-[900px] border-border bg-card shadow-sm print:hidden">
+                <CardContent className="flex flex-col gap-4 p-6 sm:flex-row sm:items-end sm:justify-between">
+                  <div className="w-full max-w-md space-y-2">
+                    <div className="text-sm font-medium text-muted-foreground">Peperiksaan</div>
+                    <Select value={selectedExamId} onValueChange={setSelectedExamId} disabled={loading || !data?.exams?.length}>
+                        <SelectTrigger className="h-11 border-border bg-background">
+                            <SelectValue placeholder="Pilih peperiksaan" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {(data?.exams ?? []).map((exam) => (
+                                <SelectItem key={exam.id} value={exam.id}>
+                                    {exam.name} ({exam.year})
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                  </div>
+                  <Button variant="outline" disabled={!data || loading} onClick={() => window.print()} className="sm:w-auto">
+                    <Download className="mr-2 h-4 w-4" />
+                    Eksport
+                  </Button>
+                </CardContent>
+            </Card>
+            <div className="report-card-print-root max-w-7xl mx-auto space-y-6">
+                <Card className="report-slip-header border border-border shadow">
                     <CardContent className="space-y-3 p-6 text-center">
                         <Image
                             src="/img/smkp-logo.png"
@@ -105,7 +149,7 @@ export default function ReportCardPage() {
                         />
                         <div>
                             <h2 className="text-lg font-bold uppercase">SMK Penanti</h2>
-                            <p className="font-semibold uppercase">
+                            <p className="report-slip-title mt-3 border-y border-border py-2 font-semibold uppercase">
                                 Slip Keputusan {student?.exam ? `- ${student.exam} ${student.year}` : ""}
                             </p>
                         </div>
@@ -124,7 +168,7 @@ export default function ReportCardPage() {
                     </Card>
                 ) : data ? (
                     <>
-                        <Card className="border border-border shadow">
+                        <Card className="report-slip-student border border-border shadow">
                             <CardContent className="grid grid-cols-1 gap-4 p-5 text-sm md:grid-cols-2">
                                 <div className="space-y-1">
                                     <p><b>Nama</b>   : {student?.name}</p>
@@ -136,7 +180,7 @@ export default function ReportCardPage() {
                             </CardContent>
                         </Card>
 
-                        <Card className="overflow-hidden rounded-xl border-border bg-card shadow-md">
+                        <Card className="report-slip-results overflow-hidden rounded-xl border-border bg-card shadow-md">
                             <CardContent className="p-0">
                                 <div className="overflow-x-auto">
                                     <Table>
@@ -170,7 +214,7 @@ export default function ReportCardPage() {
                             </CardContent>
                         </Card>
 
-                        <Card className="border border-border shadow">
+                        <Card className="report-slip-summary border border-border shadow">
                             <CardContent className="grid grid-cols-1 gap-4 p-5 text-sm md:grid-cols-2">
                                 <div className="space-y-1">
                                     <p><b>Bilangan Mata Pelajaran</b> : {summary?.totalSubjects}</p>
@@ -187,7 +231,7 @@ export default function ReportCardPage() {
                             </CardContent>
                         </Card>
 
-                        <Card className="border border-border shadow">
+                        <Card className="report-slip-comment border border-border shadow">
                             <CardContent className="p-5 text-sm">
                                 <p><b>Nama Guru Kelas</b> : {student?.classTeacher || "-"}</p>
                                 <p>
@@ -201,9 +245,6 @@ export default function ReportCardPage() {
                     </>
                 ) : null}
 
-                <div className="flex justify-end">
-                    <Button className="w-full sm:w-auto">Muat Turun PDF Slip Keputusan</Button>
-                </div>
             </div>
         </div>
     );

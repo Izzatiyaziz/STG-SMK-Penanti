@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import supabase from "@/lib/supabase";
 import { requireApiRole } from "@/lib/auth";
 import { isAllowedClassForSubject } from "@/lib/subject-rules";
+import { gradeFromTotal, gradeScaleForLevels } from "@/lib/grade-utils";
+import { compareExamsChronologically } from "@/lib/exam-utils";
 
 export const runtime = "nodejs";
 
@@ -28,15 +30,12 @@ function toNumber(value: unknown) {
 	return Number.isFinite(n) ? n : 0;
 }
 
-function normalizeGrade(value: unknown, total: number) {
+function normalizeGrade(value: unknown, total: number, level: number) {
 	const grade = toId(value).toUpperCase();
-	if (grade === "E") return "F";
-	if (["A", "B", "C", "D", "F"].includes(grade)) return grade;
-	if (total >= 80) return "A";
-	if (total >= 65) return "B";
-	if (total >= 50) return "C";
-	if (total >= 40) return "D";
-	return "F";
+	const allowed = level >= 4
+		? ["A+", "A", "A-", "B+", "B", "C+", "C", "D", "E", "G"]
+		: ["A", "B", "C", "D", "E", "F"];
+	return allowed.includes(grade) ? grade : gradeFromTotal(total, level);
 }
 
 async function getCoordinatorSubjectIds(teacherId: string) {
@@ -166,7 +165,7 @@ export async function GET(req: Request) {
 				className: classInfo?.name ?? "-",
 				gradeLevel: classInfo?.grade ?? 0,
 				mark: total,
-				grade: normalizeGrade(row.grade, total),
+				grade: normalizeGrade(row.grade, total, classInfo?.grade ?? 0),
 				status: toId(row.status),
 			};
 		});
@@ -213,7 +212,15 @@ export async function GET(req: Request) {
 			const examMatch = !examIdFilter || examIdFilter === "all" || row.exam_id === examIdFilter;
 			return gradeMatch && classMatch && examMatch;
 		});
-		const includedResultIds = new Set(studentPerformance.map((row) => row.result_id));
+		const trendResultIds = new Set(
+			studentPerformanceAll
+				.filter((row) => {
+					const gradeMatch = !gradeFilter || gradeFilter === "all" || row.gradeLevel === Number(gradeFilter);
+					const classMatch = !classIdFilter || classIdFilter === "all" || row.class_id === classIdFilter;
+					return gradeMatch && classMatch;
+				})
+				.map((row) => row.result_id),
+		);
 
 		const marks = studentPerformance.map((row) => row.mark);
 		const totalStudents = new Set(studentPerformance.map((row) => row.student_id)).size;
@@ -227,7 +234,9 @@ export async function GET(req: Request) {
 			? Math.round((passCount / studentPerformance.length) * 100)
 			: 0;
 
-		const gradeDistribution = ["A", "B", "C", "D", "F"].map((grade) => ({
+		const gradeDistribution = gradeScaleForLevels(
+			studentPerformance.map((row) => row.gradeLevel),
+		).map((grade) => ({
 			grade,
 			value: studentPerformance.filter((row) => row.grade === grade).length,
 		}));
@@ -279,24 +288,30 @@ export async function GET(req: Request) {
 			))
 			: Array.from(performanceByClass.values());
 
-		const trend = Array.from(examById.entries()).map(([examId, exam]) => {
-			const examMarks = resultRows
-				.filter((row) => toId(row.exam_id) === examId && includedResultIds.has(toId(row.result_id)))
-				.map((row) => toNumber(row.total));
-			return {
-				exam: exam.name,
-				average: examMarks.length
-					? Math.round(examMarks.reduce((sum, mark) => sum + mark, 0) / examMarks.length)
-					: 0,
-				year: exam.year,
-			};
-		});
+		const trend = Array.from(examById.entries())
+			.map(([examId, exam]) => {
+				const examMarks = resultRows
+					.filter((row) => toId(row.exam_id) === examId && trendResultIds.has(toId(row.result_id)))
+					.map((row) => toNumber(row.total));
+				return {
+					exam: exam.name,
+					average: examMarks.length
+						? Math.round(examMarks.reduce((sum, mark) => sum + mark, 0) / examMarks.length)
+						: 0,
+					year: exam.year,
+				};
+			})
+			.sort((a, b) =>
+				compareExamsChronologically(
+					{ name: a.exam, year: a.year },
+					{ name: b.exam, year: b.year },
+				),
+			);
 
 		const topStudents = [...studentPerformance]
 			.sort((a, b) => b.mark - a.mark)
 			.slice(0, 20);
 		const weakStudents = [...studentPerformance]
-			.filter((row) => row.mark < 40)
 			.sort((a, b) => a.mark - b.mark);
 
 		return NextResponse.json({

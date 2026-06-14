@@ -215,7 +215,7 @@ export function AddStudentDialog({
         fullnameTouched && !formData.fullname.trim()
             ? "Nama penuh wajib diisi."
             : fullnameTouched && formData.fullname.trim() && !isWordsOnlyName(formData.fullname)
-                ? "Nama penuh hanya boleh mengandungi huruf, ruang, '/' dan apostrof (')"
+                ? "Nama penuh hanya boleh mengandungi huruf dan '/'"
             : "";
 
     const icDigits = normalizeIcDigits(formData.ic_number);

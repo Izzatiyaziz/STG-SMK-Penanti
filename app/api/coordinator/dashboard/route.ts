@@ -13,6 +13,13 @@ function toNumber(v: unknown) {
 	return Number.isFinite(n) ? n : 0;
 }
 
+function statusRank(status: string) {
+	if (status === "approved") return 3;
+	if (status === "pending") return 2;
+	if (status === "rejected") return 1;
+	return 0;
+}
+
 async function isCoordinatorForSubject(params: {
 	coordinator_teacher_id: string;
 	subject_id: string;
@@ -72,7 +79,7 @@ export async function GET(req: Request) {
 					.single(),
 				supabase
 					.from("stg_teachers")
-					.select("teacher_id, fullname")
+					.select("teacher_id, fullname, email")
 					.eq("teacher_id", teacher_id)
 					.single(),
 			]);
@@ -204,12 +211,16 @@ export async function GET(req: Request) {
 			if (!r || typeof r !== "object") continue;
 			const sid = toId((r as any).student_id);
 			if (!sid) continue;
-			resultByStudentId.set(sid, {
+			const nextResult = {
 				total: toNumber((r as any).total),
 				grade: String((r as any).grade ?? ""),
 				status: String((r as any).status ?? "pending"),
 				hasSubjective: Boolean((r as any).subjective_id),
-			});
+			};
+			const currentResult = resultByStudentId.get(sid);
+			if (!currentResult || statusRank(nextResult.status) > statusRank(currentResult.status)) {
+				resultByStudentId.set(sid, nextResult);
+			}
 		}
 
 		const gradeCounts: Record<string, number> = { A: 0, B: 0, C: 0, D: 0, E: 0 };
@@ -232,10 +243,10 @@ export async function GET(req: Request) {
 
 				for (const s of studentsInClass) {
 					const subjTeacher = subjectiveTeacherByStudentId.get(s.id) ?? "";
-					if (subjTeacher && subjTeacher === assignedTeacherId) submittedCount += 1;
-
 					const rr = resultByStudentId.get(s.id);
-					if (rr?.hasSubjective) {
+					if ((subjTeacher && subjTeacher === assignedTeacherId) || rr) submittedCount += 1;
+
+					if (rr) {
 						resultsCount += 1;
 						totalSum += rr.total;
 						if (rr.grade && gradeCounts[rr.grade] !== undefined)
@@ -294,7 +305,11 @@ export async function GET(req: Request) {
 
 		return NextResponse.json({
 			coordinator: coordTeacher
-				? { id: coordTeacher.teacher_id, name: coordTeacher.fullname }
+				? {
+						id: coordTeacher.teacher_id,
+						name: coordTeacher.fullname,
+						email: coordTeacher.email,
+					}
 				: null,
 			subject: subject
 				? { id: subject.subject_id, name: subject.subject_name }

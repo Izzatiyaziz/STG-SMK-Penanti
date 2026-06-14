@@ -3,20 +3,72 @@ import bcrypt from "bcryptjs";
 import supabase from "@/lib/supabase";
 import nodemailer from "nodemailer"; // 🔥 Import Nodemailer
 import { randomBytes } from "crypto";
+import {
+    consumeRateLimit,
+    getClientIp,
+    isRequestBodyTooLarge,
+    normalizeLoginIdentifier,
+    rateLimitKey,
+} from "@/lib/security";
+import { logSecurityEvent } from "@/lib/security-events";
 
 export const runtime = "nodejs";
 
 export async function POST(req: Request) {
     try {
-        const body = await req.json();
-        const { role, identifier } = body;
+        if (isRequestBodyTooLarge(req, 8_192)) {
+            return NextResponse.json(
+                { message: "Permintaan terlalu besar" },
+                { status: 413 }
+            );
+        }
 
-        if (!role || !identifier) {
+        const body = await req.json();
+        const role = normalizeLoginIdentifier(body?.role, 20).toLowerCase();
+        const identifier = normalizeLoginIdentifier(body?.identifier);
+
+        if (!["teacher", "admin"].includes(role) || !identifier) {
             return NextResponse.json(
                 { message: "Peranan dan ID diperlukan" },
                 { status: 400 }
             );
         }
+
+        const clientIp = getClientIp(req);
+        const ipLimit = consumeRateLimit(
+            `forgot-password:ip:${rateLimitKey(clientIp)}`,
+            { limit: 8, windowMs: 60 * 60 * 1000 }
+        );
+        const accountLimit = consumeRateLimit(
+            `forgot-password:account:${rateLimitKey(`${role}:${identifier.toLowerCase()}`)}`,
+            { limit: 3, windowMs: 60 * 60 * 1000 }
+        );
+
+        if (!ipLimit.allowed || !accountLimit.allowed) {
+            await logSecurityEvent({
+                eventType: "password_reset_abuse",
+                severity: "high",
+                ipAddress: clientIp,
+                identifier,
+                role,
+                endpoint: "/api/auth/forgot-password",
+                details: { reason: "Had permintaan set semula kata laluan dicapai" },
+            });
+            const retryAfterSeconds = Math.max(
+                ipLimit.retryAfterSeconds,
+                accountLimit.retryAfterSeconds
+            );
+            return NextResponse.json(
+                { message: "Terlalu banyak permintaan. Sila cuba semula kemudian." },
+                {
+                    status: 429,
+                    headers: { "Retry-After": String(retryAfterSeconds) },
+                }
+            );
+        }
+
+        const genericSuccessMessage =
+            "Jika akaun dan e-mel berdaftar wujud, arahan set semula kata laluan akan dihantar.";
 
         // Jana kata laluan rawak sementara (Cth: temp-A1B2C)
         const randomString = randomBytes(4).toString("hex").toUpperCase();
@@ -36,15 +88,12 @@ export async function POST(req: Request) {
                 .single();
 
             if (fetchErr || !teacher) {
-                return NextResponse.json({ message: "ID pengguna tidak dijumpai." }, { status: 404 });
+                return NextResponse.json({ message: genericSuccessMessage });
             }
 
             userEmail = String(teacher.email ?? "").trim();
             if (!userEmail) {
-                return NextResponse.json(
-                    { message: "Guru ini tidak mempunyai rekod e-mel yang sah." },
-                    { status: 400 }
-                );
+                return NextResponse.json({ message: genericSuccessMessage });
             }
 
             const { error: updateErr } = await supabase
@@ -60,20 +109,11 @@ export async function POST(req: Request) {
         
         // ================= ADMIN =================
         else if (role === "admin") {
-            return NextResponse.json(
-                {
-                    message:
-                        "Tetapan semula kata laluan admin melalui e-mel belum disokong kerana jadual stg_admins tidak mempunyai kolum e-mel.",
-                },
-                { status: 400 }
-            );
+            return NextResponse.json({ message: genericSuccessMessage });
         }
 
         if (!userEmail) {
-            return NextResponse.json(
-                { message: "Pengguna ini tidak mempunyai rekod e-mel yang sah." },
-                { status: 400 }
-            );
+            return NextResponse.json({ message: genericSuccessMessage });
         }
 
         // ================= PENGHANTARAN E-MEL SEBENAR =================
@@ -111,7 +151,7 @@ export async function POST(req: Request) {
         await transporter.sendMail(mailOptions);
 
         return NextResponse.json(
-            { message: "Kata laluan sementara berjaya dihantar ke e-mel" },
+            { message: genericSuccessMessage },
             { status: 200 }
         );
 

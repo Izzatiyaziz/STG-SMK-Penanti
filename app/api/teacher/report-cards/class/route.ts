@@ -20,6 +20,24 @@ function average(arr: number[]) {
     return arr.reduce((a, b) => a + b, 0) / arr.length;
 }
 
+function buildCompetitionRanks(rows: Array<{ sid: string; average: number; hasResults: boolean }>) {
+    const ranks = new Map<string, number>();
+    let previousAverage: number | null = null;
+    let previousRank = 0;
+    rows
+        .filter((row) => row.hasResults)
+        .sort((a, b) => b.average - a.average || a.sid.localeCompare(b.sid))
+        .forEach((row, index) => {
+            const rank = previousAverage !== null && Math.abs(row.average - previousAverage) < 0.0001
+                ? previousRank
+                : index + 1;
+            ranks.set(row.sid, rank);
+            previousAverage = row.average;
+            previousRank = rank;
+        });
+    return ranks;
+}
+
 function normalizeGrade(value: unknown, mark: number) {
     const grade = toId(value).toUpperCase();
     if (grade === "E") return "F";
@@ -144,7 +162,6 @@ export async function GET(req: Request) {
                       .select("student_id, subject_id, total, grade, status, subjective_id")
                       .eq("exam_id", exam_id)
                       .eq("status", "approved")
-                      .not("subjective_id", "is", null)
                       .in("student_id", studentIds)
                 : { data: [] as unknown[] },
         ]);
@@ -173,7 +190,6 @@ export async function GET(req: Request) {
                   .select("student_id, total, grade, status, subjective_id")
                   .eq("exam_id", exam_id)
                   .eq("status", "approved")
-                  .not("subjective_id", "is", null)
                   .in("student_id", levelStudentIds)
             : { data: [] as unknown[] };
 
@@ -230,11 +246,7 @@ export async function GET(req: Request) {
                 hasResults: rs.length > 0,
             };
         });
-        const positionByStudentId = new Map<string, number>();
-        averages
-            .filter((row) => row.hasResults)
-            .sort((a, b) => b.average - a.average)
-            .forEach((row, index) => positionByStudentId.set(row.sid, index + 1));
+        const positionByStudentId = buildCompetitionRanks(averages);
 
         const levelResultsByStudent = new Map<string, DbRow[]>();
         for (const r of Array.isArray(levelResults) ? (levelResults as DbRow[]) : []) {
@@ -245,8 +257,7 @@ export async function GET(req: Request) {
             levelResultsByStudent.get(sid)!.push(r);
         }
 
-        const levelPositionByStudentId = new Map<string, number>();
-        levelStudentIds
+        const levelPositionByStudentId = buildCompetitionRanks(levelStudentIds
             .map((sid) => {
                 const rs = levelResultsByStudent.get(sid) ?? [];
                 return {
@@ -254,10 +265,8 @@ export async function GET(req: Request) {
                     average: average(rs.map((r) => toNumber(r.total))),
                     hasResults: rs.length > 0,
                 };
-            })
-            .filter((row) => row.hasResults)
-            .sort((a, b) => b.average - a.average)
-            .forEach((row, index) => levelPositionByStudentId.set(row.sid, index + 1));
+            }),
+        );
 
         const out = studentIds.map((sid) => {
             const c = cardByStudentId.get(sid);

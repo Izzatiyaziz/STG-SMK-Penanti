@@ -6,6 +6,7 @@ import AdminSystemUsageTable, {
 import { Activity } from "lucide-react";
 import { useEffect, useState } from "react";
 import SystemUsageChart from "./system-usage-chart";
+import { HeaderLastUpdated } from "@/components/header-last-updated";
 
 export default function AdminReportsPage() {
   const [logs, setLogs] = useState<SystemUsageLogRow[]>([]);
@@ -51,6 +52,7 @@ export default function AdminReportsPage() {
             Paparan rekod aktiviti pengguna bagi tujuan pemantauan dan audit
             penggunaan sistem oleh pihak pentadbiran.
           </p>
+          <HeaderLastUpdated />
         </div>
 
         <SystemUsageChart />

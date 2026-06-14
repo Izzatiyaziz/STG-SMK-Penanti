@@ -50,6 +50,7 @@ import {
 	TableRow,
 } from "@/components/ui/table";
 import { formatMalaysiaDate, formatMalaysiaTime } from "@/lib/date-utils";
+import { exportTablePDF } from "@/lib/export-pdf";
 
 type Student = {
 	id: string;
@@ -96,6 +97,7 @@ export default function MyClassPage() {
 	const [students, setStudents] = useState<Student[]>([]);
 	const [availableStudents, setAvailableStudents] = useState<Student[]>([]);
 	const [loading, setLoading] = useState(true);
+	const [refreshing, setRefreshing] = useState(false);
 	const [actionLoading, setActionLoading] = useState(false);
 	const [searchQuery, setSearchQuery] = useState("");
 	const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
@@ -185,32 +187,38 @@ export default function MyClassPage() {
 	}, [availableStudents]);
 
 	async function handleRefresh() {
-		await fetchData({ silent: true });
-		toast.success("Senarai pelajar dikemas kini");
+		setRefreshing(true);
+		try {
+			await fetchData({ silent: true });
+			toast.success("Senarai pelajar dikemas kini");
+		} finally {
+			setRefreshing(false);
+		}
 	}
 
 	function handleExport() {
-		const header = ["Nama Pelajar", "No. Kad Pengenalan", "Tingkatan", "Kelas", "Tarikh Daftar"];
-		const body = students.map((student) => [
-			student.name,
-			student.identifier,
-			student.level || classInfo?.grade || "",
-			classInfo?.name || "",
-			formatDate(student.enrollment_date),
-		]);
-		const csv = [header, ...body]
-			.map((row) =>
-				row.map((value) => `"${String(value).replaceAll('"', '""')}"`).join(","),
-			)
-			.join("\n");
-		const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-		const url = URL.createObjectURL(blob);
-		const anchor = document.createElement("a");
-		anchor.href = url;
-		anchor.download = `${classInfo?.name || "kelas"}-pelajar.csv`;
-		anchor.click();
-		URL.revokeObjectURL(url);
-		toast.success("Data pelajar berjaya dieksport");
+		exportTablePDF({
+			title: "Senarai Pelajar Kelas",
+			subtitle: `Kelas: ${classInfo?.grade ?? ""} ${classInfo?.name ?? ""} | Jumlah: ${students.length} pelajar`,
+			fileName: `${classInfo?.name || "kelas"}-pelajar.pdf`,
+			columns: [
+				{ header: "Bil.", dataKey: "no" },
+				{ header: "Nama Pelajar", dataKey: "name" },
+				{ header: "No. Kad Pengenalan", dataKey: "identifier" },
+				{ header: "Tingkatan", dataKey: "level" },
+				{ header: "Kelas", dataKey: "className" },
+				{ header: "Tarikh Daftar", dataKey: "enrollmentDate" },
+			],
+			rows: students.map((student, index) => ({
+				no: index + 1,
+				name: student.name,
+				identifier: student.identifier,
+				level: `Tingkatan ${student.level || classInfo?.grade || "-"}`,
+				className: classInfo?.name || "-",
+				enrollmentDate: formatDate(student.enrollment_date),
+			})),
+		});
+		toast.success("PDF senarai pelajar berjaya dieksport");
 	}
 
 	async function addStudentToClass(studentId: string) {
@@ -377,7 +385,7 @@ export default function MyClassPage() {
 				<div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
 					<div className="space-y-3">
 						<div className="flex items-center gap-4">
-							<div className="p-3 rounded-2xl bg-gradient-to-br from-primary/10 to-primary/5 border border-primary/20 shadow-sm">
+							<div className="rounded-2xl border border-primary/20 bg-primary/10 p-3 shadow-sm">
 								<Users className="w-7 h-7 text-primary" />
 							</div>
 							<div>
@@ -385,9 +393,9 @@ export default function MyClassPage() {
 									Pengurusan Pelajar Kelas
 								</h1>
 								<p className="text-muted-foreground font-medium mt-1">
-									Tingkatan {classInfo.grade} | Guru Kelas:{" "}
+									Urus senarai dan maklumat pelajar bagi kelas{" "}
 									<span className="text-primary font-bold">
-										{classInfo.name}
+										Tingkatan {classInfo.grade} {classInfo.name}
 									</span>
 								</p>
 							</div>
@@ -406,10 +414,10 @@ export default function MyClassPage() {
 						<Button
 							variant="outline"
 							onClick={handleRefresh}
-							disabled={loading}
+							disabled={loading || refreshing}
 							className="border-border hover:bg-accent hover:text-accent-foreground shadow-xs"
 						>
-							{loading ? (
+							{refreshing ? (
 								<Loader2 className="w-4 h-4 mr-2 animate-spin" />
 							) : (
 								<RefreshCw className="w-4 h-4 mr-2" />
@@ -584,7 +592,7 @@ export default function MyClassPage() {
 				</div>
 
 				<Card className="border-border bg-card shadow-lg overflow-hidden">
-					<CardHeader className="border-b border-border bg-gradient-to-r from-card to-card/80 px-6 py-5">
+					<CardHeader className="border-b border-border bg-card px-6 py-5">
 						<div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
 							<div>
 								<CardTitle className="text-xl font-bold flex items-center gap-2">

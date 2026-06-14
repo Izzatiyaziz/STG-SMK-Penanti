@@ -19,6 +19,7 @@ export type GradeTemplate = {
 
 export type SubjectExamSettings = {
   deadline?: string | null;
+  deadlines?: Partial<Record<TemplateGroup, string | null>>;
   grade_templates?: Partial<Record<TemplateGroup, GradeTemplate>>;
   objective_questions?: number;
   objective_max?: number;
@@ -324,6 +325,16 @@ export function getSubjectSettingsForTemplate(
   return {
     ...settings,
     deadline: toStringValue(settings.deadline) || null,
+    deadlines: {
+      lower:
+        settings.deadlines && typeof settings.deadlines === "object"
+          ? toStringValue((settings.deadlines as Record<string, unknown>).lower) || null
+          : null,
+      upper:
+        settings.deadlines && typeof settings.deadlines === "object"
+          ? toStringValue((settings.deadlines as Record<string, unknown>).upper) || null
+          : null,
+    },
     grade_templates: {
       lower: sanitizeGradeTemplate("lower", lowerRaw ?? settings, subjectName),
       upper: sanitizeGradeTemplate("upper", upperRaw ?? settings, subjectName),
@@ -333,6 +344,18 @@ export function getSubjectSettingsForTemplate(
 
 export function getTemplateGroupForGrade(grade: number | null | undefined): TemplateGroup {
   return Number(grade ?? 0) >= 4 ? "upper" : "lower";
+}
+
+export function getDeadlineForGrade(
+  settings: SubjectExamSettings | Record<string, unknown> | null | undefined,
+  grade: number | null | undefined,
+) {
+  const group = getTemplateGroupForGrade(grade);
+  const deadlines =
+    settings && typeof settings === "object" && settings.deadlines && typeof settings.deadlines === "object"
+      ? (settings.deadlines as Record<string, unknown>)
+      : {};
+  return toStringValue(deadlines[group]) || toStringValue(settings?.deadline);
 }
 
 export function getGradeTemplateForClass(params: {
@@ -353,7 +376,7 @@ export function getGradeTemplateForClass(params: {
   return {
     group,
     template: cloneTemplate(template),
-    deadline: settings.deadline ?? "",
+    deadline: getDeadlineForGrade(settings, params.grade),
   };
 }
 

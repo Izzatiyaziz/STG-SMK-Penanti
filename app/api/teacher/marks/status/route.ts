@@ -86,7 +86,7 @@ export async function GET(req: Request) {
         // Approval status (based on results linked to this teacher's subjective submissions)
         const { data: results } = await supabase
             .from("stg_results")
-            .select("status, subjective_id, student_id")
+            .select("status, subjective_id, student_id, rejection_reason")
             .eq("subject_id", subject_id)
             .eq("exam_id", exam_id)
             .in("student_id", studentIds);
@@ -127,6 +127,7 @@ export async function GET(req: Request) {
         let approved = 0;
         let rejected = 0;
         let total = 0;
+        const rejectionReasons = new Set<string>();
 
         for (const r of Array.isArray(results) ? results : []) {
             if (!r || typeof r !== "object") continue;
@@ -140,6 +141,11 @@ export async function GET(req: Request) {
             if (st === "approved") approved += 1;
             else if (st === "rejected") rejected += 1;
             else pending += 1;
+
+            const rejectionReason = String(
+                (r as { rejection_reason?: unknown }).rejection_reason ?? ""
+            ).trim();
+            if (st === "rejected" && rejectionReason) rejectionReasons.add(rejectionReason);
         }
 
         const approvalStatus =
@@ -163,6 +169,7 @@ export async function GET(req: Request) {
                 approved,
                 rejected,
                 status: approvalStatus,
+                rejectionReason: Array.from(rejectionReasons).join("\n"),
             },
         });
     } catch (err) {

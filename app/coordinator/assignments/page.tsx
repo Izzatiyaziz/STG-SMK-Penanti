@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { formatMalaysiaTime } from "@/lib/date-utils";
+import { exportTablePDF } from "@/lib/export-pdf";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
 	Dialog,
@@ -266,11 +267,6 @@ export default function SubjectCoordinatorAssignmentsPage() {
 		for (const t of data?.teachers ?? []) m.set(t.id, t.name);
 		return m;
 	}, [data?.teachers]);
-	const selectedTeacher = useMemo(() => {
-		if (!selectedTeacherId) return null;
-		return data?.teachers.find((teacher) => teacher.id === selectedTeacherId) ?? null;
-	}, [data?.teachers, selectedTeacherId]);
-
 	function formatTeacherSubjectLoad(subjectLoad?: TeacherSubjectLoad[]) {
 		if (!subjectLoad || subjectLoad.length === 0) return "Belum ada lantikan subjek";
 		return subjectLoad
@@ -405,7 +401,34 @@ export default function SubjectCoordinatorAssignmentsPage() {
 	}
 
 	function handleExport() {
-		window.print();
+		const subject = data?.subject?.name ?? selectedSubject?.name ?? "Subjek";
+		const exportRows = [...(data?.classes ?? [])].sort(
+			(a, b) => a.grade - b.grade || a.name.localeCompare(b.name),
+		);
+		exportTablePDF({
+			title: "Senarai Tugasan Guru Subjek",
+			subtitle: `Subjek: ${subject} | Tingkatan 1-5 | Jumlah: ${exportRows.length} kelas`,
+			fileName: `tugasan-guru-${subject}.pdf`,
+			columns: [
+				{ header: "Bil.", dataKey: "no" },
+				{ header: "Tingkatan", dataKey: "grade" },
+				{ header: "Kelas", dataKey: "className" },
+				{ header: "Guru Subjek", dataKey: "teacher" },
+				{ header: "Status", dataKey: "status" },
+			],
+			rows: exportRows.map((classItem, index) => {
+				const teacherId = assignmentTeacherByClassId.get(classItem.id) ?? "";
+				const teacher = teacherNameById.get(teacherId) ?? "";
+				return {
+					no: index + 1,
+					grade: `Tingkatan ${classItem.grade}`,
+					className: classItem.name,
+					teacher: teacher || "-",
+					status: teacher ? "Telah Dilantik" : "Belum Dilantik",
+				};
+			}),
+		});
+		toast.success("PDF tugasan guru berjaya dieksport");
 	}
 
 	async function saveAssignmentForClass() {
@@ -528,7 +551,7 @@ export default function SubjectCoordinatorAssignmentsPage() {
 						<Button
 							variant="outline"
 							onClick={handleExport}
-							disabled={loading || filteredRows.length === 0}
+							disabled={loading || (data?.classes.length ?? 0) === 0}
 							className="border-border hover:bg-accent hover:text-accent-foreground shadow-xs"
 						>
 							<Download className="w-4 h-4 mr-2" />
@@ -550,8 +573,8 @@ export default function SubjectCoordinatorAssignmentsPage() {
 								</p>
 							</div>
 							<div className="flex flex-wrap items-center gap-3">
-								<Badge variant="outline" className="border-primary/30 bg-primary/5 text-primary font-medium">
-									<Filter className="w-3 h-3 mr-1" />
+								<Badge variant="outline" className="h-8 rounded-full border-primary/30 bg-primary/5 px-3 text-sm font-medium text-primary">
+									<Filter className="mr-1.5 h-3.5 w-3.5" />
 									{filteredRows.length} kelas
 								</Badge>
 							</div>
@@ -684,7 +707,7 @@ export default function SubjectCoordinatorAssignmentsPage() {
 															</div>
 														</TableCell>
 														<TableCell className="py-4">
-															<Badge className={`px-3 py-1.5 rounded-md font-medium border ${getGradeColor(classItem.grade)}`}>
+															<Badge className={`border ${getGradeColor(classItem.grade)}`}>
 																Tingkatan {classItem.grade}
 															</Badge>
 														</TableCell>
@@ -922,16 +945,6 @@ export default function SubjectCoordinatorAssignmentsPage() {
 									)}
 								</SelectContent>
 							</Select>
-							{selectedTeacher && (
-								<div className="rounded-md border border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
-									<div className="font-medium text-foreground">
-										Ringkasan lantikan guru
-									</div>
-									<div className="mt-1 leading-5">
-										{formatTeacherSubjectLoad(selectedTeacher.subject_load)}
-									</div>
-								</div>
-							)}
 						</div>
 					</div>
 

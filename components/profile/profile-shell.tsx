@@ -11,6 +11,7 @@ import {
 
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { HeaderLastUpdated } from "@/components/header-last-updated";
 
 type ProfileShellProps = {
 	accountLabel: string;
@@ -137,6 +138,7 @@ export function ProfileShell({
 							<p className="mt-1 max-w-2xl text-sm leading-6 text-muted-foreground md:text-base">
 								Maklumat akaun dan tetapan keselamatan anda.
 							</p>
+							<HeaderLastUpdated />
 						</div>
 					</div>
 				</div>

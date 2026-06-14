@@ -21,6 +21,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatMalaysiaTime } from "@/lib/date-utils";
+import { exportTablePDF } from "@/lib/export-pdf";
 import {
 	Select,
 	SelectContent,
@@ -185,25 +186,20 @@ export default function SubjectCoordinatorReportsPage() {
 	const [session] = useState<Session | null>(() => getStoredSession());
 	const [data, setData] = useState<ReportData | null>(null);
 	const [loading, setLoading] = useState(false);
-	const [gradeFilter, setGradeFilter] = useState("default-grade-1");
+	const [gradeFilter, setGradeFilter] = useState("select-grade");
 	const [classFilter, setClassFilter] = useState("all");
-	const [examFilter, setExamFilter] = useState("all");
+	const [examFilter, setExamFilter] = useState("select-exam");
 	const subjectName = data?.subject?.name ?? "Mathematics";
 	const isUpperFormSubject = isUpperFormOnlySubject(subjectName);
-	const defaultFilterGrade = isUpperFormSubject ? "default-grade-4" : "default-grade-1";
-	const defaultGradeNumber = isUpperFormSubject ? 4 : 1;
 
 	async function fetchReport() {
 		if (!session?.user_id) return;
 
 		setLoading(true);
-		const effectiveGradeFilter = gradeFilter.startsWith("default-grade-")
-			? String(defaultGradeNumber)
-			: gradeFilter;
 		try {
 			const params = new URLSearchParams({
 				teacher_id: session.user_id,
-				grade: effectiveGradeFilter,
+				grade: gradeFilter,
 				class_id: classFilter,
 				exam_id: examFilter,
 			});
@@ -230,27 +226,15 @@ export default function SubjectCoordinatorReportsPage() {
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [classFilter, examFilter, gradeFilter, session?.user_id]);
 
-	useEffect(() => {
-		if (!isUpperFormSubject || gradeFilter !== "default-grade-1") return;
-		setGradeFilter("default-grade-4");
-		setClassFilter("all");
-	}, [gradeFilter, isUpperFormSubject]);
-
 	const gradeData = useMemo(() => data?.gradeDistribution ?? [], [data]);
-	const hasReportShell = Boolean(data);
 	const classOptions = useMemo(() => {
 		const options = data?.filterOptions.classes ?? [];
-		const effectiveGradeFilter = gradeFilter.startsWith("default-grade-")
-			? String(defaultGradeNumber)
-			: gradeFilter;
-		const filtered =
-			effectiveGradeFilter === "all"
-				? options
-				: options.filter((option) => option.grade === Number(effectiveGradeFilter));
+		if (gradeFilter === "select-grade") return [];
+		const filtered = options.filter((option) => option.grade === Number(gradeFilter));
 
 		return Array.from(new Map(filtered.map((option) => [option.id, option])).values())
 			.sort((a, b) => a.grade - b.grade || a.name.localeCompare(b.name));
-	}, [data?.filterOptions.classes, defaultGradeNumber, gradeFilter]);
+	}, [data?.filterOptions.classes, gradeFilter]);
 
 	useEffect(() => {
 		if (classFilter === "all") return;
@@ -260,15 +244,67 @@ export default function SubjectCoordinatorReportsPage() {
 
 	const gradeOptions = useMemo(() => {
 		const grades = data?.filterOptions.grades ?? [1, 2, 3, 4, 5];
-		return Array.from(new Set([defaultGradeNumber, ...grades]))
+		return Array.from(new Set(grades))
 			.filter((grade) => Number.isFinite(Number(grade)))
 			.filter((grade) => !isUpperFormSubject || Number(grade) >= 4)
 			.sort((a, b) => Number(a) - Number(b));
-	}, [data?.filterOptions.grades, defaultGradeNumber, isUpperFormSubject]);
+	}, [data?.filterOptions.grades, isUpperFormSubject]);
 
 	function handleGradeFilter(value: string) {
 		setGradeFilter(value);
 		setClassFilter("all");
+		setExamFilter("select-exam");
+	}
+
+	function handleExport() {
+		if (!data) return;
+
+		const rows = [
+			...data.classPerformance.map((row) => ({
+				category: "Prestasi Kelas",
+				name: row.gradeLevel ? `${row.gradeLevel} ${row.className}` : row.className,
+				detail: `${row.students} pelajar`,
+				mark: `${row.average}%`,
+				grade: "-",
+			})),
+			...data.trend.map((row) => ({
+				category: "Trend Peperiksaan",
+				name: row.exam,
+				detail: row.year || "-",
+				mark: `${row.average}%`,
+				grade: "-",
+			})),
+			...data.topStudents.slice(0, 3).map((row) => ({
+				category: "Pelajar Cemerlang",
+				name: row.name,
+				detail: formatStudentClass(row),
+				mark: `${row.mark}%`,
+				grade: row.grade,
+			})),
+			...data.weakStudents.slice(0, 3).map((row) => ({
+				category: "Perlu Perhatian",
+				name: row.name,
+				detail: formatStudentClass(row),
+				mark: `${row.mark}%`,
+				grade: row.grade,
+			})),
+		];
+
+		exportTablePDF({
+			title: "Laporan Prestasi Pelajar",
+			subtitle: `Subjek: ${subjectName} | Purata: ${data.summary.averageMark}% | Kadar Lulus: ${data.summary.passRate}%`,
+			fileName: `laporan-prestasi-${subjectName}.pdf`,
+			columns: [
+				{ header: "Bil.", dataKey: "no" },
+				{ header: "Kategori", dataKey: "category" },
+				{ header: "Nama / Peperiksaan", dataKey: "name" },
+				{ header: "Kelas / Tahun", dataKey: "detail" },
+				{ header: "Markah / Purata", dataKey: "mark" },
+				{ header: "Gred", dataKey: "grade" },
+			],
+			rows: rows.map((row, index) => ({ no: index + 1, ...row })),
+		});
+		toast.success("PDF laporan prestasi berjaya dieksport");
 	}
 
 	const classPerformanceChartData = useMemo(() => {
@@ -284,6 +320,21 @@ export default function SubjectCoordinatorReportsPage() {
 			examLabel: row.year ? `${row.exam} (${row.year})` : row.exam,
 		}));
 	}, [data?.trend]);
+
+	const performanceSummary = useMemo(() => {
+		if (!data) return "Tiada keputusan untuk diringkaskan.";
+
+		const classesWithResults = data.classPerformance.filter((row) => row.students > 0);
+		const bestClass = [...classesWithResults].sort((a, b) => b.average - a.average)[0];
+		if (!bestClass) return "Tiada keputusan untuk diringkaskan.";
+
+		const classLabel = `${bestClass.gradeLevel ? `${bestClass.gradeLevel} ` : ""}${bestClass.className}`;
+		if (classFilter !== "all") {
+			return `Kelas ${classLabel} mencatat purata ${bestClass.average}%. Mencapai kadar lulus ${data.summary.passRate}%.`;
+		}
+
+		return `Kelas ${classLabel} mencatat purata tertinggi ${bestClass.average}%. Purata keseluruhan ialah ${data.summary.averageMark}% dengan kadar lulus ${data.summary.passRate}%.`;
+	}, [classFilter, data]);
 
 	return (
 		<div className="min-h-screen bg-background p-4 md:p-6">
@@ -337,7 +388,8 @@ export default function SubjectCoordinatorReportsPage() {
 						</Button>
 						<Button
 							variant="outline"
-							onClick={() => window.print()}
+							onClick={handleExport}
+							disabled={!data || loading || examFilter === "select-exam"}
 							className="border-border hover:bg-accent hover:text-accent-foreground shadow-xs"
 						>
 							<Download className="w-4 h-4 mr-2" />
@@ -355,7 +407,7 @@ export default function SubjectCoordinatorReportsPage() {
 									<SelectValue placeholder="Pilih tingkatan" />
 								</SelectTrigger>
 								<SelectContent className="rounded-lg border-border">
-									<SelectItem value={defaultFilterGrade}>
+									<SelectItem value="select-grade">
 										<div className="flex items-center gap-2">
 											<GraduationCap className="h-4 w-4" />
 											Tingkatan
@@ -375,7 +427,11 @@ export default function SubjectCoordinatorReportsPage() {
 
 						<div className="space-y-2">
 							<div className="text-sm font-medium text-muted-foreground">Kelas</div>
-							<Select value={classFilter} onValueChange={setClassFilter}>
+							<Select
+								value={classFilter}
+								disabled={gradeFilter === "select-grade"}
+								onValueChange={setClassFilter}
+							>
 								<SelectTrigger className="h-11 rounded-lg border-border bg-background">
 									<SelectValue placeholder="Pilih kelas" />
 								</SelectTrigger>
@@ -396,16 +452,20 @@ export default function SubjectCoordinatorReportsPage() {
 						</div>
 
 						<div className="space-y-2">
-							<div className="text-sm font-medium text-muted-foreground">Jenis Peperiksaan</div>
-							<Select value={examFilter} onValueChange={setExamFilter}>
+							<div className="text-sm font-medium text-muted-foreground">Peperiksaan</div>
+							<Select
+								value={examFilter}
+								disabled={gradeFilter === "select-grade"}
+								onValueChange={setExamFilter}
+							>
 								<SelectTrigger className="h-11 rounded-lg border-border bg-background">
 									<SelectValue placeholder="Pilih peperiksaan" />
 								</SelectTrigger>
 								<SelectContent className="rounded-lg border-border">
-									<SelectItem value="all">
+									<SelectItem value="select-exam">
 										<div className="flex items-center gap-2">
 											<ClipboardList className="h-4 w-4" />
-											Semua Peperiksaan
+											Peperiksaan
 										</div>
 									</SelectItem>
 									{(data?.filterOptions.exams ?? []).map((exam) => (
@@ -421,9 +481,9 @@ export default function SubjectCoordinatorReportsPage() {
 							<Button
 								variant="outline"
 								onClick={() => {
-									setGradeFilter(defaultFilterGrade);
+									setGradeFilter("select-grade");
 									setClassFilter("all");
-									setExamFilter("all");
+									setExamFilter("select-exam");
 								}}
 								className="h-11 w-full border-border shadow-xs md:w-auto"
 							>
@@ -433,23 +493,7 @@ export default function SubjectCoordinatorReportsPage() {
 					</CardContent>
 				</Card>
 
-				{!loading && data && data.summary.totalStudents === 0 && (
-					<Card className="border-border bg-card shadow-md rounded-xl overflow-hidden">
-						<CardContent className="flex flex-col items-center justify-center gap-3 p-12 text-center">
-							<div className="rounded-full bg-muted/50 p-4">
-								<CheckCircle className="h-10 w-10 text-muted-foreground/60" />
-							</div>
-							<div>
-								<h2 className="text-lg font-semibold text-foreground">Belum ada markah diluluskan</h2>
-								<p className="mt-1 text-sm text-muted-foreground">
-									Laporan akan dipaparkan selepas guru menghantar markah dan coordinator meluluskan rekod tersebut.
-								</p>
-							</div>
-						</CardContent>
-					</Card>
-				)}
-
-				{hasReportShell && (
+				{(
 					<>
 						<div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 							<ChartCard title="Analisis Gred" description="Taburan gred pelajar bagi subjek ini" icon={ChartPie}>
@@ -463,7 +507,7 @@ export default function SubjectCoordinatorReportsPage() {
 										<Tooltip />
 									</PieChart>
 								</ResponsiveContainer>
-								<div className="mt-4 grid grid-cols-5 gap-2">
+								<div className="mt-4 grid grid-cols-3 gap-2">
 									{gradeData.map((item, index) => (
 										<div key={item.grade} className="rounded-md border border-border bg-muted/20 p-2 text-center">
 											<div className="mx-auto mb-1 h-2 w-8 rounded-full" style={{ backgroundColor: gradeColors[index % gradeColors.length] }} />
@@ -493,6 +537,10 @@ export default function SubjectCoordinatorReportsPage() {
 										</Bar>
 									</BarChart>
 								</ResponsiveContainer>
+								<div className="mt-4 rounded-lg bg-muted/40 px-4 py-3 text-sm leading-relaxed text-foreground">
+									<span className="font-semibold">Ringkasan Prestasi: </span>
+									{performanceSummary}
+								</div>
 							</ChartCard>
 						</div>
 
@@ -537,7 +585,7 @@ export default function SubjectCoordinatorReportsPage() {
 												</div>
 											</TableCell>
 											<TableCell className="py-4">{formatStudentClass(student)}</TableCell>
-											<TableCell className="py-4 text-center font-semibold">{student.mark}</TableCell>
+											<TableCell className="py-4 text-center font-semibold">{Math.round(student.mark)}%</TableCell>
 											<TableCell className="py-4 text-center pr-6">
 												<Badge variant="secondary">{student.grade}</Badge>
 											</TableCell>
@@ -555,7 +603,7 @@ export default function SubjectCoordinatorReportsPage() {
 
 							<ReportTable
 								title="Senarai Pelajar Perlu Perhatian"
-								description="Top 3 pelajar yang markah rendah atau gagal"
+								description="3 pelajar dengan markah paling rendah"
 								icon={TrendingDown}
 							>
 								<TableHeader className="bg-muted/30">
@@ -581,7 +629,7 @@ export default function SubjectCoordinatorReportsPage() {
 												</div>
 											</TableCell>
 											<TableCell className="py-4">{formatStudentClass(student)}</TableCell>
-											<TableCell className="py-4 text-center font-semibold text-rose-600">{student.mark}</TableCell>
+											<TableCell className="py-4 text-center font-semibold text-rose-600">{Math.round(student.mark)}%</TableCell>
 											<TableCell className="py-4 text-center pr-6">
 												<Badge variant="destructive">{student.grade}</Badge>
 											</TableCell>
@@ -590,7 +638,7 @@ export default function SubjectCoordinatorReportsPage() {
 									{!loading && (data?.weakStudents.length ?? 0) === 0 && (
 										<TableRow>
 											<TableCell colSpan={5} className="py-16">
-												<TableEmpty title="Tiada pelajar perlu perhatian" description="Tiada pelajar gagal untuk subjek dan filter semasa." />
+												<TableEmpty title="Tiada pelajar perlu perhatian" description="Tiada keputusan pelajar untuk filter semasa." />
 											</TableCell>
 										</TableRow>
 									)}

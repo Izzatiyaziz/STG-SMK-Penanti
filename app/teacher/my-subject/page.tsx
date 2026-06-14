@@ -23,13 +23,17 @@ import {
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { AlertTriangle, Camera, CheckCircle2, ClipboardList, Clock, Download, Eye, Filter, Save, Send, LayoutDashboard } from "lucide-react";
+import { AlertTriangle, Camera, CheckCircle2, ClipboardList, Clock, Download, Eye, Filter, MessageSquareWarning, Save, Send, LayoutDashboard } from "lucide-react";
 import {
   computeMarkSummary,
   getGradeTemplateForClass,
   type GradeTemplate,
 } from "@/lib/marking-template";
+import { gradeFromTotal } from "@/lib/grade-utils";
 import { formatMalaysiaDate, getMalaysiaDateInputValue } from "@/lib/date-utils";
+import { exportTablePDF } from "@/lib/export-pdf";
+import { hasOpenMarkingForAssignments, isMarkingClosedForAssignment } from "@/lib/exam-utils";
+import { HeaderLastUpdated } from "@/components/header-last-updated";
 
 type Session = {
   user_id: string;
@@ -69,6 +73,7 @@ type MarkStatus = {
     approved: number;
     rejected: number;
     status: "none" | "pending" | "approved" | "rejected" | "mixed";
+    rejectionReason?: string;
   };
 };
 
@@ -98,36 +103,23 @@ function toNumber(value: unknown, fallback = 0) {
   return Number.isFinite(num) ? num : fallback;
 }
 
-function gradeFromPercentage(total: number) {
-  if (total >= 80) return "A";
-  if (total >= 65) return "B";
-  if (total >= 50) return "C";
-  if (total >= 40) return "D";
-  return "E";
-}
-
-function escapeHtml(value: unknown) {
-  return String(value ?? "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#039;");
-}
-
-function readMarksContext() {
+function consumeMarksEntryContext() {
   try {
-    const raw = localStorage.getItem("stg_marks_context");
+    const raw = sessionStorage.getItem("stg_marks_entry_context");
+    sessionStorage.removeItem("stg_marks_entry_context");
     if (!raw) return null;
+
     const parsed = JSON.parse(raw) as {
-      class_id?: string;
-      subject_id?: string;
-      exam_id?: string;
+      class_id?: unknown;
+      subject_id?: unknown;
+      exam_id?: unknown;
+      view_only?: unknown;
     };
     return {
       class_id: String(parsed.class_id ?? "").trim(),
       subject_id: String(parsed.subject_id ?? "").trim(),
       exam_id: String(parsed.exam_id ?? "").trim(),
+      view_only: parsed.view_only === true,
     };
   } catch {
     return null;
@@ -139,6 +131,7 @@ export default function SubjectTeacherPage() {
   const [session, setSession] = useState<Session | null>(null);
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [exams, setExams] = useState<Exam[]>([]);
+  const [approvedExamIds, setApprovedExamIds] = useState<string[]>([]);
   const [selectedGrade, setSelectedGrade] = useState("");
   const [selectedClassId, setSelectedClassId] = useState("");
   const [selectedSubjectId, setSelectedSubjectId] = useState("");
@@ -151,6 +144,7 @@ export default function SubjectTeacherPage() {
   const [submitLoading, setSubmitLoading] = useState(false);
   const [draftLoading, setDraftLoading] = useState(false);
   const [markStatus, setMarkStatus] = useState<MarkStatus>(EMPTY_MARK_STATUS);
+  const [viewOnly, setViewOnly] = useState(false);
 
   useEffect(() => {
     try {
@@ -224,6 +218,26 @@ export default function SubjectTeacherPage() {
     () => exams.find((exam) => exam.id === selectedExamId) ?? null,
     [exams, selectedExamId],
   );
+  const filtersComplete = Boolean(
+    selectedExamId && selectedGrade && selectedClassId && selectedSubjectId,
+  );
+  const deadlineExams = useMemo(
+    () => exams.filter((exam) => hasOpenMarkingForAssignments(exam, assignments)),
+    [assignments, exams],
+  );
+  const visibleExams = useMemo(
+    () =>
+      viewOnly
+        ? exams.filter((exam) => approvedExamIds.includes(exam.id))
+        : deadlineExams,
+    [approvedExamIds, deadlineExams, exams, viewOnly],
+  );
+
+  useEffect(() => {
+    if (!selectedExamId) return;
+    if (visibleExams.some((exam) => exam.id === selectedExamId)) return;
+    setSelectedExamId("");
+  }, [selectedExamId, visibleExams]);
 
   const templateInfo = useMemo(() => {
     if (!selectedAssignment || !selectedExam) {
@@ -248,6 +262,11 @@ export default function SubjectTeacherPage() {
   const isApproved = markStatus.approval.status === "approved";
   const isRejected = markStatus.approval.status === "rejected";
   const isPendingApproval = markStatus.approval.status === "pending";
+  const isReadOnly = viewOnly || Boolean(
+    selectedAssignment &&
+    selectedExam &&
+    isMarkingClosedForAssignment(selectedExam, selectedAssignment),
+  );
 
   const markCompletion = useMemo(() => {
     if (!templateInfo.template) {
@@ -274,45 +293,45 @@ export default function SubjectTeacherPage() {
     if (!session) return;
     setLoading(true);
     try {
-      const [assignmentRes, examRes] = await Promise.all([
+      const [assignmentRes, examRes, approvedExamRes] = await Promise.all([
         fetch(`/api/teacher/assignments?teacher_id=${session.user_id}`),
         fetch("/api/admin/exams", { cache: "no-store" }),
+        fetch("/api/teacher/approved-exams", { cache: "no-store" }),
       ]);
 
       const assignmentJson = await assignmentRes.json();
       const examJson = await examRes.json();
+      const approvedExamJson = await approvedExamRes.json();
       const assignmentList = Array.isArray(assignmentJson?.data) ? (assignmentJson.data as Assignment[]) : [];
       const examList = Array.isArray(examJson) ? (examJson as Exam[]) : [];
-      const marksContext = readMarksContext();
-
+      const approvedIds = Array.isArray(approvedExamJson?.data)
+        ? approvedExamJson.data.map((id: unknown) => String(id))
+        : [];
       setAssignments(assignmentList);
       setExams(examList);
+      setApprovedExamIds(approvedIds);
 
-      if (marksContext?.exam_id && examList.some((exam) => exam.id === marksContext.exam_id)) {
-        setSelectedExamId(marksContext.exam_id);
-      } else if (examList.length > 0) {
-        setSelectedExamId((current) => current || examList[0].id);
-      }
-
-      if (marksContext?.class_id && marksContext?.subject_id) {
-        const matched = assignmentList.find(
-          (assignment) =>
-            assignment.class_id === marksContext.class_id &&
-            assignment.subject_id === marksContext.subject_id,
+      const entryContext = consumeMarksEntryContext();
+      if (entryContext) {
+        const assignment = assignmentList.find(
+          (item) =>
+            item.class_id === entryContext.class_id &&
+            item.subject_id === entryContext.subject_id,
         );
-        if (matched) {
-          setSelectedGrade(matched.grade == null ? "" : String(matched.grade));
-          setSelectedClassId(matched.class_id);
-          setSelectedSubjectId(matched.subject_id);
-        } else if (assignmentList.length > 0) {
-          setSelectedGrade((current) => current || (assignmentList[0].grade == null ? "" : String(assignmentList[0].grade)));
-          setSelectedClassId((current) => current || assignmentList[0].class_id);
-          setSelectedSubjectId((current) => current || assignmentList[0].subject_id);
+        const exam = examList.find((item) => item.id === entryContext.exam_id);
+
+        if (
+          assignment &&
+          exam &&
+          ((!entryContext.view_only && hasOpenMarkingForAssignments(exam, [assignment])) ||
+            (entryContext.view_only && approvedIds.includes(exam.id)))
+        ) {
+          setViewOnly(entryContext.view_only);
+          setSelectedExamId(exam.id);
+          setSelectedGrade(assignment.grade == null ? "" : String(assignment.grade));
+          setSelectedClassId(assignment.class_id);
+          setSelectedSubjectId(assignment.subject_id);
         }
-      } else if (assignmentList.length > 0) {
-        setSelectedGrade((current) => current || (assignmentList[0].grade == null ? "" : String(assignmentList[0].grade)));
-        setSelectedClassId((current) => current || assignmentList[0].class_id);
-        setSelectedSubjectId((current) => current || assignmentList[0].subject_id);
       }
     } catch {
       toast.error("Gagal memuatkan data");
@@ -332,9 +351,7 @@ export default function SubjectTeacherPage() {
       setSelectedClassId("");
       return;
     }
-    if (!classOptions.some((classOption) => classOption.class_id === selectedClassId)) {
-      setSelectedClassId(classOptions[0].class_id);
-    }
+    if (!classOptions.some((classOption) => classOption.class_id === selectedClassId)) setSelectedClassId("");
   }, [classOptions, selectedClassId, selectedGrade]);
 
   useEffect(() => {
@@ -343,9 +360,7 @@ export default function SubjectTeacherPage() {
       setSelectedSubjectId("");
       return;
     }
-    if (!subjectOptions.some((subject) => subject.subject_id === selectedSubjectId)) {
-      setSelectedSubjectId(subjectOptions[0].subject_id);
-    }
+    if (!subjectOptions.some((subject) => subject.subject_id === selectedSubjectId)) setSelectedSubjectId("");
   }, [selectedClassId, selectedSubjectId, subjectOptions]);
 
   async function loadStudents() {
@@ -399,9 +414,9 @@ export default function SubjectTeacherPage() {
   }
 
   useEffect(() => {
-    if (!selectedAssignment) return;
+    if (!filtersComplete || !selectedAssignment) return;
     loadStudents();
-  }, [selectedAssignment]);
+  }, [filtersComplete, selectedAssignment]);
 
   useEffect(() => {
     if (!selectedAssignment || !selectedExamId || !templateInfo.template || students.length === 0) return;
@@ -433,20 +448,24 @@ export default function SubjectTeacherPage() {
   }
 
   async function saveMarks(mode: "draft" | "submit") {
-    if (!session || !selectedAssignment || !selectedExamId || !templateInfo.template) return;
-    if (mode === "submit" && isLate) {
-      toast.error(`Tarikh akhir telah tamat (${formatDeadline(templateInfo.deadline)})`);
+    if (isReadOnly) {
+      toast.error("Pemarkahan telah ditutup oleh Panitia Subjek");
       return;
     }
+    if (!session || !selectedAssignment || !selectedExamId || !templateInfo.template) return;
     const invalidEntry = students
       .flatMap((student) =>
         templateInfo.template!.components.map((component) => ({
           student,
           component,
-          value: toNumber(componentMarksByStudent[student.id]?.[component.key] ?? 0, 0),
+          rawValue: componentMarksByStudent[student.id]?.[component.key],
         })),
       )
-      .find((entry) => entry.value < 0 || entry.value > entry.component.max_mark);
+      .find((entry) => {
+        if (entry.rawValue === undefined || String(entry.rawValue).trim() === "") return false;
+        const value = toNumber(entry.rawValue, 0);
+        return value < 0 || value > entry.component.max_mark;
+      });
 
     if (invalidEntry) {
       toast.error(
@@ -461,8 +480,8 @@ export default function SubjectTeacherPage() {
     try {
       const marks = students
         .filter((student) => {
-          if (mode === "submit") return true;
-          return templateInfo.template!.components.some((component) => {
+          if (mode === "draft") return true;
+          return templateInfo.template!.components.every((component) => {
             const value = componentMarksByStudent[student.id]?.[component.key];
             return value !== undefined && String(value).trim() !== "";
           });
@@ -472,10 +491,18 @@ export default function SubjectTeacherPage() {
           components: Object.fromEntries(
             templateInfo.template!.components.map((component) => [
               component.key,
-              toNumber(componentMarksByStudent[student.id]?.[component.key] ?? 0, 0),
+              componentMarksByStudent[student.id]?.[component.key] === undefined ||
+              String(componentMarksByStudent[student.id]?.[component.key]).trim() === ""
+                ? null
+                : toNumber(componentMarksByStudent[student.id]?.[component.key], 0),
             ]),
           ),
         }));
+
+      if (mode === "submit" && marks.length === 0) {
+        toast.error("Tiada markah pelajar yang lengkap untuk dihantar");
+        return;
+      }
 
       const res = await fetch("/api/teacher/marks", {
         method: "POST",
@@ -496,7 +523,15 @@ export default function SubjectTeacherPage() {
         return;
       }
 
-      toast.success(mode === "draft" ? "Draf markah disimpan" : "Markah dihantar untuk semakan ketua panitia", { id: toastId });
+      const lateDays = Number(json?.late_days ?? 0);
+      toast.success(
+        mode === "draft"
+          ? "Draf markah disimpan"
+          : lateDays > 0
+            ? `Markah dihantar lewat ${lateDays} hari untuk semakan Panitia Subjek`
+            : "Markah dihantar untuk semakan Panitia Subjek",
+        { id: toastId },
+      );
       await loadComponentMarks();
     } catch {
       toast.error("Ralat sistem", { id: toastId });
@@ -523,6 +558,15 @@ export default function SubjectTeacherPage() {
   async function openOmrResult(studentId: string) {
     if (!selectedAssignment || !selectedExamId) return;
 
+    localStorage.setItem(
+      "stg_marks_context",
+      JSON.stringify({
+        class_id: selectedAssignment.class_id,
+        subject_id: selectedAssignment.subject_id,
+        exam_id: selectedExamId,
+        student_id: studentId,
+      }),
+    );
     const params = new URLSearchParams({
       student_id: studentId,
       class_id: selectedAssignment.class_id,
@@ -545,7 +589,7 @@ export default function SubjectTeacherPage() {
       }
 
       sessionStorage.setItem("stg_omr_last_result", JSON.stringify(json));
-      router.push("/teacher/omr/results");
+      router.push(`/teacher/omr/results?${params.toString()}`);
     } catch {
       toast.error("Ralat membuka keputusan OMR");
     }
@@ -554,14 +598,6 @@ export default function SubjectTeacherPage() {
   function exportApprovedMarks() {
     if (!isApproved || !selectedAssignment || !selectedExam || !templateInfo.template) return;
 
-    const headers = [
-      "Bil",
-      "Nama Pelajar",
-      ...templateInfo.template.components.map((component) => component.label),
-      "Jumlah Markah",
-      "Peratus",
-      "Gred",
-    ];
     const rows = students.map((student, index) => {
       const marksByKey = Object.fromEntries(
         templateInfo.template!.components.map((component) => [
@@ -570,66 +606,39 @@ export default function SubjectTeacherPage() {
         ]),
       );
       const summary = computeMarkSummary(templateInfo.template!, marksByKey);
-      return [
-        index + 1,
-        student.name,
-        ...templateInfo.template!.components.map((component) => marksByKey[component.key] ?? 0),
-        `${summary.raw_total}/${summary.total_max}`,
-        `${summary.percentage}%`,
-        gradeFromPercentage(summary.percentage),
-      ];
+      return {
+        no: index + 1,
+        student: student.name,
+        ...Object.fromEntries(
+          templateInfo.template!.components.map((component) => [
+            component.key,
+            marksByKey[component.key] ?? "-",
+          ]),
+        ),
+        total: `${summary.raw_total}/${summary.total_max}`,
+        percentage: `${summary.percentage}%`,
+        grade: gradeFromTotal(summary.percentage, selectedAssignment.grade),
+      };
     });
 
-    const title = [
-      "Senarai Markah Diluluskan",
-      selectedExam.name,
-      selectedAssignment.grade ? `Tingkatan ${selectedAssignment.grade}` : "",
-      selectedAssignment.class_name,
-      selectedAssignment.subject_name,
-    ]
-      .filter(Boolean)
-      .join(" - ");
-    const printWindow = window.open("", "_blank", "noopener,noreferrer");
-    if (!printWindow) {
-      toast.error("Pop-up disekat. Sila benarkan pop-up untuk eksport PDF.");
-      return;
-    }
-
-    printWindow.document.write(`<!doctype html>
-      <html>
-        <head>
-          <title>${escapeHtml(title)}</title>
-          <style>
-            @page { size: A4; margin: 16mm; }
-            body { font-family: Arial, sans-serif; color: #0f172a; }
-            h1 { font-size: 20px; margin: 0 0 6px; }
-            .meta { color: #475569; font-size: 12px; margin-bottom: 18px; }
-            table { width: 100%; border-collapse: collapse; font-size: 12px; }
-            th, td { border: 1px solid #cbd5e1; padding: 8px; text-align: center; }
-            th { background: #f1f5f9; font-weight: 700; }
-            td.name, th.name { text-align: left; }
-          </style>
-        </head>
-        <body>
-          <h1>${escapeHtml(title)}</h1>
-          <div class="meta">Dieksport pada ${escapeHtml(formatMalaysiaDate(new Date()))}</div>
-          <table>
-            <thead>
-              <tr>${headers.map((header, index) => `<th class="${index === 1 ? "name" : ""}">${escapeHtml(header)}</th>`).join("")}</tr>
-            </thead>
-            <tbody>
-              ${rows
-                .map((row) => `<tr>${row.map((cell, index) => `<td class="${index === 1 ? "name" : ""}">${escapeHtml(cell)}</td>`).join("")}</tr>`)
-                .join("")}
-            </tbody>
-          </table>
-        </body>
-      </html>`);
-    printWindow.document.close();
-    printWindow.focus();
-    window.setTimeout(() => {
-      printWindow.print();
-    }, 250);
+    exportTablePDF({
+      title: "Senarai Markah Diluluskan",
+      subtitle: `${selectedExam.name} (${selectedExam.academic_year}) | Tingkatan ${selectedAssignment.grade ?? "-"} ${selectedAssignment.class_name} | ${selectedAssignment.subject_name}`,
+      fileName: `markah-${selectedAssignment.subject_name}-${selectedAssignment.class_name}.pdf`,
+      columns: [
+        { header: "Bil.", dataKey: "no" },
+        { header: "Nama Pelajar", dataKey: "student" },
+        ...templateInfo.template.components.map((component) => ({
+          header: component.label,
+          dataKey: component.key,
+        })),
+        { header: "Jumlah Markah", dataKey: "total" },
+        { header: "Peratus", dataKey: "percentage" },
+        { header: "Gred", dataKey: "grade" },
+      ],
+      rows,
+    });
+    toast.success("PDF markah berjaya dieksport");
   }
 
   if (!session) return null;
@@ -644,25 +653,35 @@ export default function SubjectTeacherPage() {
             </div>
             <div>
                <h1 className="text-2xl font-bold text-foreground tracking-tight">
-                 Pemarkahan Markah
+                 {isReadOnly ? "Markah Diluluskan" : "Pemarkahan Markah"}
                </h1>
                <p className="text-muted-foreground font-medium mt-1">
-                 Mengurus markah pelajar untuk peperiksaan mengikut subjek dan kelas.
+                 {isReadOnly
+                   ? "Markah pelajar yang telah diluluskan oleh Panitia Subjek."
+                   : "Mengurus markah pelajar untuk peperiksaan mengikut subjek dan kelas."}
                </p>
+               <HeaderLastUpdated />
          </div>
        </div>
     </div>
 
         <Card className="border border-border/50 shadow-lg">
-          <CardContent className="grid grid-cols-1 gap-4 p-4 md:grid-cols-4">
+          <CardContent className="grid grid-cols-1 gap-4 p-4 md:grid-cols-2 xl:grid-cols-[repeat(4,minmax(0,1fr))_auto]">
             <div className="space-y-2">
               <div className="text-sm text-muted-foreground">Peperiksaan</div>
-              <Select value={selectedExamId} onValueChange={setSelectedExamId}>
+              <Select
+                value={selectedExamId}
+                onValueChange={(value) => {
+                  setSelectedExamId(value);
+                  setComponentMarksByStudent({});
+                  setMarkStatus(EMPTY_MARK_STATUS);
+                }}
+              >
                 <SelectTrigger>
                   <SelectValue placeholder="Pilih peperiksaan" />
                 </SelectTrigger>
                 <SelectContent>
-                  {exams.map((exam) => (
+                  {visibleExams.map((exam) => (
                     <SelectItem key={exam.id} value={exam.id}>
                       {exam.name} ({exam.academic_year})
                     </SelectItem>
@@ -673,7 +692,17 @@ export default function SubjectTeacherPage() {
 
             <div className="space-y-2">
               <div className="text-sm text-muted-foreground">Tingkatan</div>
-              <Select value={selectedGrade} onValueChange={setSelectedGrade}>
+              <Select
+                value={selectedGrade}
+                onValueChange={(value) => {
+                  setSelectedGrade(value);
+                  setSelectedClassId("");
+                  setSelectedSubjectId("");
+                  setStudents([]);
+                  setComponentMarksByStudent({});
+                  setMarkStatus(EMPTY_MARK_STATUS);
+                }}
+              >
                 <SelectTrigger>
                   <SelectValue placeholder="Pilih tingkatan" />
                 </SelectTrigger>
@@ -689,7 +718,17 @@ export default function SubjectTeacherPage() {
 
             <div className="space-y-2">
               <div className="text-sm text-muted-foreground">Kelas</div>
-              <Select value={selectedClassId} onValueChange={setSelectedClassId} disabled={!selectedGrade}>
+              <Select
+                value={selectedClassId}
+                onValueChange={(value) => {
+                  setSelectedClassId(value);
+                  setSelectedSubjectId("");
+                  setStudents([]);
+                  setComponentMarksByStudent({});
+                  setMarkStatus(EMPTY_MARK_STATUS);
+                }}
+                disabled={!selectedGrade}
+              >
                 <SelectTrigger>
                   <SelectValue placeholder="Pilih kelas" />
                 </SelectTrigger>
@@ -705,7 +744,16 @@ export default function SubjectTeacherPage() {
 
             <div className="space-y-2">
               <div className="text-sm text-muted-foreground">Subjek</div>
-              <Select value={selectedSubjectId} onValueChange={setSelectedSubjectId} disabled={!selectedClassId}>
+              <Select
+                value={selectedSubjectId}
+                onValueChange={(value) => {
+                  setSelectedSubjectId(value);
+                  setStudents([]);
+                  setComponentMarksByStudent({});
+                  setMarkStatus(EMPTY_MARK_STATUS);
+                }}
+                disabled={!selectedClassId}
+              >
                 <SelectTrigger>
                   <SelectValue placeholder="Pilih subjek" />
                 </SelectTrigger>
@@ -718,11 +766,42 @@ export default function SubjectTeacherPage() {
                 </SelectContent>
               </Select>
             </div>
+
+            <div className="flex items-end">
+              <Button
+                type="button"
+                variant="outline"
+                className="h-10 w-full xl:w-auto"
+                onClick={() => {
+                  setSelectedExamId("");
+                  setSelectedGrade("");
+                  setSelectedClassId("");
+                  setSelectedSubjectId("");
+                  setStudents([]);
+                  setComponentMarksByStudent({});
+                  setMarkStatus(EMPTY_MARK_STATUS);
+                }}
+              >
+                Reset
+              </Button>
+            </div>
           </CardContent>
         </Card>
 
-        {isLate && (
-          <Card className="border border-destructive/30 bg-destructive/5">
+        {!filtersComplete && (
+          <Card className="border-dashed border-border bg-card/60 shadow-none">
+            <CardContent className="flex flex-col items-center justify-center gap-2 py-12 text-center">
+              <Filter className="h-8 w-8 text-muted-foreground/60" />
+              <p className="font-semibold text-foreground">Pilih maklumat tertentu untuk memaparkan markah</p>
+              <p className="text-sm text-muted-foreground">
+                Pilih peperiksaan, tingkatan, kelas dan subjek terlebih dahulu.
+              </p>
+            </CardContent>
+          </Card>
+        )}
+
+        {filtersComplete && isLate && !isApproved && (
+          <Card className="border border-rose-200 bg-rose-50 dark:border-rose-900 dark:bg-rose-950">
             <CardContent className="flex items-start gap-3 p-4">
               <AlertTriangle className="mt-0.5 h-5 w-5 text-destructive" />
               <div>
@@ -735,7 +814,7 @@ export default function SubjectTeacherPage() {
           </Card>
         )}
 
-        {templateInfo.template && markStatus.approval.status !== "none" && (
+        {filtersComplete && templateInfo.template && markStatus.approval.status !== "none" && !isApproved && (
           <Card
             className={
               isApproved
@@ -753,7 +832,7 @@ export default function SubjectTeacherPage() {
               ) : (
                 <Clock className="mt-0.5 h-5 w-5 text-violet-700" />
               )}
-              <div>
+              <div className="min-w-0 flex-1">
                 <div
                   className={
                     isApproved
@@ -773,15 +852,27 @@ export default function SubjectTeacherPage() {
                   {isApproved
                     ? "Guru Subjek boleh semak markah yang telah diluluskan sebelum kad laporan pelajar dijana."
                     : isRejected
-                      ? "Semak semula markah pelajar yang kosong, tersilap, atau terlepas pandang. Kemas kini markah dan hantar semula kepada Panitia Subjek."
+                      ? "Semak sebab penolakan, betulkan markah pelajar, kemudian hantar semula kepada Panitia Subjek."
                       : "Markah telah dihantar dan sedang disemak oleh Panitia Subjek."}
                 </div>
+                {isRejected && (
+                  <div className="mt-3 rounded-lg border border-destructive/25 bg-background/80 p-3">
+                    <div className="flex items-center gap-2 text-sm font-semibold text-destructive">
+                      <MessageSquareWarning className="h-4 w-4 shrink-0" />
+                      Sebab Penolakan daripada Panitia Subjek
+                    </div>
+                    <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-foreground">
+                      {markStatus.approval.rejectionReason ||
+                        "Tiada sebab penolakan diberikan. Sila hubungi Panitia Subjek."}
+                    </p>
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>
         )}
 
-        {templateInfo.template && (
+        {filtersComplete && templateInfo.template && (
           <Card className="overflow-hidden border-border bg-card shadow-lg">
             <CardHeader className="border-b border-border bg-gradient-to-r from-card to-card/80 px-6 py-5">
               <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
@@ -849,6 +940,10 @@ export default function SubjectTeacherPage() {
                   </TableHeader>
                   <TableBody>
                     {students.map((student, index) => {
+                      const hasAnyMark = templateInfo.template!.components.some((component) => {
+                        const value = componentMarksByStudent[student.id]?.[component.key];
+                        return value !== undefined && String(value).trim() !== "";
+                      });
                       const marksByKey = Object.fromEntries(
                         templateInfo.template!.components.map((component) => [
                           component.key,
@@ -868,7 +963,7 @@ export default function SubjectTeacherPage() {
                                   type="number"
                                   min={0}
                                   max={component.max_mark}
-                                  disabled={isApproved}
+                                  disabled={isApproved || isReadOnly}
                                   className="h-9 w-24 text-center"
                                   value={componentMarksByStudent[student.id]?.[component.key] ?? ""}
                                   onChange={(event) =>
@@ -891,7 +986,7 @@ export default function SubjectTeacherPage() {
                                       type="button"
                                       variant="outline"
                                       size="icon"
-                                      disabled={isApproved}
+                                      disabled={isApproved || isReadOnly}
                                       className="h-8 w-8 border-emerald-500 text-emerald-600"
                                       onClick={() => openOmrPage(student.id)}
                                       title="Imbas OMR"
@@ -916,13 +1011,15 @@ export default function SubjectTeacherPage() {
                             </TableCell>
                           ))}
                           <TableCell className="py-4 text-center font-medium">
-                            {summary.raw_total} / {summary.total_max}
+                            {hasAnyMark ? `${summary.raw_total} / ${summary.total_max}` : "-"}
                           </TableCell>
-                          <TableCell className="py-4 text-center font-semibold">{summary.percentage}%</TableCell>
+                          <TableCell className="py-4 text-center font-semibold">{hasAnyMark ? `${summary.percentage}%` : "-"}</TableCell>
                           <TableCell className="py-4 text-center">
-                            <Badge variant="outline" className={gradeFromPercentage(summary.percentage) === "E" ? "border-rose-200 bg-rose-50 text-rose-700" : "border-emerald-200 bg-emerald-50 text-emerald-700"}>
-                              {gradeFromPercentage(summary.percentage)}
-                            </Badge>
+                            {hasAnyMark ? (
+                              <Badge variant="outline" className={["F", "G"].includes(gradeFromTotal(summary.percentage, selectedAssignment?.grade)) ? "border-rose-200 bg-rose-50 text-rose-700" : "border-emerald-200 bg-emerald-50 text-emerald-700"}>
+                                {gradeFromTotal(summary.percentage, selectedAssignment?.grade)}
+                              </Badge>
+                            ) : "-"}
                           </TableCell>
                         </TableRow>
                       );
@@ -942,6 +1039,7 @@ export default function SubjectTeacherPage() {
           </Card>
         )}
 
+        {filtersComplete && templateInfo.template && !isReadOnly && (
         <div className="flex justify-end gap-2">
           <Button
             variant="outline"
@@ -959,6 +1057,7 @@ export default function SubjectTeacherPage() {
             {submitLoading ? "Menghantar..." : "Hantar"}
           </Button>
         </div>
+        )}
       </div>
     </div>
   );

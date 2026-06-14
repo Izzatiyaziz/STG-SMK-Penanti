@@ -166,7 +166,6 @@ export function NavUser({
                                 </DropdownMenuItem>
                             </Link>
                         </DropdownMenuGroup>
-
                         <DropdownMenuSeparator />
 
                         <DropdownMenuItem

@@ -786,9 +786,12 @@ export default function UsersPage() {
                                     </div>
                                     {filterRole !== "all" && (
                                         <Badge variant="secondary" className="ml-2">
-                                            {filterRole === "subject teacher" ? "Guru Subjek" : 
-                                             filterRole === "teacher" ? "Guru Kelas" : 
-                                             filterRole === "admin" ? "Admin" : filterRole}
+                                            {filterRole === "class teacher" ? "Guru Kelas" :
+                                             filterRole === "subject teacher" ? "Guru Subjek" :
+                                             filterRole === "subject coordinator" ? "Panitia Subjek" :
+                                             filterRole === "principal" ? "Pengetua" :
+                                             filterRole === "teacher" ? "Guru" :
+                                             filterRole === "admin" ? "Pentadbir" : filterRole}
                                         </Badge>
                                     )}
                                 </div>
@@ -878,13 +881,6 @@ export default function UsersPage() {
                     </div>
                 </Card>
 
-                {/* FOOTER NOTES */}
-                <div className="text-center pt-6">
-                    <div className="inline-flex items-center gap-2 text-sm text-muted-foreground bg-card/50 backdrop-blur-sm px-4 py-2 rounded-full border border-border">
-                        <Shield className="w-4 h-4" />
-                        <span>Sistem Pemarkahan Pelajar v2.0 • Akses terkawal sepenuhnya</span>
-                    </div>
-                </div>
                 <EditTeacherDialog
                     open={editOpen}
                     onOpenChange={setEditOpen}

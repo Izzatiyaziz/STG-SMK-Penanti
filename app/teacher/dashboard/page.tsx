@@ -19,6 +19,7 @@ import {
 	Dialog,
 	DialogContent,
 	DialogDescription,
+	DialogFooter,
 	DialogHeader,
 	DialogTitle,
 } from "@/components/ui/dialog";
@@ -43,8 +44,8 @@ import {
 	FileSpreadsheet,
 	Filter,
 	Clock,
+	Eye,
 	Mail as MailIcon,
-	Lightbulb,
 	Loader2,
 	MessageSquareText,
 	Pencil,
@@ -55,6 +56,8 @@ import {
 	Trophy,
 } from "lucide-react";
 import {
+	Bar,
+	BarChart,
 	CartesianGrid,
 	Cell,
 	Line,
@@ -67,6 +70,8 @@ import {
 	YAxis,
 } from "recharts";
 import { formatMalaysiaDate, formatMalaysiaTime } from "@/lib/date-utils";
+import { hasConfiguredDeadlineForAssignments, isMarkingClosedForAssignment } from "@/lib/exam-utils";
+import { getDeadlineForGrade } from "@/lib/marking-template";
 
 type TeacherRole = "class teacher" | "subject teacher" | "subject coordinator";
 
@@ -97,6 +102,11 @@ type AssignmentStatus = {
 
 type SubjectSetting = {
 	deadline?: string;
+	deadlines?: {
+		lower?: string;
+		upper?: string;
+	};
+	marking_closed?: Record<string, boolean>;
 };
 
 type Exam = {
@@ -197,7 +207,6 @@ function formatDeadline(value: string) {
 }
 
 const PIE_COLORS = ["#16a34a", "#2563eb", "#f59e0b", "#e11d48"];
-const GRADE_COLORS = ["#2563eb", "#22c55e", "#facc15", "#fb7185", "#ef4444"];
 
 function statusClass(status?: string) {
 	if (status === "Critical") {
@@ -212,6 +221,7 @@ function statusClass(status?: string) {
 function statusLabel(status?: string) {
 	if (status === "Critical") return "Kritikal";
 	if (status === "Weak") return "Lemah";
+	if (status === "Monitor") return "Perlu Dipantau";
 	if (!status) return "-";
 	return status;
 }
@@ -239,20 +249,6 @@ function categoryLabel(name?: string) {
 	if (key === "Weak") return "Lemah";
 	if (key === "Critical") return "Kritikal";
 	return key || "-";
-}
-
-function translateInsight(insight?: string) {
-	const text = String(insight ?? "").trim();
-	if (!text) return "";
-
-	// Pattern: "Most students perform well in X, but X shows the lowest average score."
-	const m1 = text.match(/^Most students perform well in (.+), but \1 shows the lowest average score\.$/i);
-	if (m1) {
-		const subject = m1[1].trim();
-		return `Kebanyakan pelajar berprestasi baik dalam ${subject}, namun ${subject} mempunyai purata markah paling rendah.`;
-	}
-
-	return text;
 }
 
 function EmptyText({ text }: { text: string }) {
@@ -339,6 +335,7 @@ export function SubjectTeacherDashboard({ teacherId }: { teacherId: string }) {
 	const [selectedExamId, setSelectedExamId] = useState<string>("");
 	const [selectedSubjectId, setSelectedSubjectId] = useState<string>("all");
 	const [teacherInfo, setTeacherInfo] = useState<{ name: string; email: string } | null>(null);
+	const [deadlineDialogOpen, setDeadlineDialogOpen] = useState(false);
 
 	useEffect(() => {
 		let cancelled = false;
@@ -415,6 +412,26 @@ export function SubjectTeacherDashboard({ teacherId }: { teacherId: string }) {
 													typeof record.deadline === "string"
 														? record.deadline
 														: undefined,
+												deadlines: isRecord(record.deadlines)
+													? {
+															lower:
+																typeof record.deadlines.lower === "string"
+																	? record.deadlines.lower
+																	: undefined,
+															upper:
+																typeof record.deadlines.upper === "string"
+																	? record.deadlines.upper
+																	: undefined,
+														}
+													: undefined,
+												marking_closed: isRecord(record.marking_closed)
+													? Object.fromEntries(
+															Object.entries(record.marking_closed).map(([key, value]) => [
+																key,
+																value === true,
+															]),
+														)
+													: undefined,
 											},
 										];
 									}),
@@ -432,7 +449,6 @@ export function SubjectTeacherDashboard({ teacherId }: { teacherId: string }) {
 
 				if (cancelled) return;
 				setExams(list);
-				setSelectedExamId((current) => current || list[0]?.id || "");
 			} catch {
 				if (!cancelled) setExams([]);
 			}
@@ -444,6 +460,17 @@ export function SubjectTeacherDashboard({ teacherId }: { teacherId: string }) {
 			cancelled = true;
 		};
 	}, []);
+
+	const deadlineExams = useMemo(
+		() => exams.filter((exam) => hasConfiguredDeadlineForAssignments(exam, assignments)),
+		[assignments, exams],
+	);
+
+	useEffect(() => {
+		if (!selectedExamId) return;
+		if (deadlineExams.some((exam) => exam.id === selectedExamId)) return;
+		setSelectedExamId("");
+	}, [deadlineExams, selectedExamId]);
 
 	useEffect(() => {
 		if (!selectedExamId || assignments.length === 0) {
@@ -502,16 +529,24 @@ export function SubjectTeacherDashboard({ teacherId }: { teacherId: string }) {
 		return exams.find((e) => e.id === selectedExamId) ?? null;
 	}, [exams, selectedExamId]);
 
-	const deadlineBySubjectId = useMemo(() => {
+	const deadlineByAssignmentId = useMemo(() => {
 		const all = selectedExam?.subject_settings ?? {};
 		const m = new Map<string, string>();
 		for (const a of assignments) {
 			const s = all?.[a.subject_id];
-			const d = String(s?.deadline ?? "").trim();
-			if (d) m.set(a.subject_id, d);
+			const d = getDeadlineForGrade(s, a.grade);
+			if (d) m.set(a.id, d);
 		}
 		return m;
 	}, [assignments, selectedExam?.subject_settings]);
+	const markingClosedByAssignmentId = useMemo(() => {
+		const closed = new Map<string, boolean>();
+		if (!selectedExam) return closed;
+		for (const assignment of assignments) {
+			closed.set(assignment.id, isMarkingClosedForAssignment(selectedExam, assignment));
+		}
+		return closed;
+	}, [assignments, selectedExam]);
 
 	const subjectCount = useMemo(() => {
 		return new Set(assignments.map((a) => a.subject_id)).size;
@@ -564,13 +599,12 @@ export function SubjectTeacherDashboard({ teacherId }: { teacherId: string }) {
 
 		const items = filteredAssignments
 			.map((a) => {
-				const deadline = deadlineBySubjectId.get(a.subject_id) || "";
+				const deadline = deadlineByAssignmentId.get(a.id) || "";
 				const deadlineDate = toLocalDate(deadline);
 				if (!deadlineDate) return null;
 
 				const status = assignmentStatuses[a.id];
-				const isApproved = status?.approval?.status === "approved";
-				if (isApproved) return null;
+				if (!status || status.isComplete) return null;
 
 				const diffMs = deadlineDate.getTime() - startOfToday.getTime();
 				const daysLeft = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
@@ -588,15 +622,33 @@ export function SubjectTeacherDashboard({ teacherId }: { teacherId: string }) {
 			.sort((a, b) => a.daysLeft - b.daysLeft);
 
 		return items;
-	}, [assignmentStatuses, deadlineBySubjectId, filteredAssignments, selectedExamId]);
+	}, [assignmentStatuses, deadlineByAssignmentId, filteredAssignments, selectedExamId]);
+
+	useEffect(() => {
+		if (reminders.length === 0 || !selectedExamId) return;
+
+		try {
+			const rawSession = localStorage.getItem("stg_session");
+			const parsedSession = rawSession ? JSON.parse(rawSession) : null;
+			const sessionKey = String(parsedSession?.session_id || teacherId);
+			const reminderKey = `stg_deadline_reminder_shown:${sessionKey}`;
+			if (sessionStorage.getItem(reminderKey)) return;
+			sessionStorage.setItem(reminderKey, "1");
+			setDeadlineDialogOpen(true);
+		} catch {
+			setDeadlineDialogOpen(true);
+		}
+	}, [reminders, selectedExamId, teacherId]);
 
 	function openMarks(assignment: Assignment) {
-		localStorage.setItem(
-			"stg_marks_context",
+		const viewOnly = markingClosedByAssignmentId.get(assignment.id) === true;
+		sessionStorage.setItem(
+			"stg_marks_entry_context",
 			JSON.stringify({
 				class_id: assignment.class_id,
 				subject_id: assignment.subject_id,
 				exam_id: selectedExamId,
+				view_only: viewOnly,
 			}),
 		);
 		router.push("/teacher/my-subject");
@@ -604,6 +656,79 @@ export function SubjectTeacherDashboard({ teacherId }: { teacherId: string }) {
 
 	return (
 		<div className="min-h-screen bg-background p-4 md:p-6">
+			<Dialog open={deadlineDialogOpen} onOpenChange={setDeadlineDialogOpen}>
+				<DialogContent className="sm:max-w-xl">
+					<DialogHeader>
+						<div className="mb-1 flex h-11 w-11 items-center justify-center rounded-full bg-amber-100 text-amber-700">
+							<AlertTriangle className="h-5 w-5" />
+						</div>
+						<DialogTitle>
+							{reminders.some((item) => item.daysLeft < 0)
+								? "Tugasan markah telah lewat"
+								: "Tarikh akhir penghantaran semakin hampir"}
+						</DialogTitle>
+						<DialogDescription>
+							Sila lengkapkan dan hantar markah secepat mungkin. Kelewatan berterusan boleh menyebabkan tindakan diambil oleh Guru Panitia Subjek.
+						</DialogDescription>
+					</DialogHeader>
+
+					<div className="max-h-[45vh] space-y-2 overflow-y-auto pr-1">
+						{reminders.map((item) => {
+							const overdue = item.daysLeft < 0;
+							const timing =
+								overdue
+									? `Lewat ${Math.abs(item.daysLeft)} hari`
+									: item.daysLeft === 0
+										? "Tarikh akhir hari ini"
+										: `${item.daysLeft} hari lagi`;
+
+							return (
+								<div
+									key={item.id}
+									className="flex items-center justify-between gap-3 rounded-lg border border-border bg-muted/20 px-4 py-3"
+								>
+									<div className="min-w-0">
+										<p className="truncate font-semibold text-foreground">
+											{item.subject}, {item.classLabel}
+										</p>
+										<p className="mt-0.5 text-sm text-muted-foreground">
+											Tarikh akhir: {formatDeadline(item.deadline)}
+										</p>
+									</div>
+									<Badge
+										variant="outline"
+										className={
+											overdue
+												? "border-rose-200 bg-rose-100 text-rose-700"
+												: "border-amber-200 bg-amber-100 text-amber-700"
+										}
+									>
+										{timing}
+									</Badge>
+								</div>
+							);
+						})}
+					</div>
+
+					<DialogFooter>
+						<Button variant="outline" onClick={() => setDeadlineDialogOpen(false)}>
+							Tutup
+						</Button>
+						<Button
+							onClick={() => {
+								const firstReminder = reminders[0];
+								const assignment = assignments.find((item) => item.id === firstReminder?.id);
+								if (assignment) openMarks(assignment);
+								setDeadlineDialogOpen(false);
+							}}
+						>
+							<ClipboardList className="mr-2 h-4 w-4" />
+							Masuk Markah Sekarang
+						</Button>
+					</DialogFooter>
+				</DialogContent>
+			</Dialog>
+
 			<div className="w-full max-w-none space-y-8">
 				<div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
 					<div className="space-y-3">
@@ -620,7 +745,7 @@ export function SubjectTeacherDashboard({ teacherId }: { teacherId: string }) {
 								</p>
 							</div>
 						</div>
-						<div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
+						<div className="flex items-center gap-4 text-muted-foreground">
 							<div className="w-1 h-1 rounded-full bg-muted" />
 							<div className="flex items-center gap-1">
 								<Clock className="w-3.5 h-3.5" />
@@ -680,7 +805,7 @@ export function SubjectTeacherDashboard({ teacherId }: { teacherId: string }) {
 											<SelectValue placeholder="Pilih peperiksaan" />
 										</SelectTrigger>
 										<SelectContent className="rounded-lg border-border">
-											{exams.map((e) => (
+											{deadlineExams.map((e) => (
 												<SelectItem key={e.id} value={e.id}>
 													{e.name} ({e.academic_year})
 												</SelectItem>
@@ -689,7 +814,7 @@ export function SubjectTeacherDashboard({ teacherId }: { teacherId: string }) {
 									</Select>
 								</div>
 								<div className="space-y-2">
-									<div className="text-sm font-medium text-muted-foreground">Subjek Diajar</div>
+									<div className="text-sm font-medium text-muted-foreground">Subjek</div>
 									<Select value={selectedSubjectId} onValueChange={setSelectedSubjectId}>
 										<SelectTrigger className="h-11 rounded-lg border-border bg-background">
 											<SelectValue placeholder="Pilih subjek" />
@@ -842,7 +967,7 @@ export function SubjectTeacherDashboard({ teacherId }: { teacherId: string }) {
 														</TableCell>
 														<TableCell className="py-4">
 															<Badge variant="outline" className="border-border bg-muted/30 text-foreground">
-																{formatDeadline(deadlineBySubjectId.get(a.subject_id) || "")}
+																{formatDeadline(deadlineByAssignmentId.get(a.id) || "")}
 															</Badge>
 														</TableCell>
 														<TableCell className="py-4">
@@ -861,8 +986,12 @@ export function SubjectTeacherDashboard({ teacherId }: { teacherId: string }) {
 																onClick={() => openMarks(a)}
 																disabled={!selectedExamId}
 															>
-																<ClipboardList className="w-4 h-4 mr-2" />
-																Masuk Markah
+																{markingClosedByAssignmentId.get(a.id) ? (
+																	<Eye className="w-4 h-4 mr-2" />
+																) : (
+																	<ClipboardList className="w-4 h-4 mr-2" />
+																)}
+																{markingClosedByAssignmentId.get(a.id) ? "Lihat Markah" : "Masuk Markah"}
 															</Button>
 														</TableCell>
 													</TableRow>
@@ -882,8 +1011,8 @@ export function SubjectTeacherDashboard({ teacherId }: { teacherId: string }) {
 									tugasan subjek dipaparkan
 								</div>
 								<div className="flex items-center gap-4 text-muted-foreground">
-									<div className="flex items-center gap-2">
-										<Clock className="w-4 h-4" />
+									<div className="flex items-center gap-1">
+										<Clock className="w-3.5 h-3.5" />
 										<span>
 											Kemas kini: <LastUpdatedTime />
 										</span>
@@ -1214,7 +1343,7 @@ export function ClassTeacherDashboard({ teacherId }: { teacherId: string }) {
 								</p>
 							</div>
 						</div>
-						<div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
+						<div className="flex items-center gap-4 text-muted-foreground">
 							<div className="w-1 h-1 rounded-full bg-muted" />
 							<div className="flex items-center gap-1">
 								<Clock className="w-3.5 h-3.5" />
@@ -1576,6 +1705,14 @@ export function ClassTeacherAnalyticsDashboard({ teacherId }: { teacherId: strin
 			name: categoryLabel(item.name),
 		}));
 	}, [summary?.categoryBreakdown]);
+	const subjectPerformanceSummary = useMemo(() => {
+		const rows = summary?.subjectPerformance ?? [];
+		if (rows.length === 0) return "Tiada keputusan subjek untuk diringkaskan.";
+		const sorted = [...rows].sort((a, b) => b.average - a.average);
+		const strongest = sorted[0];
+		const weakest = sorted[sorted.length - 1];
+		return `${strongest.subject} mencatat purata tertinggi ${strongest.average}%. ${weakest.subject} mencatat purata terendah ${weakest.average}%. Purata keseluruhan kelas ialah ${classAverage}%.`;
+	}, [classAverage, summary?.subjectPerformance]);
 
 	return (
 		<div className="min-h-screen bg-background p-4 md:p-6">
@@ -1589,9 +1726,9 @@ export function ClassTeacherAnalyticsDashboard({ teacherId }: { teacherId: strin
 									Laporan Kelas
 								</h1>
 								<p className="text-muted-foreground font-medium mt-1">
-									Tingkatan {grade || "-"} | Guru Kelas:{" "}
+									Analisis prestasi akademik bagi kelas{" "}
 									<span className="text-primary font-bold">
-										{className || "Belum ditetapkan"}
+										Tingkatan {grade || "-"} {className || "Belum ditetapkan"}
 									</span>
 								</p>
 								{selectedExam && (
@@ -1601,7 +1738,7 @@ export function ClassTeacherAnalyticsDashboard({ teacherId }: { teacherId: strin
 								)}
 							</div>
 						</div>
-						<div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
+						<div className="flex items-center gap-4 text-muted-foreground">
 							<div className="w-1 h-1 rounded-full bg-muted" />
 							<div className="flex items-center gap-1">
 								<Clock className="w-3.5 h-3.5" />
@@ -1676,43 +1813,45 @@ export function ClassTeacherAnalyticsDashboard({ teacherId }: { teacherId: strin
 										<CardHeader className="border-b border-border bg-gradient-to-r from-card to-card/80 px-6 py-5">
 											<CardTitle className="flex items-center gap-2 text-xl font-bold text-foreground">
 												<ChartPie className="h-5 w-5 text-primary" />
-												Analisis Gred
+												Pecahan Kategori Prestasi
 											</CardTitle>
 											<p className="text-sm text-muted-foreground">
-												Taburan gred pelajar bagi kelas ini
+												Kuantiti dan peratus pelajar mengikut tahap prestasi
 											</p>
 										</CardHeader>
 										<CardContent className="p-6">
 											<ResponsiveContainer width="100%" height={260}>
 												<PieChart>
 													<Pie
-														data={summary.gradeDistribution}
+														data={categoryBreakdownDisplay}
 														dataKey="value"
-														nameKey="grade"
+														nameKey="name"
 														innerRadius={58}
 														outerRadius={96}
 														paddingAngle={4}
-														label
+														label={({ percent }) => `${percent ?? 0}%`}
 													>
-														{summary.gradeDistribution.map((_, index) => (
-															<Cell key={index} fill={GRADE_COLORS[index % GRADE_COLORS.length]} />
+														{categoryBreakdownDisplay.map((item, index) => (
+															<Cell key={item.name} fill={PIE_COLORS[index % PIE_COLORS.length]} />
 														))}
 													</Pie>
 													<Tooltip />
 												</PieChart>
 											</ResponsiveContainer>
-											<div className="mt-4 grid grid-cols-5 gap-2">
-												{summary.gradeDistribution.map((item, index) => (
+											<div className="mt-4 grid grid-cols-2 gap-2">
+												{categoryBreakdownDisplay.map((item, index) => (
 													<div
-														key={item.grade}
+														key={item.name}
 														className="rounded-md border border-border bg-muted/20 p-2 text-center"
 													>
 														<div
 															className="mx-auto mb-1 h-2 w-8 rounded-full"
-															style={{ backgroundColor: GRADE_COLORS[index % GRADE_COLORS.length] }}
+															style={{ backgroundColor: PIE_COLORS[index % PIE_COLORS.length] }}
 														/>
-														<div className="text-sm font-bold">{item.grade}</div>
-														<div className="text-xs text-muted-foreground">{item.value}</div>
+														<div className="text-sm font-bold">{item.name}</div>
+														<div className="text-xs text-muted-foreground">
+															{item.value} pelajar ({item.percent}%)
+														</div>
 													</div>
 												))}
 											</div>
@@ -1750,78 +1889,43 @@ export function ClassTeacherAnalyticsDashboard({ teacherId }: { teacherId: strin
 									</Card>
 								</div>
 
-								<div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-									<Card className="border-border bg-card shadow-md rounded-xl overflow-hidden">
-								<CardHeader className="border-b border-border bg-gradient-to-r from-card to-card/80 px-6 py-5">
-									<CardTitle className="flex items-center gap-2">
-										<Trophy className="w-5 h-5 text-primary" />
-										3 Pelajar Terbaik Kelas 
-									</CardTitle>
-								</CardHeader>
-								<CardContent className="space-y-3">
-									{summary.topStudents.length === 0 ? (
-										<EmptyText text="Tiada data pelajar." />
-									) : (
-										summary.topStudents.map((student, index) => (
-											<div
-												key={student.student_id}
-												className="flex items-center justify-between rounded-lg border border-border bg-muted/20 p-3"
-											>
-												<div className="flex items-center gap-3">
-													<div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center font-bold text-primary">
-														{["1", "2", "3"][index]}
-													</div>
-													<div>
-														<p className="font-semibold">{student.name}</p>
-														<p className="text-xs text-muted-foreground">
-															Peratus keseluruhan
-														</p>
-													</div>
-												</div>
-												<p className="text-lg font-bold">{student.average}%</p>
-											</div>
-										))
-									)}
-								</CardContent>
-							</Card>
-
-							<Card className="border-border bg-card shadow-md rounded-xl overflow-hidden xl:col-span-2">
+								<Card className="border-border bg-card shadow-md rounded-xl overflow-hidden">
 								<CardHeader className="border-b border-border bg-gradient-to-r from-card to-card/80 px-6 py-5">
 									<CardTitle className="flex items-center gap-2 text-xl font-bold text-foreground">
 										<BarChart3 className="h-5 w-5 text-primary" />
 										Perbandingan Prestasi Subjek
 									</CardTitle>
+									<p className="text-sm text-muted-foreground">Purata markah setiap subjek bagi kelas ini.</p>
 								</CardHeader>
 								<CardContent className="space-y-4 p-6">
 									{summary.subjectPerformance.length === 0 ? (
 										<EmptyText text="Tiada data subjek." />
 									) : (
-										summary.subjectPerformance.map((subject) => (
-											<div key={subject.subject_id} className="space-y-2">
-												<div className="flex items-center justify-between text-sm">
-													<span className="font-medium">{subject.subject}</span>
-													<span className="font-semibold">{subject.average}%</span>
-												</div>
-												<div className="h-2 rounded-full bg-muted overflow-hidden">
-													<div
-														className="h-full rounded-full bg-primary"
-														style={{ width: `${Math.min(subject.average, 100)}%` }}
-													/>
-												</div>
-											</div>
-										))
+										<ResponsiveContainer width="100%" height={340}>
+											<BarChart data={summary.subjectPerformance}>
+												<CartesianGrid vertical={false} strokeDasharray="3 3" />
+												<XAxis dataKey="subject" tickLine={false} axisLine={false} interval={0} angle={-18} textAnchor="end" height={72} />
+												<YAxis domain={[0, 100]} tickLine={false} axisLine={false} />
+												<Tooltip />
+												<Bar dataKey="average" name="Purata" fill="#2563eb" radius={[6, 6, 0, 0]} />
+											</BarChart>
+										</ResponsiveContainer>
 									)}
+									<div className="rounded-lg bg-muted/40 px-4 py-3 text-sm leading-relaxed text-foreground">
+										<span className="font-semibold">Ringkasan Prestasi: </span>
+										{subjectPerformanceSummary}
+									</div>
 								</CardContent>
 							</Card>
-						</div>
 
 						<div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
 							<Card className="border-border bg-card shadow-md rounded-xl overflow-hidden">
 								<CardHeader className="border-b border-border bg-gradient-to-r from-card to-card/80 px-6 py-5">
 									<CardTitle className="flex items-center gap-2">
-										<AlertTriangle className="w-5 h-5 text-primary" />
-										Pelajar Perlu Perhatian
+										<Trophy className="w-5 h-5 text-primary" />
+										Senarai Pelajar Cemerlang
 									</CardTitle>
+									<p className="text-sm text-muted-foreground">Top 3 pelajar terbaik bagi kelas ini.</p>
 								</CardHeader>
 								<CardContent className="p-6">
 									<div className="rounded-lg border border-border overflow-hidden">
@@ -1829,38 +1933,28 @@ export function ClassTeacherAnalyticsDashboard({ teacherId }: { teacherId: strin
 											<Table>
 												<TableHeader className="bg-muted/30">
 													<TableRow className="hover:bg-transparent border-b border-border">
+														<TableHead className="w-14 py-4 text-center font-semibold text-foreground">#</TableHead>
 														<TableHead className="font-semibold text-foreground py-4">
 															Pelajar
 														</TableHead>
-														<TableHead className="font-semibold text-foreground py-4">
-															Peratus Keseluruhan
-														</TableHead>
-														<TableHead className="font-semibold text-foreground py-4">
-															Status
-														</TableHead>
+														<TableHead className="py-4 text-center font-semibold text-foreground">Purata</TableHead>
+														<TableHead className="py-4 text-center font-semibold text-foreground">Kedudukan</TableHead>
 													</TableRow>
 												</TableHeader>
 												<TableBody>
-													{summary.studentsNeedAttention.length === 0 ? (
+													{summary.topStudents.length === 0 ? (
 														<TableRow>
-															<TableCell colSpan={3} className="text-center py-10 text-muted-foreground">
-																Tiada pelajar dalam kategori perhatian.
+															<TableCell colSpan={4} className="text-center py-10 text-muted-foreground">
+																Tiada data pelajar.
 															</TableCell>
 														</TableRow>
 													) : (
-														summary.studentsNeedAttention.map((student) => (
+														summary.topStudents.map((student, index) => (
 															<TableRow key={student.student_id} className="hover:bg-muted/20">
-																<TableCell className="font-medium whitespace-nowrap">
-																	{student.name}
-																</TableCell>
-																<TableCell className="whitespace-nowrap">
-																	{student.average}%
-																</TableCell>
-																<TableCell className="whitespace-nowrap">
-																	<Badge variant="outline" className={statusClass(student.status)}>
-																		{statusLabel(student.status)}
-																	</Badge>
-																</TableCell>
+																<TableCell className="text-center text-muted-foreground">{index + 1}</TableCell>
+																<TableCell className="font-semibold">{student.name}</TableCell>
+																<TableCell className="text-center font-semibold">{student.average}%</TableCell>
+																<TableCell className="text-center">{index + 1}</TableCell>
 															</TableRow>
 														))
 													)}
@@ -1872,62 +1966,50 @@ export function ClassTeacherAnalyticsDashboard({ teacherId }: { teacherId: strin
 							</Card>
 							<Card className="border-border bg-card shadow-md rounded-xl overflow-hidden">
 								<CardHeader className="border-b border-border bg-gradient-to-r from-card to-card/80 px-6 py-5">
-									<CardTitle className="flex items-center gap-2 text-xl font-bold text-foreground">
-										<ChartPie className="h-5 w-5 text-primary" />
-										Pecahan Kategori Prestasi
+									<CardTitle className="flex items-center gap-2">
+										<AlertTriangle className="w-5 h-5 text-primary" />
+										Senarai Pelajar Perlu Perhatian
 									</CardTitle>
+									<p className="text-sm text-muted-foreground">Pelajar yang memerlukan sokongan lanjut.</p>
 								</CardHeader>
-								<CardContent className="grid gap-4 md:grid-cols-[240px_1fr] md:items-center">
-									<div className="h-60">
-										<ResponsiveContainer width="100%" height="100%">
-											<PieChart>
-												<Tooltip />
-												<Pie
-													data={categoryBreakdownDisplay}
-													dataKey="percent"
-													nameKey="name"
-													innerRadius={52}
-													outerRadius={86}
-													paddingAngle={3}
-												>
-													{categoryBreakdownDisplay.map((entry, index) => (
-														<Cell key={entry.name} fill={PIE_COLORS[index % PIE_COLORS.length]} />
-													))}
-												</Pie>
-											</PieChart>
-										</ResponsiveContainer>
-									</div>
-									<div className="space-y-2">
-										{categoryBreakdownDisplay.map((item, index) => (
-											<div key={item.name} className="flex items-center justify-between text-sm">
-												<div className="flex items-center gap-2">
-													<span
-														className="h-3 w-3 rounded-full"
-														style={{ backgroundColor: PIE_COLORS[index % PIE_COLORS.length] }}
-													/>
-													<span>{item.name}</span>
-												</div>
-												<span className="font-semibold">{item.percent}%</span>
-											</div>
-										))}
+								<CardContent className="p-6">
+									<div className="rounded-lg border border-border overflow-hidden">
+										<Table>
+											<TableHeader className="bg-muted/30">
+												<TableRow className="hover:bg-transparent border-b border-border">
+													<TableHead className="w-14 py-4 text-center font-semibold text-foreground">#</TableHead>
+													<TableHead className="py-4 font-semibold text-foreground">Pelajar</TableHead>
+													<TableHead className="py-4 text-center font-semibold text-foreground">Purata</TableHead>
+													<TableHead className="py-4 text-center font-semibold text-foreground">Status</TableHead>
+												</TableRow>
+											</TableHeader>
+											<TableBody>
+												{summary.studentsNeedAttention.length === 0 ? (
+													<TableRow>
+														<TableCell colSpan={4} className="text-center py-10 text-muted-foreground">
+															Tiada pelajar dalam kategori perhatian.
+														</TableCell>
+													</TableRow>
+												) : (
+													summary.studentsNeedAttention.map((student, index) => (
+														<TableRow key={student.student_id} className="hover:bg-muted/20">
+															<TableCell className="text-center text-muted-foreground">{index + 1}</TableCell>
+															<TableCell className="font-semibold">{student.name}</TableCell>
+															<TableCell className="text-center font-semibold text-rose-600">{student.average}%</TableCell>
+															<TableCell className="text-center">
+																<Badge variant="outline" className={statusClass(student.status)}>
+																	{statusLabel(student.status)}
+																</Badge>
+															</TableCell>
+														</TableRow>
+													))
+												)}
+											</TableBody>
+										</Table>
 									</div>
 								</CardContent>
 							</Card>
 						</div>
-
-						<Card className="border-border bg-card shadow-md rounded-xl overflow-hidden">
-							<CardHeader className="border-b border-border bg-gradient-to-r from-card to-card/80 px-6 py-5">
-								<CardTitle className="flex items-center gap-2">
-									<Lightbulb className="w-5 h-5 text-primary" />
-									Analisis Kelas
-								</CardTitle>
-							</CardHeader>
-							<CardContent>
-								<p className="text-sm leading-6 text-muted-foreground">
-									{translateInsight(summary.insight)}
-								</p>
-							</CardContent>
-						</Card>
 							</>
 						)}
 					</div>

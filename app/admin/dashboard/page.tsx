@@ -44,7 +44,7 @@ export default function AdminDashboardPage() {
       const [studentRes, teacherRes, sessionRes] = await Promise.all([
         fetch("/api/admin/users?role=student"),
         fetch("/api/admin/users?role=teacher"),
-        fetch("/api/admin/sessions?limit=10"),
+        fetch("/api/admin/sessions?limit=200"),
       ]);
 
       if (studentRes.ok) setStudents(await studentRes.json());
@@ -124,8 +124,8 @@ export default function AdminDashboardPage() {
           logs={sessions}
           loading={loading}
           emptyText="Tiada rekod log ditemui."
-          title="Log Penggunaan Sistem"
-          description="Paparan ringkas aktiviti pengguna untuk pemantauan."
+          title="Log Aktiviti dan Keselamatan"
+          description="Jejak sesi pengguna serta percubaan akses mencurigakan yang dikesan atau disekat."
         />
 
       </div>

@@ -211,11 +211,11 @@ export const sidebarConfig = {
                 url: "/principal/dashboard",
                 icon: LayoutDashboard,
             },
-            {
+           /* {
                 title: "Lantikan Guru Kelas",
                 url: "/principal/class-teachers",
                 icon: Database,
-            },
+            },*/
         ],
         documents: [],
     },

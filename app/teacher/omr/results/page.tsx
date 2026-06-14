@@ -3,8 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
-import { AlertTriangle, ArrowLeft, CheckCircle2, ClipboardList, Download, Printer, XCircle, Loader2, HelpCircle, Save } from "lucide-react";
-import * as XLSX from "xlsx";
+import { HeaderLastUpdated } from "@/components/header-last-updated";
+import { AlertTriangle, ArrowLeft, CheckCircle2, ClipboardList, FileScan, Printer, XCircle, Loader2, HelpCircle, Save } from "lucide-react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 
@@ -35,6 +35,9 @@ type OMRResultPayload = {
   blank?: number | string;
   ambiguous?: number | string;
   warning?: string;
+  student_name?: string;
+  class_name?: string;
+  class_grade?: number | string;
   results?: OMRResultRow[];
 };
 
@@ -58,7 +61,7 @@ function getStatusMeta(status: string, detectedOption: string) {
 
 function SummaryBadge({ label, value, className }: { label: string; value: number; className: string }) {
   return (
-    <Badge variant="outline" className={`rounded-lg px-3 py-1.5 text-sm font-semibold ${className}`}>
+    <Badge variant="outline" className={className}>
       {label}: {value}
     </Badge>
   );
@@ -156,7 +159,21 @@ export default function OMRResultsPage() {
       toast.error("ID imbasan tidak dijumpai — sila semak semula dari halaman OMR");
       return;
     }
-    if (!student_id || !subject_id || !exam_id || !class_id) {
+    let reviewContext = { student_id, subject_id, exam_id, class_id };
+    if (!reviewContext.student_id || !reviewContext.subject_id || !reviewContext.exam_id || !reviewContext.class_id) {
+      try {
+        const stored = JSON.parse(localStorage.getItem("stg_marks_context") ?? "{}") as Partial<typeof reviewContext>;
+        reviewContext = {
+          student_id: reviewContext.student_id || String(stored.student_id ?? "").trim(),
+          subject_id: reviewContext.subject_id || String(stored.subject_id ?? "").trim(),
+          exam_id: reviewContext.exam_id || String(stored.exam_id ?? "").trim(),
+          class_id: reviewContext.class_id || String(stored.class_id ?? "").trim(),
+        };
+      } catch {
+        // The validation below handles invalid stored context.
+      }
+    }
+    if (!reviewContext.student_id || !reviewContext.subject_id || !reviewContext.exam_id || !reviewContext.class_id) {
       toast.error("Maklumat pelajar tidak lengkap");
       return;
     }
@@ -171,10 +188,7 @@ export default function OMRResultsPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           omr_scan_id: summary.omrScanId,
-          student_id,
-          subject_id,
-          exam_id,
-          class_id,
+          ...reviewContext,
           overrides: overrideList,
         }),
       });
@@ -185,7 +199,7 @@ export default function OMRResultsPage() {
       }
       toast.success("Semakan berjaya disimpan!");
       // Refresh result from DB
-      const params = new URLSearchParams({ student_id, class_id, subject_id, exam_id });
+      const params = new URLSearchParams(reviewContext);
       const refreshed = await fetch(`/api/teacher/omr/result?${params.toString()}`).then((r) => r.json());
       if (refreshed?.success) {
         setResultRaw(refreshed as OMRResultPayload);
@@ -198,43 +212,52 @@ export default function OMRResultsPage() {
     }
   }
 
-  function exportExcel() {
-    const rows = summary.results.map((row) => {
-      const qno = toNumber(row.question_no);
-      const status = String(row.status ?? "").toLowerCase();
-      const detected = overrides[qno] ?? String(row.detected_option ?? "").trim();
-      const needsReview = status === "ambiguous" || status === "blank";
-      const effectiveStatus =
-        needsReview && overrides[qno]
-          ? (overrides[qno] === String(row.expected_option ?? "").trim().toUpperCase() ? "correct" : "wrong")
-          : status;
-      const meta = getStatusMeta(effectiveStatus, detected);
-      return {
-        "No.": row.question_no,
-        "Jawapan Pelajar": detected || "-",
-        "Skema": String(row.expected_option ?? "").trim() || "-",
-        "Status": meta.label,
-        "Markah": meta.mark,
-      };
-    });
-    const ws = XLSX.utils.json_to_sheet(rows);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Keputusan OMR");
-    XLSX.writeFile(wb, `OMR_${new Date().toISOString().slice(0, 10)}.xlsx`);
+  function goToMarksEntry() {
+    let marksContext = { class_id, subject_id, exam_id };
+    if (!marksContext.class_id || !marksContext.subject_id || !marksContext.exam_id) {
+      try {
+        const stored = JSON.parse(localStorage.getItem("stg_marks_context") ?? "{}") as Partial<typeof marksContext>;
+        marksContext = {
+          class_id: marksContext.class_id || String(stored.class_id ?? "").trim(),
+          subject_id: marksContext.subject_id || String(stored.subject_id ?? "").trim(),
+          exam_id: marksContext.exam_id || String(stored.exam_id ?? "").trim(),
+        };
+      } catch {
+        // The marks page will show empty filters if no valid context is available.
+      }
+    }
+
+    if (marksContext.class_id && marksContext.subject_id && marksContext.exam_id) {
+      sessionStorage.setItem(
+        "stg_marks_entry_context",
+        JSON.stringify({
+          ...marksContext,
+          view_only: true,
+        }),
+      );
+    }
+    router.push("/teacher/my-subject");
   }
 
   function exportPDF() {
     const doc = new jsPDF();
+    const studentName = String(resultRaw?.student_name ?? "").trim() || "-";
+    const classLabel = [
+      String(resultRaw?.class_grade ?? "").trim(),
+      String(resultRaw?.class_name ?? "").trim(),
+    ].filter(Boolean).join(" ") || "-";
     doc.setFontSize(14);
     doc.text("Keputusan OMR", 14, 16);
     doc.setFontSize(10);
+    doc.text(`Nama Pelajar: ${studentName}`, 14, 24);
+    doc.text(`Kelas: ${classLabel}`, 14, 30);
     doc.text(
       `Betul: ${summary.correct}  Salah: ${summary.wrong}  Kosong: ${summary.blank}  Jumlah: ${summary.totalMarks}/${summary.totalQuestions}`,
       14,
-      24
+      36
     );
     autoTable(doc, {
-      startY: 30,
+      startY: 42,
       head: [["No.", "Jawapan Pelajar", "Skema", "Status", "Markah"]],
       body: summary.results.map((row) => {
         const qno = toNumber(row.question_no);
@@ -266,11 +289,18 @@ export default function OMRResultsPage() {
   }
 
   return (
-    <div className="flex flex-col gap-8 p-6 md:p-8">
-      <div className="flex flex-col gap-1 border-b border-border/40 pb-6">
-        <p className="text-xs font-semibold tracking-[0.2em] uppercase text-primary">Guru</p>
-        <h1 className="!text-[36px] font-black leading-tight text-foreground">Keputusan OMR</h1>
-        <p className="mt-1 text-sm text-muted-foreground">Paparan keputusan imbasan OMR pelajar.</p>
+    <div className="flex flex-col gap-8 p-4 md:p-6">
+      <div className="flex items-center gap-4">
+        <div className="rounded-2xl border border-primary/20 bg-primary/10 p-3">
+          <FileScan className="h-7 w-7 text-primary" />
+        </div>
+        <div>
+          <h1 className="text-xl font-bold text-foreground">Keputusan OMR</h1>
+          <p className="mt-1 font-medium text-muted-foreground">
+            Semak jawapan, status pengesanan, dan markah OMR pelajar.
+          </p>
+          <HeaderLastUpdated />
+        </div>
       </div>
 
       <Card className="overflow-hidden rounded-xl border-border bg-card shadow-sm">
@@ -393,7 +423,7 @@ export default function OMRResultsPage() {
                 </div>
               </div>
 
-              <div className="flex flex-wrap gap-3 print:hidden">
+              <div className="flex gap-3 print:hidden">
                 {Object.keys(overrides).length > 0 && (
                   <Button
                     onClick={saveReview}
@@ -404,14 +434,6 @@ export default function OMRResultsPage() {
                     Simpan Semakan ({Object.keys(overrides).length} dipilih)
                   </Button>
                 )}
-                <Button variant="outline" size="sm" onClick={exportExcel} className="gap-2">
-                  <Download className="h-4 w-4" />
-                  Export Excel
-                </Button>
-                <Button variant="outline" size="sm" onClick={exportPDF} className="gap-2">
-                  <Printer className="h-4 w-4" />
-                  Export PDF
-                </Button>
               </div>
             </div>
           ) : (
@@ -420,17 +442,19 @@ export default function OMRResultsPage() {
             </p>
           )}
 
-          <div className="mx-auto flex max-w-5xl flex-col gap-4 sm:flex-row sm:items-center sm:justify-between print:hidden">
-            <div className="flex gap-3">
-              <Button variant="outline" onClick={() => router.push("/teacher/omr")}>
+          <div className="mx-auto flex max-w-5xl items-center gap-3 overflow-x-auto print:hidden">
+              <Button variant="outline" className="shrink-0" onClick={() => router.push("/teacher/omr")}>
                 <ArrowLeft className="mr-2 h-4 w-4" />
                 Kembali ke OMR
               </Button>
-              <Button variant="outline" onClick={() => router.push("/teacher/omr/history")}>
+              <Button variant="outline" className="shrink-0" onClick={goToMarksEntry}>
                 <ClipboardList className="mr-2 h-4 w-4" />
-                Sejarah Imbasan
+                Pemarkahan Markah
               </Button>
-            </div>
+              <Button variant="outline" className="shrink-0" onClick={exportPDF}>
+                <Printer className="mr-2 h-4 w-4" />
+                Export PDF
+              </Button>
           </div>
         </CardContent>
       </Card>

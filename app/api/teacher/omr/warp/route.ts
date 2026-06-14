@@ -27,7 +27,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ message: "Imej terlalu besar" }, { status: 413 });
     }
 
-    const omrServiceUrl = process.env.OMR_SERVICE_URL || "http://127.0.0.1:8001";
+    const omrServiceUrl = process.env.OMR_SERVICE_URL || "http://127.0.0.1:8000";
 
     let serviceData: WarpServiceResponse;
     try {
@@ -47,7 +47,7 @@ export async function POST(req: Request) {
         success: true,
         warped_image_base64: image_base64,
         corners_found: false,
-        warning: "Perkhidmatan warp tidak tersedia, imej asal digunakan",
+        fallback_used: true,
       });
     }
 
@@ -55,9 +55,7 @@ export async function POST(req: Request) {
       success: true,
       warped_image_base64: serviceData.warped_image_base64,
       corners_found: serviceData.corners_found ?? false,
-      ...(!serviceData.corners_found && {
-        warning: "Sudut kertas tidak dikesan, imej asal digunakan",
-      }),
+      fallback_used: !serviceData.corners_found,
     });
   } catch (err) {
     console.error("POST teacher/omr/warp FAILED:", err);

@@ -8,7 +8,7 @@ export function SystemFooter() {
                     </span>
                     <span className="text-border">|</span>
                     <span className="font-medium">
-                        Sistem Pemarkahan dan Laporan Akademik
+                        Sistem Pemarkahan Pelajar Automatik
                     </span>
                 </div>
 

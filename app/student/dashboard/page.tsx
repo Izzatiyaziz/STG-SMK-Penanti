@@ -1,33 +1,34 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   GraduationCap,
   UserCheck,
   BarChart3,
   TrendingUp,
   FileText,
+  ChartPie,
 } from "lucide-react";
 import {
+  Cell,
   LineChart,
   Line,
+  Pie,
+  PieChart,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -36,6 +37,7 @@ import {
 } from "recharts";
 import Link from "next/link";
 import type { LucideIcon } from "lucide-react";
+import { HeaderLastUpdated } from "@/components/header-last-updated";
 
 /* ================= TYPES ================= */
 
@@ -47,6 +49,7 @@ type SubjectResult = {
 
 type ReportCardPayload = {
   student: {
+    examId: string;
     name: string;
     ic: string;
     className: string;
@@ -54,6 +57,7 @@ type ReportCardPayload = {
     year: string;
     classTeacher: string;
   };
+  exams: Array<{ id: string; name: string; year: string }>;
   results: SubjectResult[];
   summary: {
     totalSubjects: number;
@@ -68,72 +72,37 @@ type ReportCardPayload = {
 
 type TrendPoint = { exam: string; average: number };
 
-function gradeColor(grade: string) {
-  switch (String(grade ?? "").trim().toUpperCase()) {
-    case "A":
-      return "bg-emerald-100 text-emerald-700 border-emerald-200";
-    case "B":
-      return "bg-sky-100 text-sky-700 border-sky-200";
-    case "C":
-      return "bg-amber-100 text-amber-700 border-amber-200";
-    case "D":
-      return "bg-orange-100 text-orange-700 border-orange-200";
-    default:
-      return "bg-rose-100 text-rose-700 border-rose-200";
-  }
-}
+const GRADE_COLORS = ["#16a34a", "#2563eb", "#f59e0b", "#f97316", "#e11d48"];
 
 function StatCard({
   title,
   value,
   subText,
   icon: Icon,
-  variant,
+  tone,
 }: {
   title: string;
   value: ReactNode;
   subText?: ReactNode;
   icon: LucideIcon;
-  variant: "primary" | "chart2" | "chart3";
+  tone: "emerald" | "blue" | "violet";
 }) {
-  const styles = {
-    primary: {
-      border: "hover:border-emerald-300",
-      bg: "bg-emerald-100",
-      iconBorder: "border-emerald-200",
-      text: "text-emerald-600",
-      valText: "text-emerald-600",
-    },
-    chart2: {
-      border: "hover:border-blue-300",
-      bg: "bg-blue-100",
-      iconBorder: "border-blue-200",
-      text: "text-blue-600",
-      valText: "text-blue-600",
-    },
-    chart3: {
-      border: "hover:border-violet-300",
-      bg: "bg-violet-100",
-      iconBorder: "border-violet-200",
-      text: "text-violet-600",
-      valText: "text-violet-600",
-    },
-  }[variant];
+  const toneClass = {
+    emerald: "border-emerald-200 bg-emerald-100 text-emerald-700",
+    blue: "border-blue-200 bg-blue-100 text-blue-700",
+    violet: "border-violet-200 bg-violet-100 text-violet-700",
+  }[tone];
 
   return (
-    <Card
-      className={`border-border bg-card shadow-sm hover:shadow-md transition-all duration-300 ${styles.border}`}
-    >
-      <CardContent className="p-5">
-        <div className="flex items-start justify-between gap-4">
-          <div className="min-w-0">
-            <p className="text-sm font-medium text-muted-foreground mb-2">{title}</p>
-            <div className={`truncate text-2xl font-bold ${styles.valText}`}>{value}</div>
-            {subText ? <div className="mt-1 text-xs text-muted-foreground">{subText}</div> : null}
-          </div>
-          <div className={`shrink-0 p-3 rounded-xl ${styles.bg} border ${styles.iconBorder}`}>
-            <Icon className={`w-5 h-5 ${styles.text}`} />
-          </div>
+    <Card className="border-border bg-card shadow-sm">
+      <CardContent className="flex items-center justify-between gap-4 p-5">
+        <div className="min-w-0">
+          <p className="text-sm font-medium text-muted-foreground">{title}</p>
+          <div className="mt-2 truncate text-2xl font-bold text-foreground">{value}</div>
+          {subText ? <div className="mt-1 text-xs text-muted-foreground">{subText}</div> : null}
+        </div>
+        <div className={`shrink-0 rounded-xl border p-3 ${toneClass}`}>
+          <Icon className="h-5 w-5" />
         </div>
       </CardContent>
     </Card>
@@ -145,6 +114,7 @@ export default function StudentDashboardPage() {
   const [trend, setTrend] = useState<TrendPoint[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [selectedExamId, setSelectedExamId] = useState("");
 
   useEffect(() => {
     async function loadDashboard() {
@@ -153,7 +123,10 @@ export default function StudentDashboardPage() {
 
       try {
         const [reportRes, trendRes] = await Promise.all([
-          fetch("/api/student/report-card", { cache: "no-store" }),
+          fetch(
+            `/api/student/report-card${selectedExamId ? `?exam_id=${encodeURIComponent(selectedExamId)}` : ""}`,
+            { cache: "no-store" },
+          ),
           fetch("/api/student/performance-trend", { cache: "no-store" }),
         ]);
 
@@ -165,6 +138,7 @@ export default function StudentDashboardPage() {
           return;
         }
         setReport(reportJson);
+        setSelectedExamId((current) => current || String(reportJson?.student?.examId ?? ""));
 
         const trendJson = await trendRes.json().catch(() => null);
         if (trendRes.ok) {
@@ -182,12 +156,18 @@ export default function StudentDashboardPage() {
     }
 
     loadDashboard();
-  }, []);
+  }, [selectedExamId]);
 
-  const subjects = report?.results ?? [];
-  const summary = report?.summary;
-  const student = report?.student;
-  const examLabel = [student?.exam, student?.year].filter(Boolean).join(" ").trim();
+  const gradeDistribution = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const subject of report?.results ?? []) {
+      const grade = String(subject.grade || "-").toUpperCase();
+      counts.set(grade, (counts.get(grade) ?? 0) + 1);
+    }
+    return Array.from(counts.entries())
+      .map(([grade, value]) => ({ grade, value }))
+      .sort((a, b) => a.grade.localeCompare(b.grade));
+  }, [report?.results]);
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-background to-muted/20 p-4 md:p-6">
@@ -206,6 +186,7 @@ export default function StudentDashboardPage() {
           <p className="text-muted-foreground">
             Paparan ringkas prestasi akademik dan keputusan peperiksaan.
           </p>
+          <HeaderLastUpdated />
         </div>
 
         {loading ? (
@@ -220,113 +201,101 @@ export default function StudentDashboardPage() {
           </Card>
         ) : report ? (
           <>
-            {/* ================= SUMMARY CARDS ================= */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <StatCard
-                title="Kelas"
-                value={student?.className || "-"}
-                icon={GraduationCap}
-                variant="primary"
-              />
-              <StatCard
-                title="Guru Kelas"
-                value={student?.classTeacher || "-"}
-                icon={UserCheck}
-                variant="chart2"
-              />
+            <Card className="border-border bg-card shadow-sm">
+              <CardContent className="p-6">
+                <div className="w-full max-w-md space-y-2">
+                  <div className="text-sm font-medium text-muted-foreground">Peperiksaan</div>
+                  <Select value={selectedExamId} onValueChange={setSelectedExamId} disabled={loading || !report.exams.length}>
+                    <SelectTrigger className="h-11 border-border bg-background">
+                      <SelectValue placeholder="Pilih peperiksaan" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {report.exams.map((exam) => (
+                        <SelectItem key={exam.id} value={exam.id}>
+                          {exam.name} ({exam.year})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </CardContent>
+            </Card>
+
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+              <StatCard title="Kelas" value={report.student.className || "-"} icon={GraduationCap} tone="emerald" />
+              <StatCard title="Guru Kelas" value={report.student.classTeacher || "-"} icon={UserCheck} tone="blue" />
               <StatCard
                 title="Purata"
-                value={`${summary?.percentage ?? 0}%`}
-                subText={`Kedudukan ${summary?.classRank || "-"}`}
+                value={`${report.summary.percentage ?? 0}%`}
+                subText={`Kedudukan ${report.summary.classRank || "-"}`}
                 icon={BarChart3}
-                variant="chart3"
+                tone="violet"
               />
             </div>
 
-            {/* ================= TREND GRAPH ================= */}
-            <Card className="shadow-lg border border-border/50">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base">Trend Prestasi Akademik</CardTitle>
-                <CardDescription>Perbandingan purata markah mengikut peperiksaan.</CardDescription>
-              </CardHeader>
-              <CardContent className="p-6 pt-0">
-                {trend.length ? (
-                  <ResponsiveContainer width="100%" height={300}>
-                    <LineChart data={trend}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="exam" />
-                      <YAxis domain={[0, 100]} />
-                      <Tooltip />
-                      <Line type="monotone" dataKey="average" name="Purata" strokeWidth={3} dot={{ r: 5 }} />
-                    </LineChart>
-                  </ResponsiveContainer>
-                ) : (
-                  <div className="text-sm text-muted-foreground">Tiada data trend untuk dipaparkan.</div>
-                )}
-              </CardContent>
-            </Card>
+            <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+              <Card className="overflow-hidden rounded-xl border-border bg-card shadow-md">
+                <CardHeader className="border-b border-border px-6 py-5">
+                  <CardTitle className="flex items-center gap-2 text-xl font-bold">
+                    <ChartPie className="h-5 w-5 text-primary" />
+                    Analisis Gred
+                  </CardTitle>
+                  <p className="text-sm text-muted-foreground">Taburan gred bagi keputusan peperiksaan terkini.</p>
+                </CardHeader>
+                <CardContent className="p-6">
+                  {gradeDistribution.length ? (
+                    <>
+                      <ResponsiveContainer width="100%" height={280}>
+                        <PieChart>
+                          <Pie data={gradeDistribution} dataKey="value" nameKey="grade" innerRadius={62} outerRadius={100} paddingAngle={4} label>
+                            {gradeDistribution.map((item, index) => (
+                              <Cell key={item.grade} fill={GRADE_COLORS[index % GRADE_COLORS.length]} />
+                            ))}
+                          </Pie>
+                          <Tooltip />
+                        </PieChart>
+                      </ResponsiveContainer>
+                      <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
+                        {gradeDistribution.map((item, index) => (
+                          <div key={item.grade} className="rounded-md border border-border bg-muted/20 p-2 text-center">
+                            <div className="mx-auto mb-1 h-2 w-8 rounded-full" style={{ backgroundColor: GRADE_COLORS[index % GRADE_COLORS.length] }} />
+                            <div className="font-bold">{item.grade}</div>
+                            <div className="text-xs text-muted-foreground">{item.value} subjek</div>
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  ) : (
+                    <div className="py-12 text-center text-sm text-muted-foreground">Tiada data gred untuk dipaparkan.</div>
+                  )}
+                </CardContent>
+              </Card>
 
-            {/* ================= SUBJECT TABLE ================= */}
-            <Card className="shadow-lg border border-border/50">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base">Keputusan Subjek</CardTitle>
-                <CardDescription>
-                  Markah dan gred setiap subjek{examLabel ? ` untuk ${examLabel}` : ""}.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="p-0">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Mata Pelajaran</TableHead>
-                      <TableHead className="text-center">Markah</TableHead>
-                      <TableHead className="text-center">Gred</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {subjects.length ? (
-                      subjects.map((s, i) => (
-                        <TableRow key={`${s.subject}-${i}`}>
-                          <TableCell className="font-medium">{s.subject}</TableCell>
-                          <TableCell className="text-center">{s.mark}</TableCell>
-                          <TableCell className="text-center">
-                            <Badge variant="outline" className={gradeColor(s.grade)}>
-                              {s.grade}
-                            </Badge>
-                          </TableCell>
-                        </TableRow>
-                      ))
-                    ) : (
-                      <TableRow>
-                        <TableCell colSpan={3} className="py-8 text-center text-sm text-muted-foreground">
-                          Tiada keputusan subjek untuk dipaparkan.
-                        </TableCell>
-                      </TableRow>
-                    )}
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
-
-            {/* ================= AI INSIGHT ================= */}
-            <Card className="shadow-lg border border-border/50">
-              <CardContent className="p-6 space-y-2">
-                <div className="flex items-center gap-2">
-                  <TrendingUp className="w-5 h-5 text-primary" />
-                  <h2 className="text-lg font-semibold">Prestasi Akademik</h2>
-                </div>
-                <p className="text-sm">
-                  <b>Ringkasan Gred:</b> {summary?.gradeSummary || "-"}
-                </p>
-                <p className="text-sm">
-                  <b>Bilangan Subjek:</b> {summary?.totalSubjects ?? 0}
-                </p>
-                <p className="text-sm">
-                  <b>Komen & Cadangan:</b>
-                </p>
-                <p className="text-sm italic text-muted-foreground">{summary?.comment || "Komen belum tersedia."}</p>
-              </CardContent>
-            </Card>
+              <Card className="overflow-hidden rounded-xl border-border bg-card shadow-md">
+                <CardHeader className="border-b border-border px-6 py-5">
+                  <CardTitle className="flex items-center gap-2 text-xl font-bold">
+                    <TrendingUp className="h-5 w-5 text-primary" />
+                    Trend Prestasi Akademik
+                  </CardTitle>
+                  <p className="text-sm text-muted-foreground">Perbandingan purata individu mengikut peperiksaan.</p>
+                </CardHeader>
+                <CardContent className="p-6">
+                  {trend.length ? (
+                    <ResponsiveContainer width="100%" height={340}>
+                      <LineChart data={trend}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="exam" />
+                        <YAxis domain={[0, 100]} />
+                        <Tooltip />
+                        <Line type="monotone" dataKey="average" name="Purata Individu" stroke="#2563eb" strokeWidth={3} dot={{ r: 5, fill: "#22c55e" }} />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    <div className="py-12 text-center text-sm text-muted-foreground">Tiada data trend untuk dipaparkan.</div>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
 
             {/* ================= ACTION ================= */}
             <div className="flex justify-end">

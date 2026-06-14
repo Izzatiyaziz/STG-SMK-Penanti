@@ -122,6 +122,27 @@ export async function POST() {
             });
         }
 
+        if (role === "principal") {
+            const { data: principal, error } = await supabase
+                .from("stg_teachers")
+                .select("teacher_id, username, fullname, email")
+                .eq("teacher_id", user_id)
+                .single();
+
+            if (error || !principal) {
+                return NextResponse.json({ message: "Pengguna tidak dijumpai" }, { status: 404 });
+            }
+
+            return NextResponse.json({
+                role: "principal",
+                teacher_id: principal.teacher_id,
+                staff_id: principal.username,
+                name: principal.fullname,
+                email: principal.email,
+                avatar: "/img/teacher-avatar.png",
+            });
+        }
+
         return NextResponse.json({ message: "Peranan tidak sah" }, { status: 400 });
     } catch (err) {
         console.error("FETCH ME ERROR:", err);

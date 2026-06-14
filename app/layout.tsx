@@ -4,6 +4,7 @@ import "./globals.css";
 import { Toaster } from "sonner";
 import { ThemeProvider } from "@/components/theme-provider";
 import { PageTitleManager } from "@/components/page-title-manager";
+import { AppPatternBackground } from "@/components/app-pattern-background";
 
 const inter = Inter({
 	subsets: ["latin"],
@@ -48,7 +49,7 @@ export default function RootLayout({
 					disableTransitionOnChange
 				>
 					<PageTitleManager />
-					{children}
+					<AppPatternBackground>{children}</AppPatternBackground>
 				</ThemeProvider>
 				<Toaster richColors position="bottom-right" />
 			</body>

@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import supabase from "@/lib/supabase";
 import { requireApiRole } from "@/lib/auth";
+import { getClientIp, isRequestBodyTooLarge, looksLikeXssAttempt, sanitizePlainText } from "@/lib/security";
+import { logSecurityEvent } from "@/lib/security-events";
 
 export const runtime = "nodejs";
 
@@ -85,7 +87,7 @@ function buildPromptInput(params: {
 }
 
 async function generateAiComment(prompt_input: string) {
-    const reportAiServiceUrl = process.env.REPORT_AI_SERVICE_URL || process.env.OMR_SERVICE_URL || "http://127.0.0.1:8001";
+    const reportAiServiceUrl = process.env.REPORT_AI_SERVICE_URL || process.env.OMR_SERVICE_URL || "http://127.0.0.1:8000";
     const res = await fetch(`${reportAiServiceUrl}/report-comment`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -109,13 +111,29 @@ export async function POST(req: Request) {
         const guard = await requireApiRole("teacher");
         if ("response" in guard) return guard.response;
 
+        if (isRequestBodyTooLarge(req, 16_384)) {
+            return NextResponse.json({ message: "Permintaan terlalu besar" }, { status: 413 });
+        }
+
         const body = await req.json();
         const student_id = toId(body?.student_id);
         const class_id = toId(body?.class_id);
         const teacher_id = toId(body?.teacher_id);
         const exam_id = toId(body?.exam_id);
         const mode = String(body?.mode ?? "manual").trim().toLowerCase();
-        const manualComment = String(body?.comment ?? "").trim();
+        const rawManualComment = String(body?.comment ?? "").trim();
+        const manualComment = sanitizePlainText(rawManualComment, 1_000);
+        if (looksLikeXssAttempt(rawManualComment)) {
+            await logSecurityEvent({
+                eventType: "xss_attempt",
+                severity: "high",
+                ipAddress: getClientIp(req),
+                identifier: guard.session.user_id,
+                role: "teacher",
+                endpoint: "/api/teacher/report-cards/comment",
+                details: { reason: "Markup mencurigakan dikesan pada komen kad laporan" },
+            });
+        }
 
         if (!student_id || !class_id || !teacher_id || !exam_id) {
             return NextResponse.json(
@@ -298,7 +316,10 @@ export async function POST(req: Request) {
                   })
                 : null;
 
-        const comment = mode === "ai" ? await generateAiComment(prompt_input ?? "") : manualComment;
+        const comment = sanitizePlainText(
+            mode === "ai" ? await generateAiComment(prompt_input ?? "") : manualComment,
+            1_000
+        );
         if (!comment) {
             return NextResponse.json({ message: "Comment diperlukan" }, { status: 400 });
         }

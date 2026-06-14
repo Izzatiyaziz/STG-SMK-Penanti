@@ -13,13 +13,13 @@ cd omr-service
 python -m venv .venv
 .venv\Scripts\activate
 pip install -r requirements.txt
-uvicorn main:app --host 0.0.0.0 --port 8001 --reload
+uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
 Health check:
 
 ```bash
-curl http://127.0.0.1:8001/health
+curl http://127.0.0.1:8000/health
 ```
 
 ## Endpoint
@@ -34,8 +34,8 @@ Input fields:
 - `template_width`, `template_height`: canonical warped sheet size
 - `template`: map of question bubbles (`A/B/C/D` with `x,y,r`)
 - `answer_key`: map of question no -> correct option
-- `min_mark_threshold`: default `0.36`
-- `ambiguity_gap`: default `0.10`
+- `min_mark_threshold`: default `0.30`
+- `ambiguity_gap`: default `0.06`
 
 Output fields:
 
@@ -48,7 +48,7 @@ Output fields:
 Run the server, then open:
 
 ```bash
-http://127.0.0.1:8001/demo
+http://127.0.0.1:8000/demo
 ```
 
 Upload a scanned/photo sheet image. Optionally paste a template bundle JSON (same shape as `template.sample.json`).
@@ -69,7 +69,7 @@ This route:
 Set env var in Next app:
 
 ```env
-OMR_SERVICE_URL=http://127.0.0.1:8001
+OMR_SERVICE_URL=http://127.0.0.1:8000
 ```
 
 ## Template calibration

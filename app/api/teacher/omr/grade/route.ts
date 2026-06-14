@@ -7,6 +7,7 @@ import {
     getPrimaryOmrComponent,
 } from "@/lib/marking-template";
 import { gradeFromTotal } from "@/lib/grade-utils";
+import { isMarkingClosedForAssignment } from "@/lib/exam-utils";
 
 export const runtime = "nodejs";
 
@@ -92,6 +93,32 @@ export async function POST(req: Request) {
             return NextResponse.json({ message: "Akses ditolak" }, { status: 403 });
         }
 
+        const { data: classStudents } = await supabaseAdmin
+            .from("stg_students")
+            .select("student_id")
+            .eq("class_id", class_id);
+        const classStudentIds = (classStudents ?? [])
+            .map((row) => toId(row.student_id))
+            .filter(Boolean);
+        if (classStudentIds.length > 0) {
+            const { count: approvedCount, error: approvedError } = await supabaseAdmin
+                .from("stg_results")
+                .select("result_id", { count: "exact", head: true })
+                .eq("subject_id", subject_id)
+                .eq("exam_id", exam_id)
+                .eq("status", "approved")
+                .in("student_id", classStudentIds);
+            if (approvedError) {
+                return NextResponse.json({ message: approvedError.message }, { status: 500 });
+            }
+            if (Number(approvedCount ?? 0) > 0) {
+                return NextResponse.json(
+                    { message: "Markah peperiksaan ini telah diluluskan. Imbasan OMR baharu tidak dibenarkan." },
+                    { status: 409 },
+                );
+            }
+        }
+
         const { data: classGradeRow } = await supabaseAdmin
             .from("stg_classes")
             .select("grade")
@@ -99,6 +126,20 @@ export async function POST(req: Request) {
             .maybeSingle();
         const gradeNumber = Number(classGradeRow?.grade ?? 0);
         const gradeGroup = Number.isFinite(gradeNumber) && gradeNumber > 0 ? `tingkatan-${gradeNumber}` : "lower";
+        const { data: closureExam } = await supabaseAdmin
+            .from("stg_exams")
+            .select("subject_settings")
+            .eq("exam_id", exam_id)
+            .maybeSingle();
+        if (isMarkingClosedForAssignment(
+            { subject_settings: closureExam?.subject_settings as Record<string, unknown> | undefined },
+            { subject_id, grade: gradeNumber },
+        )) {
+            return NextResponse.json(
+                { message: "Pemarkahan telah ditutup oleh panitia untuk peperiksaan ini." },
+                { status: 409 },
+            );
+        }
 
         const { data: answerRows, error: answerErr } = await supabaseAdmin
             .from("stg_answer_schema")
@@ -137,7 +178,7 @@ export async function POST(req: Request) {
             Object.entries(template).filter(([questionId]) => allowedQuestionIds.has(questionId))
         ) as OMRTemplateMap;
 
-        const omrServiceUrl = process.env.OMR_SERVICE_URL || "http://127.0.0.1:8001";
+        const omrServiceUrl = process.env.OMR_SERVICE_URL || "http://127.0.0.1:8000";
         if (Object.keys(filteredTemplate).length === 0) {
             return NextResponse.json(
                 { message: "Template OMR tidak sepadan dengan skema jawapan semasa" },
@@ -145,26 +186,54 @@ export async function POST(req: Request) {
             );
         }
 
-        const res = await fetch(`${omrServiceUrl}/grade`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                image_base64,
-                template_width,
-                template_height,
-                answer_region,
-                template: filteredTemplate,
-                answer_key,
-                min_mark_threshold: body?.min_mark_threshold ?? 0.30,
-                ambiguity_gap: body?.ambiguity_gap ?? 0.06,
-                search_radius: body?.search_radius ?? 6,
-            }),
-        });
+        let res: Response;
+        try {
+            res = await fetch(`${omrServiceUrl}/grade`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    image_base64,
+                    template_width,
+                    template_height,
+                    already_warped: body?.already_warped === true,
+                    processing_profile: body?.processing_profile === "camera" ? "camera" : "upload",
+                    answer_region,
+                    template: filteredTemplate,
+                    answer_key,
+                    min_mark_threshold: body?.min_mark_threshold ?? 0.30,
+                    ambiguity_gap: body?.ambiguity_gap ?? 0.06,
+                    search_radius: body?.search_radius ?? 6,
+                }),
+                signal: AbortSignal.timeout(60_000),
+            });
+        } catch (serviceErr) {
+            const detail =
+                serviceErr instanceof Error ? serviceErr.message : String(serviceErr ?? "");
+            return NextResponse.json(
+                {
+                    message: "Perkhidmatan OMR tidak dapat memproses imej",
+                    detail,
+                },
+                { status: 502 },
+            );
+        }
 
-        const json = await res.json();
+        const responseText = await res.text();
+        let json: Record<string, unknown> = {};
+        try {
+            json = responseText ? (JSON.parse(responseText) as Record<string, unknown>) : {};
+        } catch {
+            json = { detail: responseText };
+        }
         if (!res.ok) {
             return NextResponse.json(
-                { message: json?.detail || "OMR service error", detail: json },
+                {
+                    message:
+                        typeof json?.detail === "string"
+                            ? json.detail
+                            : `Perkhidmatan OMR gagal (${res.status})`,
+                    detail: json,
+                },
                 { status: res.status }
             );
         }
@@ -318,23 +387,35 @@ export async function POST(req: Request) {
                     marksByKey[componentKey] = objective_total_mark;
 
                     const total = computeMarkSummary(templateInfo.template, marksByKey).percentage;
-                    const grade = gradeFromTotal(total);
+                    const grade = gradeFromTotal(total, gradeNumber);
 
-                    const { error: upsertResultErr } = await supabaseAdmin
+                    const resultPayload = {
+                        student_id,
+                        subject_id,
+                        exam_id,
+                        omr_scan_id,
+                        subjective_id,
+                        total,
+                        grade,
+                        status: "pending",
+                    };
+                    const { data: existingResult } = await supabaseAdmin
                         .from("stg_results")
-                        .upsert(
-                            {
-                                student_id,
-                                subject_id,
-                                exam_id,
-                                omr_scan_id,
-                                subjective_id,
-                                total,
-                                grade,
-                                status: "pending",
-                            },
-                            { onConflict: "student_id,subject_id,exam_id" }
-                        );
+                        .select("result_id")
+                        .eq("student_id", student_id)
+                        .eq("subject_id", subject_id)
+                        .eq("exam_id", exam_id)
+                        .limit(1)
+                        .maybeSingle();
+
+                    const { error: upsertResultErr } = existingResult?.result_id
+                        ? await supabaseAdmin
+                              .from("stg_results")
+                              .update(resultPayload)
+                              .eq("student_id", student_id)
+                              .eq("subject_id", subject_id)
+                              .eq("exam_id", exam_id)
+                        : await supabaseAdmin.from("stg_results").insert(resultPayload);
 
                     if (upsertResultErr) {
                         console.warn("Failed to upsert result after OMR save:", upsertResultErr.message);
@@ -350,8 +431,14 @@ export async function POST(req: Request) {
             ...(persisted ?? {}),
             ...(resultWarning ? { warning: resultWarning } : {}),
         });
-    } catch (err) {
+    } catch (err: unknown) {
         console.error("POST teacher/omr/grade FAILED:", err);
-        return NextResponse.json({ message: "Ralat pelayan" }, { status: 500 });
+        const message =
+            err instanceof Error
+                ? err.message
+                : err && typeof err === "object" && "message" in err
+                  ? String((err as { message?: unknown }).message ?? "Ralat pelayan")
+                  : "Ralat pelayan";
+        return NextResponse.json({ message }, { status: 500 });
     }
 }

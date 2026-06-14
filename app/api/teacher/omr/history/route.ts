@@ -11,9 +11,9 @@ type ScanRow = {
   student_id: string;
   subject_id: string;
   exam_id: string;
-  stg_students: { name: string; identifier: string; class_id: string; stg_classes: { class_name: string; grade: number } };
+  stg_students: { fullname: string; ic_number: string; class_id: string; stg_classes: { class_name: string; grade: number } };
   stg_subjects: { subject_name: string };
-  stg_exams: { exam_name: string; year: string };
+  stg_exams: { exam_name: string; academic_year: string };
 };
 
 function toId(v: unknown) {
@@ -48,10 +48,10 @@ export async function GET(req: Request) {
       .select(
         `omr_scan_id, objective_total_mark, scan_date,
          student_id, subject_id, exam_id,
-         stg_students!inner(name, identifier, class_id,
+         stg_students!inner(fullname, ic_number, class_id,
            stg_classes!inner(class_name, grade)),
          stg_subjects!inner(subject_name),
-         stg_exams!inner(exam_name, year)`
+         stg_exams!inner(exam_name, academic_year)`
       )
       .in("subject_id", allowedSubjectIds)
       .order("scan_date", { ascending: false })
@@ -64,9 +64,21 @@ export async function GET(req: Request) {
     if (scansErr) return NextResponse.json({ message: scansErr.message }, { status: 500 });
 
     const rows = (Array.isArray(scans) ? scans : []) as unknown as ScanRow[];
+    const scanIds = rows.map((row) => toId(row.omr_scan_id)).filter(Boolean);
+    const { data: answerRows, error: answersErr } = scanIds.length
+      ? await supabaseAdmin
+          .from("stg_omr_scan_answers")
+          .select("omr_scan_id")
+          .in("omr_scan_id", scanIds)
+      : { data: [] as Array<{ omr_scan_id: string }>, error: null };
+    if (answersErr) return NextResponse.json({ message: answersErr.message }, { status: 500 });
+    const realOmrScanIds = new Set(
+      (answerRows ?? []).map((row) => toId(row.omr_scan_id)).filter(Boolean),
+    );
 
     const data = rows
       .filter((row) => {
+        if (!realOmrScanIds.has(toId(row.omr_scan_id))) return false;
         const studentClassId = String(row.stg_students?.class_id ?? "");
         const rowSubjectId = String(row.subject_id ?? "");
         const allowed = assignments.some(
@@ -79,15 +91,15 @@ export async function GET(req: Request) {
       .map((row) => ({
         omr_scan_id: String(row.omr_scan_id),
         student_id: String(row.student_id),
-        student_name: String(row.stg_students?.name ?? ""),
-        student_identifier: String(row.stg_students?.identifier ?? ""),
+        student_name: String(row.stg_students?.fullname ?? ""),
+        student_identifier: String(row.stg_students?.ic_number ?? ""),
         class_id: String(row.stg_students?.class_id ?? ""),
         class_name: String(row.stg_students?.stg_classes?.class_name ?? ""),
         grade: Number(row.stg_students?.stg_classes?.grade ?? 0),
         subject_id: String(row.subject_id),
         subject_name: String(row.stg_subjects?.subject_name ?? ""),
         exam_id: String(row.exam_id),
-        exam_name: [row.stg_exams?.exam_name, row.stg_exams?.year].filter(Boolean).join(" "),
+        exam_name: [row.stg_exams?.exam_name, row.stg_exams?.academic_year].filter(Boolean).join(" "),
         scan_date: String(row.scan_date),
         objective_total_mark: row.objective_total_mark != null ? Number(row.objective_total_mark) : null,
       }));

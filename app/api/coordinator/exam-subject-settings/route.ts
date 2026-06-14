@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import supabase from "@/lib/supabase";
+import supabaseAdmin from "@/lib/supabase-admin";
 import { requireApiRole } from "@/lib/auth";
 import {
   serializeTemplateForStorage,
@@ -63,7 +64,12 @@ export async function POST(req: Request) {
       return NextResponse.json({ message: "Akses ditolak" }, { status: 403 });
     }
 
-    const deadline = safeDateString(body?.deadline);
+    const requestedDeadlines =
+      body?.deadlines && typeof body.deadlines === "object"
+        ? (body.deadlines as Record<string, unknown>)
+        : {};
+    const lowerDeadline = safeDateString(requestedDeadlines.lower);
+    const upperDeadline = safeDateString(requestedDeadlines.upper);
     const requestedTemplates =
       body?.grade_templates && typeof body.grade_templates === "object"
         ? (body.grade_templates as Record<string, unknown>)
@@ -106,9 +112,44 @@ export async function POST(req: Request) {
         ? (subjectCurrentRaw as Record<string, unknown>)
         : {};
 
+    if (!lowerDeadline && !upperDeadline) {
+      const nextAll = { ...current };
+      delete nextAll[subject_id];
+
+      const [{ error: updateErr }, { error: answerSchemaErr }] = await Promise.all([
+        supabase
+          .from("stg_exams")
+          .update({ subject_settings: nextAll })
+          .eq("exam_id", exam_id),
+        supabaseAdmin
+          .from("stg_answer_schema")
+          .delete()
+          .eq("exam_id", exam_id)
+          .eq("subject_id", subject_id),
+      ]);
+
+      if (updateErr) {
+        return NextResponse.json({ message: updateErr.message }, { status: 500 });
+      }
+
+      if (answerSchemaErr) {
+        return NextResponse.json({ message: answerSchemaErr.message }, { status: 500 });
+      }
+
+      return NextResponse.json({
+        success: true,
+        cancelled: true,
+        subject_settings: null,
+      });
+    }
+
     const nextSubjectSettings: Record<string, unknown> = {
       ...subjectCurrent,
-      deadline: deadline || null,
+      deadline: lowerDeadline || upperDeadline || null,
+      deadlines: {
+        lower: lowerDeadline || null,
+        upper: upperDeadline || null,
+      },
       grade_templates: {
         lower: lowerTemplate,
         upper: upperTemplate,

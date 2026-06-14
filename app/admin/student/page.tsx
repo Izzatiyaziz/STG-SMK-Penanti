@@ -171,9 +171,24 @@ export default function AdminStudentsPage() {
     async function fetchStudents() {
         setLoading(true);
         try {
-            const res = await fetch("/api/admin/students");
-            const json = await res.json();
-            setRows(json?.data ?? []);
+            const firstRes = await fetch("/api/admin/students?page=1&page_size=500");
+            if (!firstRes.ok) throw new Error("Gagal mendapatkan senarai pelajar");
+
+            const firstJson = await firstRes.json();
+            const totalPages = Math.max(1, Number(firstJson?.total_pages) || 1);
+            const remainingPages = await Promise.all(
+                Array.from({ length: totalPages - 1 }, async (_, index) => {
+                    const res = await fetch(`/api/admin/students?page=${index + 2}&page_size=500`);
+                    if (!res.ok) throw new Error("Gagal mendapatkan senarai pelajar");
+                    const json = await res.json();
+                    return Array.isArray(json?.data) ? json.data : [];
+                }),
+            );
+
+            setRows([
+                ...(Array.isArray(firstJson?.data) ? firstJson.data : []),
+                ...remainingPages.flat(),
+            ]);
         } catch { setRows([]); }
         finally { setLoading(false); }
     }
@@ -198,7 +213,7 @@ export default function AdminStudentsPage() {
             const matchesSearch = s.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
                                  s.identifier.includes(searchQuery);
             const effectiveFilterLevel = filterLevel === "default-level-1" ? "1" : filterLevel;
-            const matchesLevel = effectiveFilterLevel === "all" || s.level?.toString() === effectiveFilterLevel;
+            const matchesLevel = s.level?.toString() === effectiveFilterLevel;
             const matchesClass =
                 filterClassName === "all" ||
                 (filterClassName === "__unassigned__"
@@ -330,11 +345,7 @@ export default function AdminStudentsPage() {
             return;
         }
         const parts: string[] = [];
-        if (filterLevel !== "all" && filterLevel !== "default-level-1") {
-            parts.push(`Tingkatan ${filterLevel}`);
-        } else if (filterLevel === "default-level-1") {
-            parts.push("Tingkatan 1");
-        }
+        parts.push(`Tingkatan ${filterLevel === "default-level-1" ? "1" : filterLevel}`);
         if (filterClassName !== "all") {
             parts.push(filterClassName === "__unassigned__" ? "Belum Tetap" : filterClassName);
         }
@@ -890,7 +901,9 @@ export default function AdminStudentsPage() {
                                 daripada{" "}
                                 <span className="font-semibold text-foreground">{filteredStudents.length}</span>{" "}
                                 pelajar
-                                {filterLevel !== "all" && <Badge variant="secondary" className="ml-2">Tingkatan {filterLevel === "default-level-1" ? "1" : filterLevel}</Badge>}
+                                <Badge variant="secondary" className="ml-2">
+                                    Tingkatan {filterLevel === "default-level-1" ? "1" : filterLevel}
+                                </Badge>
                                 {filterClassName !== "all" && (
                                     <Badge variant="secondary" className="ml-2">
                                         {filterClassName === "__unassigned__" ? "Belum Tetap" : filterClassName}

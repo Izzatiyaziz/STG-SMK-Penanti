@@ -71,7 +71,7 @@ export function AddTeacherDialog({ onSuccess, children }: AddTeacherDialogProps)
     fullnameTouched && !fullname.trim()
       ? "Nama penuh wajib diisi."
       : fullnameTouched && fullname.trim() && !isWordsOnlyName(fullname)
-        ? "Nama penuh hanya boleh mengandungi huruf, ruang, '/' dan apostrof (')"
+        ? "Nama penuh hanya boleh mengandungi huruf, ruang dan '/'"
         : "";
 
   const toggleRole = (value: TeacherRoleName, checked: boolean) => {
