@@ -88,6 +88,7 @@ class OMRGradeRequest(BaseModel):
 
 class WarpRequest(BaseModel):
     image_base64: str
+    corners: dict[str, list[int]] | None = None
 
 
 class WarpResponse(BaseModel):
@@ -884,20 +885,32 @@ async def grade_file(
 @app.post("/warp", response_model=WarpResponse)
 def warp(req: WarpRequest) -> Any:
     image = _decode_base64_image(req.image_base64)
-    corners = _find_sheet_corners(image)
+    if req.corners:
+        try:
+            corners = OrderedCorners(
+                top_left=np.array(req.corners["top_left"], dtype=np.float32),
+                top_right=np.array(req.corners["top_right"], dtype=np.float32),
+                bottom_right=np.array(req.corners["bottom_right"], dtype=np.float32),
+                bottom_left=np.array(req.corners["bottom_left"], dtype=np.float32),
+            )
+        except Exception as exc:
+            raise HTTPException(status_code=400, detail="Invalid corners payload") from exc
+        corners_found = True
+    else:
+        corners = _find_sheet_corners(image)
 
-    # Determine whether the corner finder actually found a real quad or fell back
-    # to the full-frame fallback (which means no paper was detected).
-    h, w = image.shape[:2]
-    margin = int(min(h, w) * 0.01)
-    fallback_pts = {(margin, margin), (w - margin, margin), (w - margin, h - margin), (margin, h - margin)}
-    detected_pts = {
-        tuple(corners.top_left.astype(int).tolist()),
-        tuple(corners.top_right.astype(int).tolist()),
-        tuple(corners.bottom_right.astype(int).tolist()),
-        tuple(corners.bottom_left.astype(int).tolist()),
-    }
-    corners_found = detected_pts != fallback_pts
+        # Determine whether the corner finder actually found a real quad or fell
+        # back to the full frame.
+        h, w = image.shape[:2]
+        margin = int(min(h, w) * 0.01)
+        fallback_pts = {(margin, margin), (w - margin, margin), (w - margin, h - margin), (margin, h - margin)}
+        detected_pts = {
+            tuple(corners.top_left.astype(int).tolist()),
+            tuple(corners.top_right.astype(int).tolist()),
+            tuple(corners.bottom_right.astype(int).tolist()),
+            tuple(corners.bottom_left.astype(int).tolist()),
+        }
+        corners_found = detected_pts != fallback_pts
 
     warped = _warp_sheet(image, corners, 955, 1280)
 

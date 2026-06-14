@@ -21,6 +21,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ message: "Badan permintaan tidak sah (JSON diperlukan)" }, { status: 400 });
     }
     const image_base64 = String((body as Record<string, unknown>)?.image_base64 ?? "").trim();
+    const corners = (body as Record<string, unknown>)?.corners;
     if (!image_base64) {
       return NextResponse.json({ message: "image_base64 diperlukan" }, { status: 400 });
     }
@@ -35,7 +36,7 @@ export async function POST(req: Request) {
       const res = await fetch(`${omrServiceUrl}/warp`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ image_base64 }),
+        body: JSON.stringify({ image_base64, corners }),
         signal: AbortSignal.timeout(30_000),
       });
       if (!res.ok) throw new Error(`Service error ${res.status}`);
