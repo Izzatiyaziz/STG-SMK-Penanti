@@ -126,6 +126,24 @@ type TemplateMode = "auto-spm" | "custom" | "test";
 type ScanFlowState = "idle" | "warping" | "preview";
 type ImageProcessingProfile = "upload" | "camera";
 
+function getCameraErrorMessage(error: unknown) {
+  if (!window.isSecureContext) {
+    return "Kamera memerlukan sambungan HTTPS yang selamat.";
+  }
+  if (error instanceof DOMException) {
+    if (error.name === "NotAllowedError" || error.name === "SecurityError") {
+      return "Akses kamera disekat. Benarkan kamera dalam tetapan laman pelayar, kemudian cuba lagi.";
+    }
+    if (error.name === "NotFoundError" || error.name === "DevicesNotFoundError") {
+      return "Tiada kamera ditemui pada peranti ini.";
+    }
+    if (error.name === "NotReadableError" || error.name === "TrackStartError") {
+      return "Kamera sedang digunakan oleh aplikasi lain. Tutup aplikasi tersebut dan cuba lagi.";
+    }
+  }
+  return "Kamera tidak dapat diakses. Cuba semula atau guna Kamera Sistem.";
+}
+
 function toId(v: unknown) {
   return typeof v === "string" ? v.trim() : v == null ? "" : String(v).trim();
 }
@@ -420,9 +438,10 @@ export default function OMRScanPage() {
       setIsCameraActive(true);
     } catch (error) {
       console.error("OMR camera access failed:", error);
-      setCameraError("Kamera tidak dapat diakses. Benarkan permission kamera atau guna Kamera Telefon.");
+      const message = getCameraErrorMessage(error);
+      setCameraError(message);
       setIsCameraActive(false);
-      toast.error("Tidak dapat akses kamera");
+      toast.error(message);
     } finally {
       setIsStartingCamera(false);
     }
