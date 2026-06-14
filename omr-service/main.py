@@ -138,18 +138,18 @@ def _build_spm_80_template_bundle() -> dict[str, Any]:
     Coordinates are defined in the canonical warped sheet space and assume:
     - sheet width = 955
     - sheet height = 1280
-    - four answer columns
-    - twenty questions per column
+    - three major answer columns
+    - thirty rows in the first two columns and twenty rows in the last
     """
 
     template_width = 955
     template_height = 1280
 
     answer_region = {
-        "x": 350,
-        "y": 300,
-        "width": 580,
-        "height": 900,
+        "x": 370,
+        "y": 390,
+        "width": 550,
+        "height": 800,
     }
 
     # Real SPM objective area layout from the provided sheet:
@@ -157,17 +157,24 @@ def _build_spm_80_template_bundle() -> dict[str, Any]:
     # - middle major column: 31..60
     # - right major column: 61..80
     option_x = {
-        0: {"A": 389, "B": 429, "C": 469, "D": 508},
-        1: {"A": 592, "B": 633, "C": 673, "D": 713},
-        2: {"A": 795, "B": 835, "C": 877, "D": 917},
+        0: {"A": 391, "B": 429, "C": 468, "D": 508},
+        1: {"A": 585, "B": 626, "C": 665, "D": 703},
+        2: {"A": 784, "B": 822, "C": 862, "D": 902},
     }
-    base_y = [411, 432, 453, 475, 496]
-    group_offsets = [0, 143, 282, 423, 564, 705]
-    row_y = [base_y[row] + group_offsets[group] for group in range(6) for row in range(5)]
+    # Calibrated from the red-print SPM sheet after canonical 955x1280 warp.
+    # Explicit rows prevent cumulative drift between each five-question group.
+    row_y = [
+        408, 428, 447, 466, 486,
+        545, 563, 583, 603, 623,
+        681, 700, 719, 739, 758,
+        817, 836, 856, 875, 895,
+        953, 973, 993, 1012, 1032,
+        1089, 1108, 1127, 1146, 1166,
+    ]
 
     template: dict[str, Any] = {}
     answer_key: dict[str, str] = {}
-    radius = 11
+    radius = 9
 
     for question_no in range(1, 81):
         if question_no <= 30:

@@ -72,8 +72,7 @@ type TemplateBundle = {
 const MAX_SPM_TEMPLATE_QUESTIONS = 80;
 
 function buildSpmTemplateBundle(
-  questionCount: number,
-  profile: "upload" | "camera" = "upload"
+  questionCount: number
 ): Required<Pick<TemplateBundle, "template_width" | "template_height" | "template" | "answer_region">> {
   const safeQuestionCount = Math.max(
     1,
@@ -82,14 +81,21 @@ function buildSpmTemplateBundle(
   const template_width = 955;
   const template_height = 1280;
   const optionX = [
-    { A: 389, B: 429, C: 469, D: 508 },
-    { A: 592, B: 633, C: 673, D: 713 },
-    { A: 795, B: 835, C: 877, D: 917 },
+    { A: 391, B: 429, C: 468, D: 508 },
+    { A: 585, B: 626, C: 665, D: 703 },
+    { A: 784, B: 822, C: 862, D: 902 },
   ] as const;
-  const baseY = profile === "camera" ? [411, 432, 453, 475, 496] : [411, 432, 453, 475, 496];
-  const groupOffsets = profile === "camera" ? [0, 143, 282, 423, 564, 705] : [0, 143, 282, 423, 564, 705];
-  const rowY = groupOffsets.flatMap((offset) => baseY.map((y) => y + offset));
-  const radius = 11;
+  // Calibrated against the red-print SPM sheet after canonical 955x1280 warp.
+  // Explicit rows avoid the cumulative drift caused by assumed group spacing.
+  const rowY = [
+    408, 428, 447, 466, 486,
+    545, 563, 583, 603, 623,
+    681, 700, 719, 739, 758,
+    817, 836, 856, 875, 895,
+    953, 973, 993, 1012, 1032,
+    1089, 1108, 1127, 1146, 1166,
+  ];
+  const radius = 9;
 
   const template = Object.fromEntries(
     Array.from({ length: safeQuestionCount }, (_, index) => {
@@ -116,7 +122,7 @@ function buildSpmTemplateBundle(
   return {
     template_width,
     template_height,
-    answer_region: { x: 350, y: 300, width: 580, height: 900 },
+    answer_region: { x: 370, y: 390, width: 550, height: 800 },
     template,
   };
 }
@@ -147,7 +153,7 @@ function getCameraErrorMessage(error: unknown) {
 }
 
 function AnswerZoneOverlay() {
-  const template = buildSpmTemplateBundle(MAX_SPM_TEMPLATE_QUESTIONS, "camera").template as Record<
+  const template = buildSpmTemplateBundle(MAX_SPM_TEMPLATE_QUESTIONS).template as Record<
     string,
     Record<string, { x: number; y: number; r: number }>
   >;
@@ -157,10 +163,10 @@ function AnswerZoneOverlay() {
       <div
         className="absolute rounded-sm border-2 border-dashed border-sky-400 bg-sky-400/5"
         style={{
-          left: `${(350 / 955) * 100}%`,
-          top: `${(300 / 1280) * 100}%`,
-          width: `${(580 / 955) * 100}%`,
-          height: `${(900 / 1280) * 100}%`,
+        left: `${(370 / 955) * 100}%`,
+        top: `${(390 / 1280) * 100}%`,
+        width: `${(550 / 955) * 100}%`,
+        height: `${(800 / 1280) * 100}%`,
         }}
       >
         <span className="absolute left-1/2 top-2 -translate-x-1/2 whitespace-nowrap rounded bg-black/75 px-2 py-1 text-[9px] font-semibold text-sky-100">
@@ -669,10 +675,10 @@ export default function OMRScanPage() {
     try {
       const parsed = (
         templateMode === "auto-spm"
-          ? buildSpmTemplateBundle(objectiveQuestionCount, imageProcessingProfile)
+          ? buildSpmTemplateBundle(objectiveQuestionCount)
           : templateJson.trim()
             ? JSON.parse(templateJson)
-            : buildSpmTemplateBundle(objectiveQuestionCount, imageProcessingProfile)
+            : buildSpmTemplateBundle(objectiveQuestionCount)
       ) as TemplateBundle;
       template_width = Number(parsed?.template_width ?? 1400);
       template_height = Number(parsed?.template_height ?? 2000);
