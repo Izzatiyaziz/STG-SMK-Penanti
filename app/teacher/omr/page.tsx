@@ -72,7 +72,8 @@ type TemplateBundle = {
 const MAX_SPM_TEMPLATE_QUESTIONS = 80;
 
 function buildSpmTemplateBundle(
-  questionCount: number
+  questionCount: number,
+  profile: "upload" | "camera" = "upload"
 ): Required<Pick<TemplateBundle, "template_width" | "template_height" | "template" | "answer_region">> {
   const safeQuestionCount = Math.max(
     1,
@@ -81,21 +82,14 @@ function buildSpmTemplateBundle(
   const template_width = 955;
   const template_height = 1280;
   const optionX = [
-    { A: 391, B: 429, C: 468, D: 508 },
-    { A: 585, B: 626, C: 665, D: 703 },
-    { A: 784, B: 822, C: 862, D: 902 },
+    { A: 389, B: 429, C: 469, D: 508 },
+    { A: 592, B: 633, C: 673, D: 713 },
+    { A: 795, B: 835, C: 877, D: 917 },
   ] as const;
-  // Calibrated against the red-print SPM sheet after canonical 955x1280 warp.
-  // Explicit rows avoid the cumulative drift caused by assumed group spacing.
-  const rowY = [
-    408, 428, 447, 466, 486,
-    545, 563, 583, 603, 623,
-    681, 700, 719, 739, 758,
-    817, 836, 856, 875, 895,
-    953, 973, 993, 1012, 1032,
-    1089, 1108, 1127, 1146, 1166,
-  ];
-  const radius = 9;
+  const baseY = profile === "camera" ? [411, 432, 453, 475, 496] : [411, 432, 453, 475, 496];
+  const groupOffsets = profile === "camera" ? [0, 143, 282, 423, 564, 705] : [0, 143, 282, 423, 564, 705];
+  const rowY = groupOffsets.flatMap((offset) => baseY.map((y) => y + offset));
+  const radius = 11;
 
   const template = Object.fromEntries(
     Array.from({ length: safeQuestionCount }, (_, index) => {
@@ -122,7 +116,7 @@ function buildSpmTemplateBundle(
   return {
     template_width,
     template_height,
-    answer_region: { x: 370, y: 390, width: 550, height: 800 },
+    answer_region: { x: 350, y: 300, width: 580, height: 900 },
     template,
   };
 }
@@ -131,8 +125,6 @@ type TemplateMode = "auto-spm" | "custom" | "test";
 
 type ScanFlowState = "idle" | "warping" | "preview";
 type ImageProcessingProfile = "upload" | "camera";
-const MAX_OMR_IMAGE_DIMENSION = 1600;
-const OMR_JPEG_QUALITY = 0.82;
 
 function getCameraErrorMessage(error: unknown) {
   if (!window.isSecureContext) {
@@ -150,64 +142,6 @@ function getCameraErrorMessage(error: unknown) {
     }
   }
   return "Kamera tidak dapat diakses. Cuba semula atau guna Kamera Sistem.";
-}
-
-function AnswerZoneOverlay() {
-  const template = buildSpmTemplateBundle(MAX_SPM_TEMPLATE_QUESTIONS).template as Record<
-    string,
-    Record<string, { x: number; y: number; r: number }>
-  >;
-
-  return (
-    <div className="pointer-events-none absolute inset-0">
-      <div
-        className="absolute rounded-sm border-2 border-dashed border-sky-400 bg-sky-400/5"
-        style={{
-        left: `${(370 / 955) * 100}%`,
-        top: `${(390 / 1280) * 100}%`,
-        width: `${(550 / 955) * 100}%`,
-        height: `${(800 / 1280) * 100}%`,
-        }}
-      >
-        <span className="absolute left-1/2 top-2 -translate-x-1/2 whitespace-nowrap rounded bg-black/75 px-2 py-1 text-[9px] font-semibold text-sky-100">
-          Pastikan cincin tepat di atas bulatan jawapan
-        </span>
-      </div>
-      {Object.entries(template).flatMap(([questionNo, options]) =>
-        Object.entries(options).map(([option, point]) => (
-          <span
-            key={`${questionNo}-${option}`}
-            className="absolute rounded-full border border-emerald-400 bg-emerald-400/10"
-            style={{
-              left: `${(point.x / 955) * 100}%`,
-              top: `${(point.y / 1280) * 100}%`,
-              width: `${((point.r * 2) / 955) * 100}%`,
-              aspectRatio: "1",
-              transform: "translate(-50%, -50%)",
-            }}
-          />
-        ))
-      )}
-    </div>
-  );
-}
-
-async function optimizeOmrImage(imageDataUrl: string) {
-  const image = document.createElement("img");
-  image.decoding = "async";
-  image.src = imageDataUrl;
-  await image.decode();
-
-  const scale = Math.min(1, MAX_OMR_IMAGE_DIMENSION / Math.max(image.naturalWidth, image.naturalHeight));
-  const width = Math.max(1, Math.round(image.naturalWidth * scale));
-  const height = Math.max(1, Math.round(image.naturalHeight * scale));
-  const canvas = document.createElement("canvas");
-  canvas.width = width;
-  canvas.height = height;
-  const context = canvas.getContext("2d");
-  if (!context) throw new Error("Canvas tidak tersedia");
-  context.drawImage(image, 0, 0, width, height);
-  return canvas.toDataURL("image/jpeg", OMR_JPEG_QUALITY);
 }
 
 function toId(v: unknown) {
@@ -259,7 +193,6 @@ export default function OMRScanPage() {
   const [scanFlowState, setScanFlowState] = useState<ScanFlowState>("idle");
   const [warpedImage, setWarpedImage] = useState<string | null>(null);
   const [cornersFound, setCornersFound] = useState(false);
-  const [warpedImageIsCanonical, setWarpedImageIsCanonical] = useState(false);
   const [capturedImageIsWarped, setCapturedImageIsWarped] = useState(false);
   const [autoCapture, setAutoCapture] = useState<boolean>(() => {
     if (typeof window === "undefined") return true;
@@ -523,7 +456,7 @@ export default function OMRScanPage() {
     return () => { stopCamera(); };
   }, [activeTab, isMobileScanDevice, startCamera, stopCamera]);
 
-  async function callWarp(imageBase64: string): Promise<{ warped: string; cornersFound: boolean; isCanonical: boolean }> {
+  async function callWarp(imageBase64: string): Promise<{ warped: string; cornersFound: boolean }> {
     try {
       const res = await fetch("/api/teacher/omr/warp", {
         method: "POST",
@@ -532,33 +465,27 @@ export default function OMRScanPage() {
       });
       const json = await res.json();
       if (!res.ok || !json?.success) {
-        return { warped: imageBase64, cornersFound: false, isCanonical: false };
+        return { warped: imageBase64, cornersFound: false };
       }
-      return {
-        warped: json.warped_image_base64,
-        cornersFound: !!json.corners_found,
-        isCanonical: json.image_is_canonical === true,
-      };
+      return { warped: json.warped_image_base64, cornersFound: !!json.corners_found };
     } catch {
-      return { warped: imageBase64, cornersFound: false, isCanonical: false };
+      return { warped: imageBase64, cornersFound: false };
     }
   }
 
   const handleCaptureAndWarp = useCallback(async (rawImage: string, label: string, profile: ImageProcessingProfile) => {
     if (captureInProgressRef.current) return;
     captureInProgressRef.current = true;
+    setCapturedImage(rawImage);
+    setCapturedImageIsWarped(false);
+    setImageSourceLabel(label);
+    setImageProcessingProfile(profile);
+    stopCamera();
+    setScanFlowState("warping");
     try {
-      const optimizedImage = await optimizeOmrImage(rawImage);
-      setCapturedImage(optimizedImage);
-      setCapturedImageIsWarped(false);
-      setImageSourceLabel(label);
-      setImageProcessingProfile(profile);
-      stopCamera();
-      setScanFlowState("warping");
-      const { warped, cornersFound: cf, isCanonical } = await callWarp(optimizedImage);
+      const { warped, cornersFound: cf } = await callWarp(rawImage);
       setWarpedImage(warped);
       setCornersFound(cf);
-      setWarpedImageIsCanonical(isCanonical);
       setScanFlowState("preview");
     } catch {
       toast.error("Gagal memproses imej");
@@ -573,7 +500,7 @@ export default function OMRScanPage() {
   function confirmWarp() {
     if (!warpedImage) return;
     setCapturedImage(warpedImage);
-    setCapturedImageIsWarped(warpedImageIsCanonical);
+    setCapturedImageIsWarped(cornersFound);
     setScanFlowState("idle");
   }
 
@@ -582,7 +509,6 @@ export default function OMRScanPage() {
     setCapturedImage(null);
     setCapturedImageIsWarped(false);
     setWarpedImage(null);
-    setWarpedImageIsCanonical(false);
     captureInProgressRef.current = false;
     startCamera();
   }
@@ -675,10 +601,10 @@ export default function OMRScanPage() {
     try {
       const parsed = (
         templateMode === "auto-spm"
-          ? buildSpmTemplateBundle(objectiveQuestionCount)
+          ? buildSpmTemplateBundle(objectiveQuestionCount, imageProcessingProfile)
           : templateJson.trim()
             ? JSON.parse(templateJson)
-            : buildSpmTemplateBundle(objectiveQuestionCount)
+            : buildSpmTemplateBundle(objectiveQuestionCount, imageProcessingProfile)
       ) as TemplateBundle;
       template_width = Number(parsed?.template_width ?? 1400);
       template_height = Number(parsed?.template_height ?? 2000);
@@ -705,25 +631,15 @@ export default function OMRScanPage() {
           search_radius: Number(searchRadius) || 6,
         }),
       });
-      const responseText = await res.text();
-      let json: Record<string, unknown> = {};
-      try {
-        json = responseText ? JSON.parse(responseText) as Record<string, unknown> : {};
-      } catch {
-        json = {};
-      }
-      if (!res.ok || !json?.success) {
-        toast.error(typeof json?.message === "string" ? json.message : `Gagal memproses OMR (${res.status})`);
-        return;
-      }
+      const json = await res.json();
+      if (!res.ok || !json?.success) { toast.error(json?.message || "Gagal memproses OMR"); return; }
       localStorage.setItem("stg_marks_context", JSON.stringify({ class_id, subject_id, exam_id, student_id }));
       sessionStorage.setItem("stg_omr_last_result", JSON.stringify(json));
       toast.success("OMR berjaya diproses!");
       const params = new URLSearchParams({ student_id, subject_id, class_id, exam_id });
       router.push(`/teacher/omr/results?${params.toString()}`);
-    } catch (error) {
-      console.error("OMR request failed:", error);
-      toast.error("Permintaan OMR gagal. Semak sambungan dan cuba lagi.");
+    } catch {
+      toast.error("Gagal menghubungi server OMR");
     } finally {
       setIsProcessing(false);
     }
@@ -1045,25 +961,18 @@ export default function OMRScanPage() {
                   <p className="text-sm font-medium text-white">Membetulkan perspektif...</p>
                 </div>
               ) : scanFlowState === "preview" ? (
-                <div className="relative flex justify-center bg-black" style={{ minHeight: "min(70dvh, 520px)" }}>
-                  <div className="relative my-auto w-fit max-w-full">
-                    <Image
-                      src={warpedImage ?? capturedImage ?? ""}
-                      alt="Pratonton kertas OMR selepas pelarasan"
-                      width={955}
-                      height={1280}
-                      unoptimized
-                      className="block h-auto w-auto max-w-full object-contain"
-                      style={{ maxHeight: "min(70dvh, 520px)" }}
-                    />
-                    {warpedImageIsCanonical && <AnswerZoneOverlay />}
-                  </div>
+                <div className="relative" style={{ minHeight: "min(70dvh, 520px)" }}>
+                  <Image
+                    src={warpedImage ?? capturedImage ?? ""}
+                    alt="Pratonton kertas OMR — perspektif dibetulkan"
+                    width={955}
+                    height={1280}
+                    unoptimized
+                    className="w-full object-contain bg-black"
+                    style={{ maxHeight: "min(70dvh, 520px)" }}
+                  />
                   <div className="absolute top-3 left-1/2 -translate-x-1/2 rounded-full px-3 py-1 text-[11px] font-semibold text-white shadow backdrop-blur-sm bg-black/60">
-                    {cornersFound
-                      ? "Perspektif dibetulkan. Semak zon jawapan."
-                      : warpedImageIsCanonical
-                        ? "Imej diselaraskan. Semak kedudukan bulatan."
-                        : "Pelarasan gagal. Ambil semula gambar."}
+                    {cornersFound ? "Perspektif dibetulkan — sahkan?" : "Sudut tidak dikesan — guna imej asal"}
                   </div>
                   <div className="absolute bottom-0 inset-x-0 flex items-center justify-center gap-3 pb-5 pt-10 bg-gradient-to-t from-black/70 to-transparent">
                     <Button
@@ -1077,39 +986,29 @@ export default function OMRScanPage() {
                     </Button>
                     <Button size="sm" onClick={confirmWarp} className="gap-1.5">
                       <CheckCircle2 className="h-4 w-4" />
-                      {warpedImageIsCanonical ? "Guna Imej Ini" : "Guna Tanpa Pelarasan"}
+                      Guna Imej Ini
                     </Button>
                   </div>
                 </div>
               ) : (
                 /* Confirmed captured image view */
-                <div className="relative flex justify-center bg-black" style={{ minHeight: "min(70dvh, 520px)" }}>
-                  <div className="relative my-auto w-fit max-w-full">
-                    <Image
-                      src={capturedImage}
-                      alt="Pratonton kertas OMR"
-                      width={capturedImageIsWarped ? 955 : 1280}
-                      height={capturedImageIsWarped ? 1280 : 960}
-                      unoptimized
-                      className="block h-auto w-auto max-w-full object-contain"
-                      style={{ maxHeight: "min(70dvh, 520px)" }}
-                    />
-                    {capturedImageIsWarped && <AnswerZoneOverlay />}
-                  </div>
+                <div className="relative" style={{ minHeight: "min(70dvh, 520px)" }}>
+                  <Image
+                    src={capturedImage}
+                    alt="Pratonton kertas OMR"
+                    width={1280}
+                    height={960}
+                    unoptimized
+                    className="w-full object-contain"
+                    style={{ maxHeight: "min(70dvh, 520px)" }}
+                  />
                   {/* Captured overlay actions */}
                   <div className="absolute bottom-0 inset-x-0 flex items-center justify-center gap-3 pb-5 pt-10 bg-gradient-to-t from-black/70 to-transparent">
                     <Button
                       variant="outline"
                       size="sm"
                       className="bg-white/10 border-white/30 text-white hover:bg-white/20"
-                      onClick={() => {
-                        setCapturedImage(null);
-                        setCapturedImageIsWarped(false);
-                        setWarpedImage(null);
-                        setWarpedImageIsCanonical(false);
-                        setImageSourceLabel("");
-                        startCamera();
-                      }}
+                      onClick={() => { setCapturedImage(null); setImageSourceLabel(""); startCamera(); }}
                     >
                       <RotateCw className="mr-1.5 h-4 w-4" />
                       Ambil Semula
@@ -1317,19 +1216,7 @@ export default function OMRScanPage() {
                       <p className="text-xs text-muted-foreground text-center">{imageSourceLabel}</p>
                     )}
                     <div className="flex gap-3">
-                      <Button
-                        variant="outline"
-                        className="flex-1 gap-2"
-                        onClick={() => {
-                          setCapturedImage(null);
-                          setCapturedImageIsWarped(false);
-                          setImageSourceLabel("");
-                          setWarpedImage(null);
-                          setWarpedImageIsCanonical(false);
-                          setScanFlowState("idle");
-                          captureInProgressRef.current = false;
-                        }}
-                      >
+                      <Button variant="outline" className="flex-1 gap-2" onClick={() => { setCapturedImage(null); setImageSourceLabel(""); setWarpedImage(null); setScanFlowState("idle"); captureInProgressRef.current = false; }}>
                         <RotateCw className="h-4 w-4" />
                         Ganti Imej
                       </Button>
