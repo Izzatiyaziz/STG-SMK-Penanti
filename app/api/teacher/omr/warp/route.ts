@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireApiRole } from "@/lib/auth";
 
 export const runtime = "nodejs";
+export const maxDuration = 60;
 
 type WarpServiceResponse = {
   warped_image_base64: string;
@@ -35,7 +36,7 @@ export async function POST(req: Request) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ image_base64 }),
-        signal: AbortSignal.timeout(5000),
+        signal: AbortSignal.timeout(30_000),
       });
       if (!res.ok) throw new Error(`Service error ${res.status}`);
       serviceData = await res.json() as WarpServiceResponse;

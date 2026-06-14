@@ -63,6 +63,52 @@ npx vercel@latest logs YOUR-DEPLOYMENT-URL
 Vercel Functions limit request and response payloads to 4.5 MB. Keep uploaded
 images below approximately 3 MB before base64 encoding.
 
+## Deploy to Fly.io
+
+Fly.io runs the service from `Dockerfile` and uses `fly.toml` for its machine,
+health-check, region, and auto-stop configuration.
+
+Install `flyctl`, authenticate, and deploy:
+
+```powershell
+winget install Fly-IO.flyctl
+fly auth login
+cd C:\stg-penanti\omr-service
+fly launch --no-deploy
+fly config validate
+fly deploy
+```
+
+If `stg-smk-penanti-omr` is unavailable, change `app` in `fly.toml` to a unique
+name before running `fly launch`.
+
+Test and inspect the deployment:
+
+```powershell
+fly status
+fly checks list
+fly logs
+curl.exe https://stg-smk-penanti-omr.fly.dev/health
+```
+
+Optional JamAI secrets:
+
+```powershell
+fly secrets set JAMAI_PROJECT_ID="..." JAMAI_PAT="..." JAMAI_SYMPTOM_TABLE_ID="std_report"
+```
+
+Set the Fly URL in the Next.js Vercel project's environment variables, then
+redeploy the Next.js project:
+
+```env
+OMR_SERVICE_URL=https://stg-smk-penanti-omr.fly.dev
+REPORT_AI_SERVICE_URL=https://stg-smk-penanti-omr.fly.dev
+```
+
+The configured machine uses `shared-cpu-1x` with 1 GB RAM. It stops when idle
+and starts when a request arrives. Fly.io still charges for actual usage and
+stopped-machine root filesystem storage.
+
 ## Endpoint
 
 - `POST /grade`

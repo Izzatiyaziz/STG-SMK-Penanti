@@ -1,0 +1,13 @@
+.git
+.gitignore
+.vercel
+.vercelignore
+.venv
+__pycache__
+debug
+*.pyc
+*.png
+*.md
+app.py
+fly.toml
+vercel.json

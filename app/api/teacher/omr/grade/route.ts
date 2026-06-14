@@ -10,6 +10,7 @@ import { gradeFromTotal } from "@/lib/grade-utils";
 import { isMarkingClosedForAssignment } from "@/lib/exam-utils";
 
 export const runtime = "nodejs";
+export const maxDuration = 300;
 
 type OMRTemplateMap = Record<
     string,
@@ -204,7 +205,7 @@ export async function POST(req: Request) {
                     ambiguity_gap: body?.ambiguity_gap ?? 0.06,
                     search_radius: body?.search_radius ?? 6,
                 }),
-                signal: AbortSignal.timeout(60_000),
+                signal: AbortSignal.timeout(180_000),
             });
         } catch (serviceErr) {
             const detail =

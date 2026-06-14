@@ -125,6 +125,8 @@ type TemplateMode = "auto-spm" | "custom" | "test";
 
 type ScanFlowState = "idle" | "warping" | "preview";
 type ImageProcessingProfile = "upload" | "camera";
+const MAX_OMR_IMAGE_DIMENSION = 1600;
+const OMR_JPEG_QUALITY = 0.82;
 
 function getCameraErrorMessage(error: unknown) {
   if (!window.isSecureContext) {
@@ -142,6 +144,24 @@ function getCameraErrorMessage(error: unknown) {
     }
   }
   return "Kamera tidak dapat diakses. Cuba semula atau guna Kamera Sistem.";
+}
+
+async function optimizeOmrImage(imageDataUrl: string) {
+  const image = document.createElement("img");
+  image.decoding = "async";
+  image.src = imageDataUrl;
+  await image.decode();
+
+  const scale = Math.min(1, MAX_OMR_IMAGE_DIMENSION / Math.max(image.naturalWidth, image.naturalHeight));
+  const width = Math.max(1, Math.round(image.naturalWidth * scale));
+  const height = Math.max(1, Math.round(image.naturalHeight * scale));
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext("2d");
+  if (!context) throw new Error("Canvas tidak tersedia");
+  context.drawImage(image, 0, 0, width, height);
+  return canvas.toDataURL("image/jpeg", OMR_JPEG_QUALITY);
 }
 
 function toId(v: unknown) {
@@ -476,14 +496,15 @@ export default function OMRScanPage() {
   const handleCaptureAndWarp = useCallback(async (rawImage: string, label: string, profile: ImageProcessingProfile) => {
     if (captureInProgressRef.current) return;
     captureInProgressRef.current = true;
-    setCapturedImage(rawImage);
-    setCapturedImageIsWarped(false);
-    setImageSourceLabel(label);
-    setImageProcessingProfile(profile);
-    stopCamera();
-    setScanFlowState("warping");
     try {
-      const { warped, cornersFound: cf } = await callWarp(rawImage);
+      const optimizedImage = await optimizeOmrImage(rawImage);
+      setCapturedImage(optimizedImage);
+      setCapturedImageIsWarped(false);
+      setImageSourceLabel(label);
+      setImageProcessingProfile(profile);
+      stopCamera();
+      setScanFlowState("warping");
+      const { warped, cornersFound: cf } = await callWarp(optimizedImage);
       setWarpedImage(warped);
       setCornersFound(cf);
       setScanFlowState("preview");
@@ -631,15 +652,25 @@ export default function OMRScanPage() {
           search_radius: Number(searchRadius) || 6,
         }),
       });
-      const json = await res.json();
-      if (!res.ok || !json?.success) { toast.error(json?.message || "Gagal memproses OMR"); return; }
+      const responseText = await res.text();
+      let json: Record<string, unknown> = {};
+      try {
+        json = responseText ? JSON.parse(responseText) as Record<string, unknown> : {};
+      } catch {
+        json = {};
+      }
+      if (!res.ok || !json?.success) {
+        toast.error(typeof json?.message === "string" ? json.message : `Gagal memproses OMR (${res.status})`);
+        return;
+      }
       localStorage.setItem("stg_marks_context", JSON.stringify({ class_id, subject_id, exam_id, student_id }));
       sessionStorage.setItem("stg_omr_last_result", JSON.stringify(json));
       toast.success("OMR berjaya diproses!");
       const params = new URLSearchParams({ student_id, subject_id, class_id, exam_id });
       router.push(`/teacher/omr/results?${params.toString()}`);
-    } catch {
-      toast.error("Gagal menghubungi server OMR");
+    } catch (error) {
+      console.error("OMR request failed:", error);
+      toast.error("Permintaan OMR gagal. Semak sambungan dan cuba lagi.");
     } finally {
       setIsProcessing(false);
     }
