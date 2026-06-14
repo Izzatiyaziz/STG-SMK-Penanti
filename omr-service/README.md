@@ -109,15 +109,6 @@ The configured machine uses `shared-cpu-1x` with 1 GB RAM. It stops when idle
 and starts when a request arrives. Fly.io still charges for actual usage and
 stopped-machine root filesystem storage.
 
-For CLI deployment, always run Fly commands from this `omr-service` directory.
-Do not deploy from the repository root, because Fly may detect the Next.js app.
-
-```powershell
-cd C:\stg-penanti\omr-service
-flyctl config validate
-flyctl deploy --config fly.toml --dockerfile Dockerfile --remote-only
-```
-
 ## Endpoint
 
 - `POST /grade`
