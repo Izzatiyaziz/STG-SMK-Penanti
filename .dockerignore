@@ -1,8 +1,0 @@
-*
-!Dockerfile.fly
-!fly.toml
-!omr-service/
-omr-service/*
-!omr-service/main.py
-!omr-service/requirements.txt
-!omr-service/template.sample.json
