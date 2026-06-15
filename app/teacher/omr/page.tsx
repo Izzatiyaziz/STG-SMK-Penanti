@@ -87,7 +87,7 @@ function buildSpmTemplateBundle(
     { A: 795, B: 835, C: 877, D: 917 },
   ] as const;
   const baseY = profile === "camera" ? [411, 432, 453, 475, 496] : [411, 432, 453, 475, 496];
-  const groupOffsets = profile === "camera" ? [0, 143, 282, 423, 564, 705] : [0, 143, 282, 423, 564, 705];
+  const groupOffsets = profile === "camera" ? [0, 135, 270, 405, 540, 675] : [0, 135, 270, 405, 540, 675];
   const rowY = groupOffsets.flatMap((offset) => baseY.map((y) => y + offset));
   const radius = 11;
 

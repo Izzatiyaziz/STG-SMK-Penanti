@@ -162,7 +162,10 @@ def _build_spm_80_template_bundle() -> dict[str, Any]:
         2: {"A": 795, "B": 835, "C": 877, "D": 917},
     }
     base_y = [411, 432, 453, 475, 496]
-    group_offsets = [0, 143, 282, 423, 564, 705]
+    # The five-row groups are separated by roughly 135 px on the canonical
+    # full-page SPM sheet. Larger offsets drift progressively onto the next
+    # printed row, causing later marked answers to be reported as blank/wrong.
+    group_offsets = [0, 135, 270, 405, 540, 675]
     row_y = [base_y[row] + group_offsets[group] for group in range(6) for row in range(5)]
 
     template: dict[str, Any] = {}
@@ -257,6 +260,21 @@ def _validate_quad(pts: np.ndarray, image_shape: tuple[int, int]) -> bool:
     x, y, w, h = cv2.boundingRect(pts.astype(np.int32))
     # Reject near-degenerate aspect ratios (e.g. a vertical/horizontal stripe)
     if max(w, h) / max(min(w, h), 1) > 5.0:
+        return False
+
+    ordered = _order_points(pts.astype(np.float32))
+    top_width = float(np.linalg.norm(ordered.top_right - ordered.top_left))
+    bottom_width = float(np.linalg.norm(ordered.bottom_right - ordered.bottom_left))
+    left_height = float(np.linalg.norm(ordered.bottom_left - ordered.top_left))
+    right_height = float(np.linalg.norm(ordered.bottom_right - ordered.top_right))
+    average_width = (top_width + bottom_width) / 2.0
+    average_height = (left_height + right_height) / 2.0
+    sheet_ratio = average_width / max(average_height, 1.0)
+
+    # This preset only supports portrait SPM/A4-style sheets. Without this gate,
+    # the large form border below the page heading can be mistaken for the paper
+    # edge, shifting every answer bubble after the perspective warp.
+    if not 0.55 <= sheet_ratio <= 0.82:
         return False
     return True
 
@@ -949,32 +967,29 @@ def grade(req: OMRGradeRequest) -> Any:
         q_template = req.template[qid]
         is_camera_profile = req.processing_profile == "camera"
         effective_search_radius = (
-            0
-            if is_camera_profile and req.already_warped
-            else max(req.search_radius, 10)
-            if not is_camera_profile
-            else req.search_radius
+            0 if is_camera_profile and req.already_warped else req.search_radius
         )
         ratios = _aligned_option_ratios(gray, q_template, effective_search_radius)
         ranked = sorted(ratios.items(), key=lambda item: item[1], reverse=True)
         best_opt, best_val = ranked[0]
         second_val = ranked[1][1]
         gap = best_val - second_val
-        min_mark_threshold = min(req.min_mark_threshold, 0.20 if is_camera_profile else 0.18)
-        ambiguity_gap = min(req.ambiguity_gap, 0.025 if is_camera_profile else 0.02)
+        min_mark_threshold = (
+            min(req.min_mark_threshold, 0.20)
+            if is_camera_profile
+            else req.min_mark_threshold
+        )
+        ambiguity_gap = (
+            min(req.ambiguity_gap, 0.025)
+            if is_camera_profile
+            else req.ambiguity_gap
+        )
 
         expected = _normalize_option(req.answer_key.get(qid))
         status = "wrong"
         detected: str | None = None
 
-        if not is_camera_profile:
-            detected = best_opt
-            if detected == expected:
-                status = "correct"
-                correct += 1
-            else:
-                wrong += 1
-        elif best_val < min_mark_threshold:
+        if best_val < min_mark_threshold:
             status = "blank"
             blank += 1
         elif gap < ambiguity_gap:

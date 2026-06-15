@@ -232,7 +232,7 @@ export default function OMRResultsPage() {
         "stg_marks_entry_context",
         JSON.stringify({
           ...marksContext,
-          view_only: true,
+          view_only: false,
         }),
       );
     }
