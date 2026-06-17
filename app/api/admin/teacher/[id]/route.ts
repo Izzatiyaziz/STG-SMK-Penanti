@@ -14,9 +14,11 @@ export async function PUT(
 
         const { id: teacherId } = await context.params;
         const body = await req.json();
-        const { fullname, email, role, role_names } = body;
+        const { fullname, email, role, role_names, status } = body;
 
         const name = typeof fullname === "string" ? fullname.trim() : "";
+        const nextStatus =
+            status === undefined || status === null ? undefined : String(status).trim();
         const roleNames = Array.isArray(role_names)
             ? role_names.map((item) => String(item).trim()).filter(Boolean)
             : role
@@ -26,6 +28,13 @@ export async function PUT(
         if (!teacherId || !name || roleNames.length === 0) {
             return NextResponse.json(
                 { error: "Nama guru atau peranan tidak sah" },
+                { status: 400 }
+            );
+        }
+
+        if (nextStatus && !["active", "inactive"].includes(nextStatus)) {
+            return NextResponse.json(
+                { error: "Status guru tidak sah" },
                 { status: 400 }
             );
         }
@@ -42,6 +51,7 @@ export async function PUT(
             .update({
                 fullname: name,
                 email: email?.trim() || null,
+                ...(nextStatus ? { status: nextStatus } : {}),
             })
             .eq("teacher_id", teacherId);
 

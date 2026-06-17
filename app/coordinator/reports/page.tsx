@@ -189,7 +189,7 @@ export default function SubjectCoordinatorReportsPage() {
 	const [gradeFilter, setGradeFilter] = useState("select-grade");
 	const [classFilter, setClassFilter] = useState("all");
 	const [examFilter, setExamFilter] = useState("select-exam");
-	const subjectName = data?.subject?.name ?? "Mathematics";
+	const subjectName = data?.subject?.name ?? "Tiada subjek";
 	const isUpperFormSubject = isUpperFormOnlySubject(subjectName);
 
 	async function fetchReport() {

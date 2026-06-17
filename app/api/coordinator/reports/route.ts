@@ -80,10 +80,10 @@ export async function GET(req: Request) {
 			}) ?? subjectList[0];
 
 		const subjectId = toId(mathSubject?.subject_id);
-		const subjectName = toId(mathSubject?.subject_name) || "Mathematics";
+		const subjectName = toId(mathSubject?.subject_name);
 
 		if (!subjectId) {
-			return NextResponse.json({ message: "Subjek Mathematics tidak dijumpai", data: null }, { status: 404 });
+			return NextResponse.json({ message: "Subjek seliaan tidak dijumpai", data: null }, { status: 404 });
 		}
 
 		const [{ data: results, error: resultErr }, { data: assignments }] =

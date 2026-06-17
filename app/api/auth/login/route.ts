@@ -170,11 +170,23 @@ export async function POST(req: Request) {
             const password = typeof body?.password === "string" ? body.password : "";
             if (!password || password.length > 256) return NextResponse.json({ message: "ID & Kata Laluan diperlukan" }, { status: 400 });
 
-            const { data: admin, error } = await supabase
+            let { data: admin, error } = await supabase
                 .from("stg_admins")
-                .select("admin_id, password, fullname") 
+                .select("admin_id, password, fullname, status, is_first_login")
                 .eq("admin_id", admin_id)
                 .single();
+
+            if (error?.message?.toLowerCase().includes("column")) {
+                const fallback = await supabase
+                    .from("stg_admins")
+                    .select("admin_id, password, fullname")
+                    .eq("admin_id", admin_id)
+                    .single();
+                admin = fallback.data
+                    ? { ...fallback.data, status: "active", is_first_login: false }
+                    : null;
+                error = fallback.error;
+            }
 
             if (error || !admin) {
                 await logSecurityEvent({
@@ -188,6 +200,19 @@ export async function POST(req: Request) {
                     details: { reason: "ID atau kata laluan tidak sah" },
                 });
                 return NextResponse.json({ message: "Kelayakan tidak sah" }, { status: 401 });
+            }
+
+            if (admin.status && admin.status !== "active") {
+                await logSecurityEvent({
+                    eventType: "failed_login",
+                    severity: "medium",
+                    ipAddress: clientIp,
+                    identifier,
+                    role,
+                    endpoint: "/api/auth/login",
+                    details: { reason: "Akaun tidak aktif" },
+                });
+                return NextResponse.json({ message: "Akaun admin tidak aktif" }, { status: 403 });
             }
 
             const valid = await bcrypt.compare(password, admin.password);
@@ -216,6 +241,7 @@ export async function POST(req: Request) {
                 role: "admin",
                 user_id: admin.admin_id,
                 session_id,
+                must_change_password: admin.is_first_login === true,
             });
             setSessionCookie(response, {
                 userType: "admin",
@@ -238,7 +264,7 @@ export async function POST(req: Request) {
 
             const { data: teacher, error } = await supabase
                 .from("stg_teachers")
-                .select("teacher_id, password, fullname, is_first_login")
+                .select("teacher_id, password, fullname, status, is_first_login")
                 .eq("username", username)
                 .single();
 
@@ -254,6 +280,19 @@ export async function POST(req: Request) {
                     details: { reason: "ID atau kata laluan tidak sah" },
                 });
                 return NextResponse.json({ message: "Kelayakan tidak sah" }, { status: 401 });
+            }
+
+            if (teacher.status && teacher.status !== "active") {
+                await logSecurityEvent({
+                    eventType: "failed_login",
+                    severity: "medium",
+                    ipAddress: clientIp,
+                    identifier,
+                    role,
+                    endpoint: "/api/auth/login",
+                    details: { reason: "Akaun tidak aktif" },
+                });
+                return NextResponse.json({ message: "Akaun guru tidak aktif" }, { status: 403 });
             }
 
             const valid = await bcrypt.compare(password, teacher.password);

@@ -1,9 +1,71 @@
 import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
+import { randomBytes } from "crypto";
+import nodemailer from "nodemailer";
 import supabase from "@/lib/supabase";
 import { requireApiRole } from "@/lib/auth";
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+export const runtime = "nodejs";
+
+function generateTemporaryPassword() {
+  return `Temp-${randomBytes(5).toString("hex").toUpperCase()}!`;
+}
+
+function escapeHtml(value: string) {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+async function sendNewTeacherEmail(params: {
+  to: string;
+  fullname: string;
+  staffId: string;
+  temporaryPassword: string;
+}) {
+  const emailUser = process.env.EMAIL_USER;
+  const emailPass = process.env.EMAIL_PASS;
+
+  if (!emailUser || !emailPass) {
+    throw new Error("Konfigurasi e-mel belum lengkap");
+  }
+
+  const transporter = nodemailer.createTransport({
+    service: "gmail",
+    auth: {
+      user: emailUser,
+      pass: emailPass,
+    },
+  });
+
+  const fullname = escapeHtml(params.fullname);
+  const staffId = escapeHtml(params.staffId);
+  const temporaryPassword = escapeHtml(params.temporaryPassword);
+
+  await transporter.sendMail({
+    from: emailUser,
+    to: params.to,
+    subject: "Akaun Guru Baru - Sistem STG SMK Penanti",
+    html: `
+      <div style="font-family: Arial, sans-serif; padding: 20px; color: #333;">
+        <h2>Akaun Guru Baru</h2>
+        <p>Salam sejahtera ${fullname},</p>
+        <p>Akaun anda telah didaftarkan dalam Sistem STG SMK Penanti.</p>
+        <p>Sila log masuk menggunakan maklumat berikut:</p>
+        <div style="background:#f4f4f4; padding:14px; border-radius:8px; display:inline-block;">
+          <p style="margin:0 0 8px;"><strong>Staff ID:</strong> ${staffId}</p>
+          <p style="margin:0;"><strong>Kata laluan sementara:</strong> ${temporaryPassword}</p>
+        </div>
+        <p>Selepas log masuk kali pertama, anda perlu menukar kata laluan sementara ini kepada kata laluan baharu.</p>
+      </div>
+    `,
+  });
+}
 
 export async function POST(req: Request) {
   try {
@@ -26,7 +88,16 @@ export async function POST(req: Request) {
       );
     }
 
-    if (email && !EMAIL_REGEX.test(String(email).trim())) {
+    const normalizedEmail = String(email ?? "").trim();
+
+    if (!normalizedEmail) {
+      return NextResponse.json(
+        { message: "E-mel guru diperlukan untuk menghantar kata laluan sementara" },
+        { status: 400 }
+      );
+    }
+
+    if (!EMAIL_REGEX.test(normalizedEmail)) {
       return NextResponse.json(
         { message: "Format e-mel tidak sah" },
         { status: 400 }
@@ -45,10 +116,8 @@ export async function POST(req: Request) {
       );
     }
 
-    // NOTE: Untuk fasa semasa, semua akaun guru akan guna password default yang sama.
-    // (E-mel password sementara dimatikan sementara seperti diminta.)
-    const defaultPassword = "123456";
-    const hashedPassword = await bcrypt.hash(defaultPassword, 10);
+    const temporaryPassword = generateTemporaryPassword();
+    const hashedPassword = await bcrypt.hash(temporaryPassword, 10);
 
     const { data: teacher, error: teacherError } = await supabase
       .from("stg_teachers")
@@ -56,7 +125,9 @@ export async function POST(req: Request) {
         username,
         password: hashedPassword,
         fullname: String(fullname).trim(),
-        email: email?.trim() || null,
+        email: normalizedEmail,
+        status: "active",
+        is_first_login: true,
       })
       .select("teacher_id")
       .single();
@@ -78,16 +149,35 @@ export async function POST(req: Request) {
       );
 
     if (assignError) {
+      await supabase.from("stg_teacher_roles").delete().eq("teacher_id", teacher.teacher_id);
+      await supabase.from("stg_teachers").delete().eq("teacher_id", teacher.teacher_id);
+
       return NextResponse.json(
         { message: assignError.message },
         { status: 400 }
       );
     }
 
-    // Penghantaran e-mel password sementara dimatikan sementara.
+    try {
+      await sendNewTeacherEmail({
+        to: normalizedEmail,
+        fullname: String(fullname).trim(),
+        staffId: String(username).trim(),
+        temporaryPassword,
+      });
+    } catch (emailError) {
+      console.error("SEND NEW TEACHER EMAIL ERROR:", emailError);
+      await supabase.from("stg_teacher_roles").delete().eq("teacher_id", teacher.teacher_id);
+      await supabase.from("stg_teachers").delete().eq("teacher_id", teacher.teacher_id);
+
+      return NextResponse.json(
+        { message: "Akaun guru tidak dibuat kerana e-mel kata laluan sementara gagal dihantar" },
+        { status: 502 }
+      );
+    }
 
     return NextResponse.json({
-      message: "Guru berjaya ditambah",
+      message: "Guru berjaya ditambah. Staff ID dan kata laluan sementara telah dihantar melalui e-mel.",
     });
   } catch (err) {
     console.error("ERROR:", err);

@@ -108,16 +108,6 @@ const detectLevelFromIC = (ic: string): string | null => {
     return null;
 };
 
-// Helper: Get age from IC for display
-const getAgeFromIC = (ic: string): number | null => {
-    const digits = normalizeIcDigits(ic);
-    if (digits.length < 12) return null;
-    const yearPart = parseInt(digits.substring(0, 2));
-    const currentYear = new Date().getFullYear();
-    const fullYear = yearPart > (currentYear % 100) ? 1900 + yearPart : 2000 + yearPart;
-    return currentYear - fullYear;
-};
-
 // Format date to local string
 const formatDate = (dateString: string | null): string => {
     return formatMalaysiaDate(dateString);
@@ -145,6 +135,7 @@ export default function AdminStudentsPage() {
     const [searchQuery, setSearchQuery] = useState("");
     const [filterLevel, setFilterLevel] = useState<string>("default-level-1");
     const [filterClassName, setFilterClassName] = useState<string>("all");
+    const [filterStatus, setFilterStatus] = useState<"active" | "inactive">("active");
     const [sortBy, setSortBy] = useState<"name" | "level" | "date">("name");
     const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
     const [currentPage, setCurrentPage] = useState(1);
@@ -159,6 +150,8 @@ export default function AdminStudentsPage() {
     const [editUserOverridden, setEditUserOverridden] = useState(false);
     const [editEnrollmentDate, setEditEnrollmentDate] = useState<string>("");
     const [confirmDelete, setConfirmDelete] = useState(false);
+    const [confirmInactive, setConfirmInactive] = useState(false);
+    const [deactivating, setDeactivating] = useState(false);
 
     async function fetchClasses() {
         try {
@@ -219,7 +212,8 @@ export default function AdminStudentsPage() {
                 (filterClassName === "__unassigned__"
                     ? !s.className
                     : s.className === filterClassName);
-            return matchesSearch && matchesLevel && matchesClass;
+            const matchesStatus = (s.status || "active") === filterStatus;
+            return matchesSearch && matchesLevel && matchesClass && matchesStatus;
         })
         .sort((a, b) => {
             let compareA, compareB;
@@ -251,7 +245,7 @@ export default function AdminStudentsPage() {
 
     useEffect(() => {
         setCurrentPage(1);
-    }, [searchQuery, filterLevel, filterClassName, sortBy, sortOrder]);
+    }, [searchQuery, filterLevel, filterClassName, filterStatus, sortBy, sortOrder]);
 
     useEffect(() => {
         const totalPages = Math.max(1, Math.ceil(filteredStudents.length / PAGE_SIZE));
@@ -283,13 +277,16 @@ export default function AdminStudentsPage() {
     }, [currentPage, totalPages]);
 
     // ================= STATS =================
+    const activeStudents = rows.filter((s) => (s.status || "active") === "active");
     const stats = {
-        total: rows.length,
-        form1: rows.filter((s) => s.level === "1").length,
-        form2: rows.filter((s) => s.level === "2").length,
-        form3: rows.filter((s) => s.level === "3").length,
-        form4: rows.filter((s) => s.level === "4").length,
-        form5: rows.filter((s) => s.level === "5").length,
+        total: activeStudents.length,
+        form1: activeStudents.filter((s) => s.level === "1").length,
+        form2: activeStudents.filter((s) => s.level === "2").length,
+        form3: activeStudents.filter((s) => s.level === "3").length,
+        form4: activeStudents.filter((s) => s.level === "4").length,
+        form5: activeStudents.filter((s) => s.level === "5").length,
+        active: activeStudents.length,
+        inactive: rows.filter((s) => s.status === "inactive").length,
     };
 
     const handleLevelCardClick = (level: "1" | "2" | "3" | "4" | "5") => {
@@ -403,6 +400,29 @@ export default function AdminStudentsPage() {
         } catch { toast.error("Ralat sistem", { id: toastId }); }
     }
 
+    async function handleInactive() {
+        if (!editing) return;
+        setDeactivating(true);
+        const toastId = toast.loading("Menandakan pelajar tidak aktif...");
+        try {
+            const res = await fetch(`/api/admin/students?id=${editing.id}`, {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ status: "inactive" }),
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(data?.message || "Gagal nyahaktifkan pelajar");
+            toast.success("Pelajar telah ditandakan tidak aktif", { id: toastId });
+            setConfirmInactive(false);
+            setEditing(null);
+            fetchStudents();
+        } catch (error) {
+            toast.error(error instanceof Error ? error.message : "Ralat sistem", { id: toastId });
+        } finally {
+            setDeactivating(false);
+        }
+    }
+
     // ================= TOGGLE SORT =================
     const toggleSort = (field: "name" | "level" | "date") => {
         if (sortBy === field) {
@@ -423,6 +443,7 @@ export default function AdminStudentsPage() {
         setEditDetectedLevel(null);
         setEditUserOverridden(false);
         setEditEnrollmentDate("");
+        setConfirmInactive(false);
     };
 
     const cancelDeleteDialog = () => {
@@ -751,12 +772,28 @@ export default function AdminStudentsPage() {
                                     </Select>
                                 </div>
 
+                                <div className="w-full sm:w-[170px]">
+                                    <Select
+                                        value={filterStatus}
+                                        onValueChange={(value) => setFilterStatus(value as "active" | "inactive")}
+                                    >
+                                        <SelectTrigger className="h-11 rounded-lg border-border bg-background">
+                                            <SelectValue placeholder="Status" />
+                                        </SelectTrigger>
+                                        <SelectContent className="rounded-lg border-border">
+                                            <SelectItem value="active">Aktif</SelectItem>
+                                            <SelectItem value="inactive">Tidak Aktif</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+
                                 <Button
                                     variant="outline"
                                     onClick={() => {
                                         setSearchQuery("");
                                         setFilterLevel("default-level-1");
                                         setFilterClassName("all");
+                                        setFilterStatus("active");
                                         setSortBy("name");
                                         setSortOrder("asc");
                                     }}
@@ -783,6 +820,7 @@ export default function AdminStudentsPage() {
                                             <TableHead className="font-semibold text-foreground py-4">No. Kad Pengenalan</TableHead>
                                             <TableHead className="font-semibold text-foreground py-4">Tingkatan</TableHead>
                                             <TableHead className="font-semibold text-foreground py-4">Kelas</TableHead>
+                                            <TableHead className="font-semibold text-foreground py-4">Status</TableHead>
                                             <TableHead className="font-semibold text-foreground py-4">
                                                 <Button variant="ghost" size="sm" onClick={() => toggleSort("date")} className="p-0 h-auto font-semibold hover:bg-transparent">
                                                     Tarikh Daftar
@@ -796,7 +834,7 @@ export default function AdminStudentsPage() {
                                     <TableBody>
                                         {loading ? (
                                             <TableRow>
-                                                <TableCell colSpan={7} className="py-16">
+                                                <TableCell colSpan={8} className="py-16">
                                                     <div className="flex flex-col items-center justify-center gap-4">
                                                         <Loader2 className="w-10 h-10 animate-spin text-primary" />
                                                         <p className="font-semibold text-foreground">Memuatkan data pelajar...</p>
@@ -805,7 +843,7 @@ export default function AdminStudentsPage() {
                                             </TableRow>
                                         ) : filteredStudents.length === 0 ? (
                                             <TableRow>
-                                                <TableCell colSpan={7} className="py-16">
+                                                <TableCell colSpan={8} className="py-16">
                                                     <div className="flex flex-col items-center justify-center gap-4">
                                                         <div className="p-4 rounded-full bg-muted/50">
                                                             <Users className="w-12 h-12 text-muted-foreground/50" />
@@ -864,6 +902,17 @@ export default function AdminStudentsPage() {
                                                             </div>
                                                         </TableCell>
                                                         <TableCell className="py-4">
+                                                            {student.status === "inactive" ? (
+                                                                <Badge variant="outline" className="border-slate-300 bg-slate-50 text-slate-700">
+                                                                    Tidak Aktif
+                                                                </Badge>
+                                                            ) : (
+                                                                <Badge variant="outline" className="border-emerald-300 bg-emerald-50 text-emerald-700">
+                                                                    Aktif
+                                                                </Badge>
+                                                            )}
+                                                        </TableCell>
+                                                        <TableCell className="py-4">
                                                             <div className="flex items-center gap-2 text-muted-foreground">
                                                                 <Calendar className="w-4 h-4" />
                                                                 <span>{formatDate(student.enrollment_date)}</span>
@@ -901,6 +950,12 @@ export default function AdminStudentsPage() {
                                 daripada{" "}
                                 <span className="font-semibold text-foreground">{filteredStudents.length}</span>{" "}
                                 pelajar
+                                <Badge variant="outline" className="ml-2 border-emerald-300 bg-emerald-50 text-emerald-700">
+                                    {stats.active} aktif
+                                </Badge>
+                                <Badge variant="outline" className="ml-1 border-slate-300 bg-slate-50 text-slate-700">
+                                    {stats.inactive} tidak aktif
+                                </Badge>
                                 <Badge variant="secondary" className="ml-2">
                                     Tingkatan {filterLevel === "default-level-1" ? "1" : filterLevel}
                                 </Badge>
@@ -948,7 +1003,7 @@ export default function AdminStudentsPage() {
             </div>
 
             {/* EDIT DIALOG */}
-            <Dialog open={Boolean(editing) && !confirmDelete} onOpenChange={(open) => {
+            <Dialog open={Boolean(editing) && !confirmDelete && !confirmInactive} onOpenChange={(open) => {
                 if (!open) closeEditDialog();
             }}>
                 <DialogContent className="sm:max-w-[500px]">
@@ -1018,8 +1073,47 @@ export default function AdminStudentsPage() {
                         </div>
                     </div>
                     <DialogFooter>
-                        <Button variant="outline" onClick={closeEditDialog}>Batal</Button>
-                        <Button onClick={handleSaveEdit} className="bg-primary px-8">Simpan</Button>
+                        <div className="flex w-full flex-col-reverse gap-2 sm:flex-row sm:justify-between">
+                            <Button
+                                variant="destructive"
+                                onClick={() => setConfirmInactive(true)}
+                                disabled={!editing || editing.status === "inactive" || deactivating}
+                            >
+                                {editing?.status === "inactive" ? "Sudah Tidak Aktif" : "Tidak Aktif"}
+                            </Button>
+                            <div className="flex gap-2">
+                                <Button variant="outline" onClick={closeEditDialog}>Batal</Button>
+                                <Button onClick={handleSaveEdit} className="bg-primary px-8">Simpan</Button>
+                            </div>
+                        </div>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* INACTIVE CONFIRMATION */}
+            <Dialog
+                open={confirmInactive}
+                onOpenChange={(open) => {
+                    if (!open) setConfirmInactive(false);
+                    else setConfirmInactive(true);
+                }}
+            >
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle className="text-destructive font-bold">Jadikan Pelajar Tidak Aktif?</DialogTitle>
+                    </DialogHeader>
+                    <p>
+                        Akaun <strong>{editing?.name}</strong> akan ditandakan tidak aktif,
+                        dikeluarkan daripada kelas semasa, dan tidak boleh mengakses akaun.
+                    </p>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setConfirmInactive(false)} disabled={deactivating}>
+                            Batal
+                        </Button>
+                        <Button variant="destructive" onClick={handleInactive} disabled={deactivating}>
+                            {deactivating && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                            {deactivating ? "Menyimpan..." : "Ya, Tidak Aktif"}
+                        </Button>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>

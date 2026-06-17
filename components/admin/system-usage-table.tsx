@@ -193,9 +193,6 @@ export default function AdminSystemUsageTable({
                           {log.details?.reason && (
                             <p className="mt-1 text-xs text-muted-foreground">{log.details.reason}</p>
                           )}
-                          {log.endpoint && (
-                            <p className="mt-1 font-mono text-xs text-muted-foreground">{log.endpoint}</p>
-                          )}
                         </div>
                       </div>
                     </TableCell>

@@ -109,11 +109,23 @@ export async function POST(req: Request) {
 
         // ================= ADMIN =================
         if (userType === "admin") {
-            const { data: admin, error } = await supabase
+            let { data: admin, error } = await supabase
                 .from("stg_admins")
-                .select("admin_id, password")
+                .select("admin_id, password, is_first_login")
                 .eq("admin_id", user_id)
                 .single();
+
+            if (error?.message?.toLowerCase().includes("column")) {
+                const fallback = await supabase
+                    .from("stg_admins")
+                    .select("admin_id, password")
+                    .eq("admin_id", user_id)
+                    .single();
+                admin = fallback.data
+                    ? { ...fallback.data, is_first_login: false }
+                    : null;
+                error = fallback.error;
+            }
 
             if (error || !admin) {
                 return NextResponse.json(
@@ -122,17 +134,24 @@ export async function POST(req: Request) {
                 );
             }
 
-            const valid = await bcrypt.compare(current_password, admin.password);
-            if (!valid) {
+            if (!first_login) {
+                const valid = await bcrypt.compare(current_password, admin.password);
+                if (!valid) {
+                    return NextResponse.json(
+                        { message: "Kata laluan semasa tidak sah" },
+                        { status: 401 }
+                    );
+                }
+            } else if (!admin.is_first_login) {
                 return NextResponse.json(
-                    { message: "Kata laluan semasa tidak sah" },
-                    { status: 401 }
+                    { message: "Akaun ini tidak memerlukan penukaran kata laluan pertama" },
+                    { status: 400 }
                 );
             }
 
             const { error: updateErr } = await supabase
                 .from("stg_admins")
-                .update({ password: hashed })
+                .update({ password: hashed, is_first_login: false })
                 .eq("admin_id", admin.admin_id);
 
             if (updateErr) {

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Users, FileCheck2, FileText, FileSignature, Database, Folder } from "lucide-react";
+import { Users, FileCheck2, FileText, FileSignature, Database, Folder, ShieldCheck } from "lucide-react";
 import { HeaderLastUpdated } from "@/components/header-last-updated";
 
 export default function AdminUsersPage() {
@@ -24,7 +24,20 @@ export default function AdminUsersPage() {
                         <HeaderLastUpdated />
                     </div>
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <Card className="shadow-lg border border-border/50">
+                        <CardHeader>
+                            <CardTitle>Admin</CardTitle>
+                        </CardHeader>
+                        <CardContent className="space-y-3">
+                            <div className="text-sm text-muted-foreground">
+                                Tambah admin baharu dan nyahaktifkan akaun lama.
+                            </div>
+                            <Button asChild>
+                                <Link href="/admin/admins">Buka Pengurusan Admin</Link>
+                            </Button>
+                        </CardContent>
+                    </Card>
                     <Card className="shadow-lg border border-border/50">
                         <CardHeader>
                             <CardTitle>Guru</CardTitle>
@@ -58,6 +71,12 @@ export default function AdminUsersPage() {
                         <CardTitle>Quick Links</CardTitle>
                     </CardHeader>
                     <CardContent className="flex flex-wrap gap-2">
+                        <Button asChild variant="outline">
+                            <Link href="/admin/admins">
+                                <ShieldCheck className="w-4 h-4 mr-2" />
+                                Admin
+                            </Link>
+                        </Button>
                         <Button asChild variant="outline">
                             <Link href="/admin/assignments">
                                 <FileSignature className="w-4 h-4 mr-2" />

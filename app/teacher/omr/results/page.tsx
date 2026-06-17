@@ -69,6 +69,11 @@ function SummaryBadge({ label, value, className }: { label: string; value: numbe
 
 const OPTIONS = ["A", "B", "C", "D"] as const;
 
+function normalizeOption(value: unknown) {
+  const option = String(value ?? "").trim().toUpperCase();
+  return OPTIONS.includes(option as (typeof OPTIONS)[number]) ? option : "";
+}
+
 export default function OMRResultsPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -125,21 +130,25 @@ export default function OMRResultsPage() {
       const s = String(r.status ?? "").toLowerCase();
       return s === "ambiguous" || s === "blank";
     }).length;
-    const totalMarks = results.reduce((total, row) => {
+    const effectiveRows = results.map((row) => {
       const qno = toNumber(row.question_no);
       const status = String(row.status ?? "").toLowerCase();
-      const detected = overrides[qno] ?? String(row.detected_option ?? "").trim();
-      const needsReview = status === "ambiguous" || status === "blank";
-      const effectiveStatus =
-        needsReview && overrides[qno]
-          ? (overrides[qno] === String(row.expected_option ?? "").trim().toUpperCase() ? "correct" : "wrong")
-          : status;
-      return total + getStatusMeta(effectiveStatus, detected).mark;
-    }, 0);
+      const detected = overrides[qno] ?? normalizeOption(row.detected_option);
+      const expected = normalizeOption(row.expected_option);
+      const effectiveStatus = overrides[qno] && expected
+        ? (overrides[qno] === expected ? "correct" : "wrong")
+        : status;
+      return { status: effectiveStatus, detected };
+    });
+    const totalMarks = effectiveRows.reduce(
+      (total, row) => total + getStatusMeta(row.status, row.detected).mark,
+      0
+    );
     return {
-      correct: toNumber(resultRaw?.correct),
-      wrong: toNumber(resultRaw?.wrong),
-      blank: toNumber(resultRaw?.blank),
+      correct: effectiveRows.filter((row) => row.status === "correct").length,
+      wrong: effectiveRows.filter((row) => row.status === "wrong").length,
+      blank: effectiveRows.filter((row) => row.status === "blank" || (!row.detected && row.status !== "ambiguous")).length,
+      ambiguous: effectiveRows.filter((row) => row.status === "ambiguous").length,
       needsReviewCount,
       totalMarks,
       totalQuestions: toNumber(resultRaw?.total_questions) || results.length,
@@ -153,6 +162,16 @@ export default function OMRResultsPage() {
     const s = String(r.status ?? "").toLowerCase();
     return (s === "ambiguous" || s === "blank") && !overrides[toNumber(r.question_no)];
   }).length;
+
+  function setAnswerOverride(questionNo: number, option: string, originalDetected: unknown) {
+    const original = normalizeOption(originalDetected);
+    setOverrides((prev) => {
+      const next = { ...prev };
+      if (option === original) delete next[questionNo];
+      else next[questionNo] = option;
+      return next;
+    });
+  }
 
   async function saveReview() {
     if (!summary.omrScanId) {
@@ -262,12 +281,11 @@ export default function OMRResultsPage() {
       body: summary.results.map((row) => {
         const qno = toNumber(row.question_no);
         const status = String(row.status ?? "").toLowerCase();
-        const detected = overrides[qno] ?? String(row.detected_option ?? "").trim();
-        const needsReview = status === "ambiguous" || status === "blank";
-        const effectiveStatus =
-          needsReview && overrides[qno]
-            ? (overrides[qno] === String(row.expected_option ?? "").trim().toUpperCase() ? "correct" : "wrong")
-            : status;
+        const detected = overrides[qno] ?? normalizeOption(row.detected_option);
+        const expected = normalizeOption(row.expected_option);
+        const effectiveStatus = overrides[qno] && expected
+          ? (overrides[qno] === expected ? "correct" : "wrong")
+          : status;
         const meta = getStatusMeta(effectiveStatus, detected);
         return [String(row.question_no ?? ""), detected || "-", String(row.expected_option ?? "").trim() || "-", meta.label, meta.mark];
       }),
@@ -329,6 +347,10 @@ export default function OMRResultsPage() {
                 </div>
               )}
 
+              <div className="rounded-lg border border-primary/20 bg-primary/5 px-4 py-3 text-sm text-foreground">
+                Jika sistem salah detect jawapan, pilih A/B/C/D yang sebenar pada kertas. Pilihan asal akan dipaparkan sebagai rujukan sebelum disimpan.
+              </div>
+
               {summary.needsReviewCount > 0 && (
                 <div className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
                   <p className="font-semibold">Terdapat {summary.needsReviewCount} soalan perlu semakan manual</p>
@@ -356,39 +378,47 @@ export default function OMRResultsPage() {
                         const status = String(row.status ?? "").toLowerCase();
                         const needsReview = status === "ambiguous" || status === "blank";
                         const override = overrides[qno];
-                        const detected = override ?? String(row.detected_option ?? "").trim();
-                        const expected = String(row.expected_option ?? "").trim().toUpperCase();
-                        const effectiveStatus = needsReview && override
+                        const originalDetected = normalizeOption(row.detected_option);
+                        const detected = override ?? originalDetected;
+                        const expected = normalizeOption(row.expected_option);
+                        const effectiveStatus = override
                           ? (override === expected ? "correct" : "wrong")
                           : status;
                         const meta = getStatusMeta(effectiveStatus, detected);
                         const StatusIcon = meta.icon;
+                        const hasOverride = Boolean(override);
                         return (
                           <TableRow
                             key={String(row.question_no ?? "")}
-                            className={`border-b border-border transition-colors last:border-0 hover:bg-muted/50 ${needsReview && !override ? "bg-amber-50/40" : ""}`}
+                            className={`border-b border-border transition-colors last:border-0 hover:bg-muted/50 ${needsReview && !override ? "bg-amber-50/40" : ""} ${hasOverride ? "bg-primary/5" : ""}`}
                           >
                             <TableCell className="py-4 text-center font-medium text-muted-foreground">{row.question_no}</TableCell>
                             <TableCell className="py-4 text-center">
-                              {needsReview ? (
+                              <div className="flex flex-col items-center gap-1.5">
                                 <div className="flex items-center justify-center gap-1">
-                                  {OPTIONS.map((opt) => (
-                                    <button
-                                      key={opt}
-                                      onClick={() => setOverrides((prev) => ({ ...prev, [qno]: opt }))}
-                                      className={`h-7 w-7 rounded-md border text-xs font-bold transition-colors ${
-                                        override === opt
-                                          ? "border-primary bg-primary text-primary-foreground"
-                                          : "border-border bg-background text-foreground hover:border-primary hover:bg-primary/10"
-                                      }`}
-                                    >
-                                      {opt}
-                                    </button>
-                                  ))}
+                                  {OPTIONS.map((opt) => {
+                                    const isSelected = detected === opt;
+                                    const isOriginal = originalDetected === opt;
+                                    return (
+                                      <button
+                                        key={opt}
+                                        onClick={() => setAnswerOverride(qno, opt, row.detected_option)}
+                                        className={`h-7 w-7 rounded-md border text-xs font-bold transition-colors ${
+                                          isSelected
+                                            ? "border-primary bg-primary text-primary-foreground"
+                                            : "border-border bg-background text-foreground hover:border-primary hover:bg-primary/10"
+                                        } ${isOriginal && !override ? "ring-1 ring-primary/30" : ""}`}
+                                        title={isOriginal ? "Jawapan detect asal" : "Pilih jawapan sebenar pada kertas"}
+                                      >
+                                        {opt}
+                                      </button>
+                                    );
+                                  })}
                                 </div>
-                              ) : (
-                                <span className="font-semibold text-foreground">{detected || "-"}</span>
-                              )}
+                                <span className="text-[11px] text-muted-foreground">
+                                  {hasOverride ? `Asal: ${originalDetected || "-"}` : `Detect: ${originalDetected || "-"}`}
+                                </span>
+                              </div>
                             </TableCell>
                             <TableCell className="py-4 text-center font-semibold text-foreground">{expected || "-"}</TableCell>
                             <TableCell className="py-4 text-center">

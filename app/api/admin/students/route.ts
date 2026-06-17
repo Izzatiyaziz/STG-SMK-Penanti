@@ -6,14 +6,39 @@ import { logSecurityEvent } from "@/lib/security-events";
 
 export const runtime = "nodejs";
 
+type DatabaseErrorLike = {
+    message?: unknown;
+    details?: unknown;
+    code?: unknown;
+};
+
+type ClassLookupRow = {
+    class_id: string;
+    class_name: string;
+};
+
+type StudentUpdate = {
+    fullname?: string;
+    ic_number?: string;
+    status?: string;
+    class_id?: string | null;
+    enrollment_date?: string | null;
+    level?: string;
+};
+
 function normalizeIcDigits(value: unknown) {
     return String(value ?? "").replace(/\D/g, "");
 }
 
-function toFriendlyStudentError(error: any): string {
-    const message = String(error?.message ?? "");
-    const details = String(error?.details ?? "");
-    const code = String(error?.code ?? "");
+function getErrorMessage(error: unknown) {
+    return error instanceof Error ? error.message : String(error ?? "Ralat tidak dijangka");
+}
+
+function toFriendlyStudentError(error: unknown): string {
+    const dbError = error as DatabaseErrorLike;
+    const message = String(dbError?.message ?? "");
+    const details = String(dbError?.details ?? "");
+    const code = String(dbError?.code ?? "");
 
     // Postgres unique constraint on IC number (23505)
     if (
@@ -42,6 +67,10 @@ function deriveLevelFromEnrollment(enrollmentDate: string | null | undefined) {
     const years = now.getFullYear() - d.getFullYear() + 1;
     const clamped = Math.max(1, Math.min(5, years));
     return String(clamped);
+}
+
+function todayDate() {
+    return new Date().toISOString().slice(0, 10);
 }
 
 export async function GET(req: Request) {
@@ -137,10 +166,10 @@ export async function GET(req: Request) {
                   .from("stg_classes")
                   .select("class_id, class_name")
                   .in("class_id", classIds)
-            : { data: [] as any[] };
+            : { data: [] as ClassLookupRow[] };
 
         const classById = new Map(
-            (classes ?? []).map((c: any) => [c.class_id, c.class_name])
+            ((classes ?? []) as ClassLookupRow[]).map((c) => [c.class_id, c.class_name])
         );
 
         const formatted = (students ?? []).map((s) => ({
@@ -163,10 +192,10 @@ export async function GET(req: Request) {
             page_size: pageSize,
             total_pages: Math.ceil((count ?? formatted.length) / pageSize),
         });
-    } catch (err: any) {
+    } catch (err: unknown) {
         console.error("GET STUDENTS ERROR:", err);
         return NextResponse.json(
-            { success: false, message: "Ralat pelayan", error: err.message },
+            { success: false, message: "Ralat pelayan", error: getErrorMessage(err) },
             { status: 500 }
         );
     }
@@ -242,10 +271,10 @@ export async function POST(req: Request) {
             { success: true, id: data?.student_id },
             { status: 201 }
         );
-    } catch (err: any) {
+    } catch (err: unknown) {
         console.error("ADD STUDENT ERROR:", err);
         return NextResponse.json(
-            { message: "Ralat pelayan", error: err.message },
+            { message: "Ralat pelayan", error: getErrorMessage(err) },
             { status: 500 }
         );
     }
@@ -292,7 +321,22 @@ export async function PUT(req: Request) {
             ? String(body.enrollment_date).trim()
             : undefined;
 
-        const update: any = {};
+        if (status && !["active", "inactive"].includes(status)) {
+            return NextResponse.json(
+                { message: "Status pelajar tidak sah" },
+                { status: 400 }
+            );
+        }
+
+        const { data: currentStudent } = status === "inactive"
+            ? await supabase
+                  .from("stg_students")
+                  .select("student_id, class_id, level, enrollment_date")
+                  .eq("student_id", id)
+                  .single()
+            : { data: null };
+
+        const update: StudentUpdate = {};
         if (fullname) update.fullname = fullname;
         if (ic_number) {
             if (normalizeIcDigits(ic_number).length !== 12) {
@@ -305,6 +349,7 @@ export async function PUT(req: Request) {
         }
         if (status) update.status = status;
         if (class_id !== undefined) update.class_id = class_id;
+        if (status === "inactive") update.class_id = null;
         if (enrollment_date !== undefined) {
             update.enrollment_date = enrollment_date || null;
             const lvl = deriveLevelFromEnrollment(enrollment_date);
@@ -323,11 +368,49 @@ export async function PUT(req: Request) {
             );
         }
 
+        if (status === "inactive") {
+            const endDate = todayDate();
+            const { data: openHistory, error: historyFindError } = await supabase
+                .from("stg_student_class_history")
+                .select("history_id")
+                .eq("student_id", id)
+                .is("end_date", null)
+                .order("created_at", { ascending: false })
+                .limit(1);
+
+            if (historyFindError) {
+                console.error("FIND STUDENT HISTORY ERROR:", historyFindError);
+            } else if (openHistory && openHistory.length > 0) {
+                const { error: historyUpdateError } = await supabase
+                    .from("stg_student_class_history")
+                    .update({ end_date: endDate })
+                    .eq("history_id", openHistory[0].history_id);
+
+                if (historyUpdateError) {
+                    console.error("UPDATE STUDENT HISTORY ERROR:", historyUpdateError);
+                }
+            } else if (currentStudent?.class_id) {
+                const { error: historyInsertError } = await supabase
+                    .from("stg_student_class_history")
+                    .insert({
+                        student_id: id,
+                        class_id: currentStudent.class_id,
+                        level: currentStudent.level,
+                        start_date: currentStudent.enrollment_date || endDate,
+                        end_date: endDate,
+                    });
+
+                if (historyInsertError) {
+                    console.error("INSERT STUDENT HISTORY ERROR:", historyInsertError);
+                }
+            }
+        }
+
         return NextResponse.json({ success: true });
-    } catch (err: any) {
+    } catch (err: unknown) {
         console.error("UPDATE STUDENT ERROR:", err);
         return NextResponse.json(
-            { message: "Ralat pelayan", error: err.message },
+            { message: "Ralat pelayan", error: getErrorMessage(err) },
             { status: 500 }
         );
     }
@@ -365,10 +448,10 @@ export async function DELETE(req: Request) {
         }
 
         return NextResponse.json({ success: true });
-    } catch (err: any) {
+    } catch (err: unknown) {
         console.error("DELETE STUDENT ERROR:", err);
         return NextResponse.json(
-            { message: "Ralat pelayan", error: err.message },
+            { message: "Ralat pelayan", error: getErrorMessage(err) },
             { status: 500 }
         );
     }

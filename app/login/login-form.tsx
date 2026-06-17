@@ -2,9 +2,13 @@
 
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
+import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+    isStrongPassword,
+    PasswordRequirements,
+} from "@/components/profile/password-controls";
 import {
     Select,
     SelectContent,
@@ -13,6 +17,7 @@ import {
     SelectValue,
 } from "@/components/ui/select";
 import { useState } from "react";
+import { createPortal } from "react-dom";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { Eye, EyeOff, GraduationCap, Loader2, Shield, User } from "lucide-react";
@@ -28,6 +33,7 @@ type LoginPayload = {
 };
 type PasswordChangeSession = {
     user_id: string;
+    userType: "teacher" | "admin";
     role: string;
     session_id?: string | null;
     roles?: string[];
@@ -81,7 +87,8 @@ export function LoginForm({
     const hasUpper = /[A-Z]/.test(newPassword);
     const hasNumber = /[0-9]/.test(newPassword);
     const hasSymbol = /[^A-Za-z0-9]/.test(newPassword);
-    const isPasswordStrong = hasLength && hasUpper && hasNumber && hasSymbol;
+    const passwordIsStrong = isStrongPassword(newPassword);
+    const isPasswordStrong = passwordIsStrong;
 
     async function handleSubmit(
         e: React.FormEvent<HTMLFormElement>,
@@ -139,6 +146,7 @@ export function LoginForm({
                 if (data.must_change_password) {
                     setTempData({
                         user_id: data.user_id,
+                        userType: "teacher",
                         role: finalRole,
                         session_id: data.session_id ?? null,
                         roles,
@@ -156,6 +164,18 @@ export function LoginForm({
                     toastId,
                     roles
                 );
+                return;
+            }
+
+            if (submitRole === "admin" && data.must_change_password) {
+                setTempData({
+                    user_id: data.user_id,
+                    userType: "admin",
+                    role: "admin",
+                    session_id: data.session_id ?? null,
+                });
+                setShowPasswordDialog(true);
+                toast.dismiss(toastId);
                 return;
             }
 
@@ -209,7 +229,7 @@ export function LoginForm({
     async function handlePasswordChange(e: React.FormEvent) {
         e.preventDefault();
 
-        if (!isPasswordStrong) {
+        if (!passwordIsStrong) {
             toast.error("Sila pastikan kata laluan memenuhi semua kriteria yang ditetapkan.");
             return;
         }
@@ -227,7 +247,7 @@ export function LoginForm({
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                    userType: "teacher",
+                    userType: tempData?.userType ?? "teacher",
                     user_id: tempData?.user_id,
                     current_password: "",
                     new_password: newPassword,
@@ -240,7 +260,7 @@ export function LoginForm({
             setShowPasswordDialog(false);
             await proceedToDashboard(
                 tempData?.user_id ?? "",
-                "teacher",
+                tempData?.userType ?? "teacher",
                 tempData?.role ?? "subject teacher",
                 tempData?.session_id ?? null,
                 toastId,
@@ -441,7 +461,7 @@ export function LoginForm({
             </Tabs>
 
             {/* PASSWORD CHANGE DIALOG */}
-            {showPasswordDialog && (
+            {showPasswordDialog && typeof document !== "undefined" && createPortal(
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
                     <div className="bg-background w-full max-w-md p-6 rounded-xl border shadow-2xl">
                         <h2 className="text-xl font-bold mb-2">Tukar Kata Laluan</h2>
@@ -468,7 +488,9 @@ export function LoginForm({
                                         />
                                     </div>
 
-                                    {newPassword.length > 0 && (
+                                    <PasswordRequirements password={newPassword} />
+
+                                    {newPassword.length < 0 && (
                                         <div className="mt-2 text-xs p-3 rounded-lg border bg-muted/30">
                                             <p className={cn(
                                                 "font-bold mb-2",
@@ -514,21 +536,8 @@ export function LoginForm({
                                     )}
                                 </Field>
 
-                                <div className="flex gap-3 mt-2">
-                                    <Button
-                                        type="button"
-                                        variant="outline"
-                                        className="flex-1"
-                                        onClick={() => {
-                                            setShowPasswordDialog(false);
-                                            setLoading(false);
-                                            setNewPassword("");
-                                            setConfirmPassword("");
-                                        }}
-                                    >
-                                        Batal
-                                    </Button>
-                                    <Button type="submit" className="flex-1" disabled={loading || !isPasswordStrong}>
+                                <div className="mt-2">
+                                    <Button type="submit" className="w-full" disabled={loading || !isPasswordStrong}>
                                         {loading && <Loader2 size={15} className="animate-spin" />}
                                         {loading ? "Menyimpan..." : "Simpan & Masuk"}
                                     </Button>
@@ -536,28 +545,37 @@ export function LoginForm({
                             </FieldGroup>
                         </form>
                     </div>
-                </div>
+                </div>,
+                document.body
             )}
 
             {/* FORGOT PASSWORD DIALOG */}
-            {showForgotDialog && (
+            {showForgotDialog && typeof document !== "undefined" && createPortal(
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
                     <div className="bg-background w-full max-w-md p-6 rounded-xl border shadow-2xl">
                         <h2 className="text-xl font-bold mb-2">Lupa Kata Laluan?</h2>
                         <p className="text-sm text-muted-foreground mb-6">
-                            Masukkan ID {forgotRole === "teacher" ? "Guru" : "Admin"} anda. Sistem akan menetapkan semula kata laluan anda dan menghantarnya ke e-mel yang didaftarkan.
+                            {forgotRole === "teacher"
+                                ? "Masukkan No. Staff. Sistem akan menghantar kata laluan sementara ke e-mel guru yang berdaftar."
+                                : "Masukkan ID Admin. Sistem akan menghantar kata laluan sementara ke e-mel admin."}
                         </p>
 
                         <form onSubmit={handleForgotPassword}>
                             <FieldGroup>
                                 <Field>
-                                    <FieldLabel>ID {forgotRole === "teacher" ? "Guru" : "Admin"}</FieldLabel>
+                                    <FieldLabel>
+                                        {forgotRole === "teacher" ? "No. Staff " : "ID Admin"}
+                                    </FieldLabel>
                                     <Input
                                         type="text"
                                         value={forgotIdentifier}
                                         onChange={(e) => setForgotIdentifier(e.target.value)}
                                         required
-                                        placeholder={`Masukkan ID ${forgotRole === "teacher" ? "Guru" : "Admin"}`}
+                                        placeholder={
+                                            forgotRole === "teacher"
+                                                ? "Contoh: PNT-ABC123"
+                                                : "Masukkan ID Admin"
+                                        }
                                         autoComplete="username"
                                     />
                                 </Field>
@@ -583,7 +601,8 @@ export function LoginForm({
                             </FieldGroup>
                         </form>
                     </div>
-                </div>
+                </div>,
+                document.body
             )}
         </div>
     );

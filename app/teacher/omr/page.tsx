@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -121,6 +121,21 @@ function buildSpmTemplateBundle(
   };
 }
 
+function buildAnswerGuideBubbles(questionCount: number) {
+  const bundle = buildSpmTemplateBundle(questionCount, "camera");
+  const template = bundle.template as Record<string, Record<"A" | "B" | "C" | "D", { x: number; y: number; r: number }>>;
+
+  return Object.entries(template).flatMap(([questionNo, options]) =>
+    (["A", "B", "C", "D"] as const).map((option) => ({
+      key: `${questionNo}-${option}`,
+      questionNo: Number(questionNo),
+      option,
+      left: (options[option].x / bundle.template_width) * 100,
+      top: (options[option].y / bundle.template_height) * 100,
+    }))
+  );
+}
+
 type TemplateMode = "auto-spm" | "custom" | "test";
 
 type ScanFlowState = "idle" | "warping" | "preview";
@@ -231,6 +246,10 @@ export default function OMRScanPage() {
   const [templateJson, setTemplateJson] = useState<string>("");
   const [templateMode, setTemplateMode] = useState<TemplateMode>("auto-spm");
   const [objectiveQuestionCount, setObjectiveQuestionCount] = useState<number>(MAX_SPM_TEMPLATE_QUESTIONS);
+  const answerGuideBubbles = useMemo(
+    () => buildAnswerGuideBubbles(objectiveQuestionCount),
+    [objectiveQuestionCount]
+  );
   const [isTemplateMetaLoading, setIsTemplateMetaLoading] = useState(false);
   const [isApprovalLocked, setIsApprovalLocked] = useState(false);
   const [approvalLockMessage, setApprovalLockMessage] = useState("");
@@ -907,10 +926,38 @@ export default function OMRScanPage() {
                           }}
                         />
                       ))}
-                      <div className="absolute bottom-[6%] left-[36.5%] right-[2.5%] top-[23.5%] rounded-sm border border-dashed border-sky-300/80 bg-sky-400/5">
-                        <span className="absolute left-1/2 top-2 -translate-x-1/2 whitespace-nowrap rounded bg-black/60 px-2 py-0.5 text-[9px] font-medium text-sky-100">
-                          Semua bulatan jawapan dalam zon ini
+                      <div className="absolute bottom-[6%] left-[36.5%] right-[2.5%] top-[23.5%] rounded-sm border border-sky-300/80 bg-sky-400/5">
+                        <span className="absolute left-1/2 top-2 z-10 -translate-x-1/2 whitespace-nowrap rounded bg-black/60 px-2 py-0.5 text-[9px] font-medium text-sky-100">
+                          Padankan bulatan jawapan
                         </span>
+                      </div>
+                      <div className="absolute inset-0">
+                        {answerGuideBubbles.map((bubble) => {
+                          const isFirstOption = bubble.option === "A";
+                          const showQuestionNo = isFirstOption && (bubble.questionNo === 1 || bubble.questionNo % 5 === 0);
+                          return (
+                            <span
+                              key={bubble.key}
+                              className={`absolute -translate-x-1/2 -translate-y-1/2 rounded-full border ${
+                                detectionState === "stable"
+                                  ? "border-green-300/95 bg-green-300/15"
+                                  : "border-sky-200/85 bg-sky-300/10"
+                              }`}
+                              style={{
+                                left: `${bubble.left}%`,
+                                top: `${bubble.top}%`,
+                                width: "clamp(5px, 1.6vw, 11px)",
+                                height: "clamp(5px, 1.6vw, 11px)",
+                              }}
+                            >
+                              {showQuestionNo && (
+                                <span className="absolute right-full top-1/2 mr-1 -translate-y-1/2 rounded bg-black/55 px-1 text-[7px] font-semibold leading-3 text-white/90">
+                                  {bubble.questionNo}
+                                </span>
+                              )}
+                            </span>
+                          );
+                        })}
                       </div>
                       <div className="absolute inset-x-3 bottom-3 rounded bg-black/60 px-2 py-1 text-center text-[9px] text-white/90">
                         Pastikan empat penjuru kertas kelihatan dan kamera selari
@@ -1219,10 +1266,6 @@ export default function OMRScanPage() {
                     <Button type="button" size="sm" className="gap-2">
                       <ImageUp className="h-4 w-4" />
                       Pilih Fail
-                    </Button>
-                    <Button type="button" variant="outline" size="sm" className="gap-2" onClick={(e) => { e.stopPropagation(); handlePhoneCameraCapture(); }}>
-                      <Smartphone className="h-4 w-4" />
-                      Kamera Telefon
                     </Button>
                   </div>
                 </div>

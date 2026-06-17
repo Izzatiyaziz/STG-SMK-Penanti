@@ -14,8 +14,12 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
 import { ProfileShell } from "@/components/profile/profile-shell";
+import {
+    isStrongPassword,
+    PasswordInput,
+    PasswordRequirements,
+} from "@/components/profile/password-controls";
 
 type Session = {
     user_id: string;
@@ -31,6 +35,9 @@ export default function AdminProfilePage() {
     const [currentPassword, setCurrentPassword] = useState("");
     const [newPassword, setNewPassword] = useState("");
     const [confirmPassword, setConfirmPassword] = useState("");
+    const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+    const [showNewPassword, setShowNewPassword] = useState(false);
+    const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
     const [session, setSession] = useState<Session | null>(null);
     const [sessionChecked, setSessionChecked] = useState(false);
@@ -74,8 +81,8 @@ export default function AdminProfilePage() {
             toast.error("Kata laluan semasa diperlukan");
             return;
         }
-        if (!newPassword || newPassword.length < 8) {
-            toast.error("Kata laluan baharu mesti sekurang-kurangnya 8 aksara");
+        if (!isStrongPassword(newPassword)) {
+            toast.error("Sila pastikan kata laluan baharu memenuhi semua syarat.");
             return;
         }
         if (newPassword !== confirmPassword) {
@@ -121,6 +128,12 @@ export default function AdminProfilePage() {
         setNewPassword("");
         setConfirmPassword("");
     }
+
+    const passwordIsStrong = isStrongPassword(newPassword);
+    const passwordCanSubmit =
+        passwordIsStrong &&
+        newPassword === confirmPassword &&
+        Boolean(currentPassword);
 
     return (
         <ProfileShell
@@ -213,30 +226,42 @@ export default function AdminProfilePage() {
                     <FieldGroup>
                         <Field>
                             <FieldLabel>Kata Laluan Semasa</FieldLabel>
-                            <Input
-                                type="password"
+                            <PasswordInput
                                 value={currentPassword}
-                                onChange={(e) => setCurrentPassword(e.target.value)}
+                                onChange={setCurrentPassword}
+                                show={showCurrentPassword}
+                                onToggle={() => setShowCurrentPassword((value) => !value)}
                                 required
+                                autoComplete="current-password"
                             />
                         </Field>
                         <Field>
                             <FieldLabel>Kata Laluan Baharu</FieldLabel>
-                            <Input
-                                type="password"
+                            <PasswordInput
                                 value={newPassword}
-                                onChange={(e) => setNewPassword(e.target.value)}
+                                onChange={setNewPassword}
+                                show={showNewPassword}
+                                onToggle={() => setShowNewPassword((value) => !value)}
                                 required
+                                autoComplete="new-password"
                             />
+                            <PasswordRequirements password={newPassword} />
                         </Field>
                         <Field>
                             <FieldLabel>Sahkan Kata Laluan Baharu</FieldLabel>
-                            <Input
-                                type="password"
+                            <PasswordInput
                                 value={confirmPassword}
-                                onChange={(e) => setConfirmPassword(e.target.value)}
+                                onChange={setConfirmPassword}
+                                show={showConfirmPassword}
+                                onToggle={() => setShowConfirmPassword((value) => !value)}
                                 required
+                                autoComplete="new-password"
                             />
+                            {confirmPassword && newPassword !== confirmPassword ? (
+                                <p className="text-xs font-medium text-destructive">
+                                    Kata laluan baharu dan pengesahan tidak sepadan.
+                                </p>
+                            ) : null}
                         </Field>
 
                         <div className="flex flex-col gap-3 pt-2 sm:flex-row sm:justify-end">
@@ -248,7 +273,7 @@ export default function AdminProfilePage() {
                             >
                                 Batal
                             </Button>
-                            <Button type="submit" disabled={loading}>
+                            <Button type="submit" disabled={loading || !passwordCanSubmit}>
                                 {loading ? "Menyimpan..." : "Simpan"}
                             </Button>
                         </div>

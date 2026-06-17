@@ -23,7 +23,7 @@ import {
 } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
-import { Edit, Loader2, Trash2 } from "lucide-react";
+import { Edit, Loader2, UserX } from "lucide-react";
 
 type User = {
   id: string;
@@ -69,6 +69,7 @@ export function EditTeacherDialog({
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [internalDeleteOpen, setInternalDeleteOpen] = useState(false);
+  const [inactiveOpen, setInactiveOpen] = useState(false);
 
   const deleteOpen = controlledDeleteOpen ?? internalDeleteOpen;
   const setDeleteOpen = onDeleteOpenChange ?? setInternalDeleteOpen;
@@ -180,7 +181,7 @@ export function EditTeacherDialog({
       const result = await res.json();
 
       if (!res.ok) {
-        throw new Error(result?.error || "Delete gagal");
+        throw new Error(result?.error || "Padam gagal");
       }
 
       toast.success(`${user.name} berjaya dipadam`);
@@ -189,6 +190,48 @@ export function EditTeacherDialog({
       onSuccess?.();
     } catch (err: unknown) {
       toast.error("Gagal padam guru", {
+        description: err instanceof Error ? err.message : "Sila cuba lagi",
+      });
+    } finally {
+      setDeleting(false);
+    }
+  }
+
+  async function confirmInactive() {
+    if (!user) return;
+
+    if (!user.id) {
+      toast.error("teacher_id (UUID) tiada. Sila refresh data.");
+      return;
+    }
+
+    setDeleting(true);
+
+    try {
+      const res = await fetch(`/api/admin/teacher/${user.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          teacher_id: user.id,
+          fullname: name.trim().toUpperCase(),
+          email: email.trim() ? email.trim() : null,
+          role_names: roles,
+          status: "inactive",
+        }),
+      });
+
+      const result = await res.json();
+
+      if (!res.ok) {
+        throw new Error(result?.error || "Tidak aktif gagal");
+      }
+
+      toast.success(`${user.name} telah ditandakan tidak aktif`);
+      setInactiveOpen(false);
+      onOpenChange(false);
+      onSuccess?.();
+    } catch (err: unknown) {
+      toast.error("Gagal tandakan guru tidak aktif", {
         description: err instanceof Error ? err.message : "Sila cuba lagi",
       });
     } finally {
@@ -277,11 +320,11 @@ export function EditTeacherDialog({
             <div className="flex w-full flex-col-reverse gap-2 sm:flex-row sm:justify-between">
               <Button
                 variant="destructive"
-                onClick={() => setDeleteOpen(true)}
-                disabled={!user || deleting || saving}
+                onClick={() => setInactiveOpen(true)}
+                disabled={!user || deleting || saving || user.status === "inactive"}
               >
-                <Trash2 className="w-4 h-4 mr-2" />
-                Padam
+                <UserX className="w-4 h-4 mr-2" />
+                {user?.status === "inactive" ? "Sudah Tidak Aktif" : "Tidak Aktif"}
               </Button>
 
               <div className="flex gap-2">
@@ -314,9 +357,9 @@ export function EditTeacherDialog({
               Padam Guru?
             </AlertDialogTitle>
             <AlertDialogDescription>
-              Padam rekod{" "}
+              Akaun{" "}
               <span className="font-semibold text-foreground">{user?.name}</span>
-              ?
+              {" "}akan dipadam secara kekal. Tindakan ini tidak boleh dibuat asal.
             </AlertDialogDescription>
           </AlertDialogHeader>
 
@@ -333,6 +376,38 @@ export function EditTeacherDialog({
               >
                 {deleting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
                 {deleting ? "Memadam..." : "Ya, Padam"}
+              </Button>
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={inactiveOpen} onOpenChange={setInactiveOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-destructive font-bold">
+              Jadikan Guru Tidak Aktif?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Akaun{" "}
+              <span className="font-semibold text-foreground">{user?.name}</span>
+              {" "}akan ditandakan tidak aktif dan tidak boleh log masuk lagi.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Batal</AlertDialogCancel>
+            <AlertDialogAction asChild>
+              <Button
+                variant="destructive"
+                onClick={(e) => {
+                  e.preventDefault();
+                  confirmInactive();
+                }}
+                disabled={deleting}
+              >
+                {deleting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                {deleting ? "Menyimpan..." : "Ya, Tidak Aktif"}
               </Button>
             </AlertDialogAction>
           </AlertDialogFooter>

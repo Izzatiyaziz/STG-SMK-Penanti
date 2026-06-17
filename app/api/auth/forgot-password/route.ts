@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
-import supabase from "@/lib/supabase";
-import nodemailer from "nodemailer"; // 🔥 Import Nodemailer
+import supabaseAdmin from "@/lib/supabase-admin";
+import nodemailer from "nodemailer";
 import { randomBytes } from "crypto";
 import {
     consumeRateLimit,
@@ -13,6 +13,21 @@ import {
 import { logSecurityEvent } from "@/lib/security-events";
 
 export const runtime = "nodejs";
+
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function generateTemporaryPassword() {
+    return `Temp-${randomBytes(5).toString("hex").toUpperCase()}!`;
+}
+
+function escapeHtml(value: string) {
+    return value
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+}
 
 export async function POST(req: Request) {
     try {
@@ -70,33 +85,35 @@ export async function POST(req: Request) {
         const genericSuccessMessage =
             "Jika akaun dan e-mel berdaftar wujud, arahan set semula kata laluan akan dihantar.";
 
-        // Jana kata laluan rawak sementara (Cth: temp-A1B2C)
-        const randomString = randomBytes(4).toString("hex").toUpperCase();
-        const tempPassword = `temp-${randomString}`;
-        
+        const tempPassword = generateTemporaryPassword();
         const salt = await bcrypt.genSalt(10);
         const hashedPassword = await bcrypt.hash(tempPassword, salt);
 
         let userEmail = "";
+        let userName = "";
+        let accountIdentifier = identifier;
 
         // ================= GURU =================
         if (role === "teacher") {
-            const { data: teacher, error: fetchErr } = await supabase
+            const teacherQuery = supabaseAdmin
                 .from("stg_teachers")
-                .select("teacher_id, email, fullname")
-                .eq("username", identifier)
-                .single();
+                .select("teacher_id, username, email, fullname");
+            const { data: teacher, error: fetchErr } = EMAIL_REGEX.test(identifier)
+                ? await teacherQuery.eq("email", identifier).maybeSingle()
+                : await teacherQuery.eq("username", identifier).maybeSingle();
 
             if (fetchErr || !teacher) {
                 return NextResponse.json({ message: genericSuccessMessage });
             }
 
             userEmail = String(teacher.email ?? "").trim();
+            userName = String(teacher.fullname ?? "").trim();
+            accountIdentifier = String(teacher.username ?? identifier).trim();
             if (!userEmail) {
                 return NextResponse.json({ message: genericSuccessMessage });
             }
 
-            const { error: updateErr } = await supabase
+            const { error: updateErr } = await supabaseAdmin
                 .from("stg_teachers")
                 .update({ 
                     password: hashedPassword,
@@ -109,15 +126,52 @@ export async function POST(req: Request) {
         
         // ================= ADMIN =================
         else if (role === "admin") {
-            return NextResponse.json({ message: genericSuccessMessage });
+            let { data: admin, error: fetchErr } = await supabaseAdmin
+                .from("stg_admins")
+                .select("admin_id, fullname, email")
+                .eq("admin_id", identifier)
+                .maybeSingle();
+
+            if (fetchErr?.message?.toLowerCase().includes("column")) {
+                const fallback = await supabaseAdmin
+                    .from("stg_admins")
+                    .select("admin_id, fullname")
+                    .eq("admin_id", identifier)
+                    .maybeSingle();
+                admin = fallback.data ? { ...fallback.data, email: null } : null;
+                fetchErr = fallback.error;
+            }
+
+            if (fetchErr || !admin) {
+                return NextResponse.json({ message: genericSuccessMessage });
+            }
+
+            userEmail = String(admin.email || process.env.ADMIN_EMAIL || process.env.EMAIL_USER || "").trim();
+            userName = String(admin.fullname ?? "").trim();
+            accountIdentifier = String(admin.admin_id ?? identifier).trim();
+            if (!userEmail) {
+                return NextResponse.json({ message: genericSuccessMessage });
+            }
+
+            const { error: updateErr } = await supabaseAdmin
+                .from("stg_admins")
+                .update({
+                    password: hashedPassword,
+                    is_first_login: true,
+                })
+                .eq("admin_id", admin.admin_id);
+
+            if (updateErr) throw updateErr;
         }
 
         if (!userEmail) {
             return NextResponse.json({ message: genericSuccessMessage });
         }
 
-        // ================= PENGHANTARAN E-MEL SEBENAR =================
-        // Konfigurasi transporter (Pastikan EMAIL_USER dan EMAIL_PASS ada dalam .env)
+        if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
+            throw new Error("Konfigurasi e-mel belum lengkap");
+        }
+
         const transporter = nodemailer.createTransport({
             service: "gmail",
             auth: {
@@ -126,7 +180,11 @@ export async function POST(req: Request) {
             },
         });
 
-        // Tetapan isi kandungan e-mel
+        const safeName = escapeHtml(userName || "Pengguna");
+        const safeIdentifier = escapeHtml(accountIdentifier);
+        const safePassword = escapeHtml(tempPassword);
+        const roleLabel = role === "teacher" ? "Guru" : "Admin";
+
         const mailOptions = {
             from: process.env.EMAIL_USER,
             to: userEmail,
@@ -134,12 +192,12 @@ export async function POST(req: Request) {
             html: `
                 <div style="font-family: Arial, sans-serif; padding: 20px; color: #333;">
                     <h2>Permintaan Set Semula Kata Laluan</h2>
-                    <p>Salam sejahtera,</p>
+                    <p>Salam sejahtera ${safeName},</p>
                     <p>Sistem telah menerima permintaan untuk menetapkan semula kata laluan bagi akaun anda.</p>
-                    <p>Kata laluan sementara anda adalah:</p>
-                    <h3 style="background-color: #f4f4f4; padding: 10px; display: inline-block; border-radius: 5px; letter-spacing: 2px;">
-                        ${tempPassword}
-                    </h3>
+                    <div style="background:#f4f4f4; padding:14px; border-radius:8px; display:inline-block;">
+                        <p style="margin:0 0 8px;"><strong>ID ${roleLabel}:</strong> ${safeIdentifier}</p>
+                        <p style="margin:0;"><strong>Kata laluan sementara:</strong> ${safePassword}</p>
+                    </div>
                     <p>Sila log masuk menggunakan kata laluan ini. Anda akan diminta untuk menukarnya kepada kata laluan baharu dengan segera untuk tujuan keselamatan.</p>
                     <br/>
                     <p><small>Jika anda tidak membuat permintaan ini, sila abaikan e-mel ini.</small></p>
@@ -147,7 +205,6 @@ export async function POST(req: Request) {
             `,
         };
 
-        // Arahkan nodemailer untuk hantar
         await transporter.sendMail(mailOptions);
 
         return NextResponse.json(

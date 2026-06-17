@@ -8,11 +8,7 @@ import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-	addDaysToDateInputValue,
-	formatMalaysiaDate,
-	formatMalaysiaTime,
-} from "@/lib/date-utils";
+import { formatMalaysiaDate, formatMalaysiaTime } from "@/lib/date-utils";
 import { getDeadlineForGrade } from "@/lib/marking-template";
 import {
 	Select,
@@ -137,10 +133,6 @@ const LastUpdatedTime = () => {
 
 	return <span className="font-medium text-primary">{time || "Memuatkan..."}</span>;
 };
-
-function addDays(dateValue: unknown, days: number) {
-	return addDaysToDateInputValue(String(dateValue ?? "").trim(), days);
-}
 
 function getGradeDotColor(grade: number) {
 	switch (grade) {
@@ -357,8 +349,9 @@ export default function SubjectCoordinatorDashboard() {
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [examId, session, subjectId]);
 
-	const subjectName = data?.subject?.name ?? subjects[0]?.name ?? "Matematik";
-	const coordinatorName = data?.coordinator?.name ?? "Penyelaras Matematik";
+	const selectedSubject = subjects.find((subject) => subject.id === subjectId) ?? null;
+	const subjectName = data?.subject?.name ?? selectedSubject?.name ?? "Tiada subjek";
+	const coordinatorName = data?.coordinator?.name ?? "Belum tersedia";
 	const coordinatorEmail = data?.coordinator?.email?.trim() || "Belum tersedia";
 	const selectedExam = data?.exam ?? configuredExams.find((exam) => exam.id === examId) ?? null;
 	const classSummaries = useMemo(

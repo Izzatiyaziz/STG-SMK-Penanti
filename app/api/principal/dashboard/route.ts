@@ -37,6 +37,25 @@ function normalizeGrade(value: unknown, total: number, level: number) {
 	return allowed.includes(grade) ? grade : gradeFromTotal(total, level);
 }
 
+function average(values: number[]) {
+	return values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : 0;
+}
+
+function studentAverages(rows: Array<{ student_id: string; total: number }>) {
+	const marksByStudent = new Map<string, number[]>();
+	for (const row of rows) {
+		if (!row.student_id) continue;
+		const marks = marksByStudent.get(row.student_id) ?? [];
+		marks.push(row.total);
+		marksByStudent.set(row.student_id, marks);
+	}
+
+	return Array.from(marksByStudent.entries()).map(([student_id, marks]) => ({
+		student_id,
+		average: average(marks),
+	}));
+}
+
 export async function GET(req: Request) {
 	try {
 		const guard = await requireApiRole("principal");
@@ -163,10 +182,10 @@ export async function GET(req: Request) {
 			return subjectMatch && examMatch && gradeMatch && classMatch;
 		}) : [];
 
-		const marks = filteredRows.map((row) => row.total);
-		const averageMark = marks.length ? Math.round(marks.reduce((sum, mark) => sum + mark, 0) / marks.length) : 0;
-		const passRate = filteredRows.length
-			? Math.round((filteredRows.filter((row) => row.total >= 40).length / filteredRows.length) * 100)
+		const filteredStudentAverages = studentAverages(filteredRows);
+		const averageMark = Math.round(average(filteredStudentAverages.map((row) => row.average)));
+		const passRate = filteredStudentAverages.length
+			? Math.round((filteredStudentAverages.filter((row) => row.average >= 40).length / filteredStudentAverages.length) * 100)
 			: 0;
 
 		const gradeDistribution = gradeScaleForLevels(
@@ -198,27 +217,30 @@ export async function GET(req: Request) {
 			}))
 			.sort((a, b) => b.average - a.average);
 
-		const classGroups = new Map<string, { className: string; gradeLevel: number; marks: number[] }>();
+		const classGroups = new Map<string, { className: string; gradeLevel: number; rows: typeof filteredRows }>();
 		for (const row of filteredRows) {
 			if (!row.class_id) continue;
 			const group = classGroups.get(row.class_id) ?? {
 				className: row.class_name,
 				gradeLevel: row.grade_level,
-				marks: [],
+				rows: [],
 			};
-			group.marks.push(row.total);
+			group.rows.push(row);
 			classGroups.set(row.class_id, group);
 		}
 
 		const classPerformance = Array.from(classGroups.entries())
-			.map(([class_id, group]) => ({
-				class_id,
-				className: group.className,
-				gradeLevel: group.gradeLevel,
-				classTeacherName: classTeacherByClassId.get(class_id) ?? "-",
-				average: group.marks.length ? Math.round(group.marks.reduce((sum, mark) => sum + mark, 0) / group.marks.length) : 0,
-				results: group.marks.length,
-			}))
+			.map(([class_id, group]) => {
+				const averages = studentAverages(group.rows);
+				return {
+					class_id,
+					className: group.className,
+					gradeLevel: group.gradeLevel,
+					classTeacherName: classTeacherByClassId.get(class_id) ?? "-",
+					average: Math.round(average(averages.map((row) => row.average))),
+					results: averages.length,
+				};
+			})
 			.sort((a, b) => a.gradeLevel - b.gradeLevel || a.className.localeCompare(b.className));
 
 		const trendScopedRows = hasSelectedGrade ? allRows.filter((row) => {
@@ -228,11 +250,11 @@ export async function GET(req: Request) {
 			return subjectMatch && gradeMatch && classMatch;
 		}) : [];
 		const trend = approvedExams.map(([examId, exam]) => {
-			const examMarks = trendScopedRows.filter((row) => row.exam_id === examId).map((row) => row.total);
+			const examStudentAverages = studentAverages(trendScopedRows.filter((row) => row.exam_id === examId));
 			return {
 				exam: exam.name,
 				year: exam.year,
-				average: examMarks.length ? Math.round(examMarks.reduce((sum, mark) => sum + mark, 0) / examMarks.length) : 0,
+				average: Math.round(average(examStudentAverages.map((row) => row.average))),
 			};
 		});
 

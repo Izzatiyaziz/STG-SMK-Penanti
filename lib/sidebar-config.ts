@@ -142,6 +142,10 @@ export const sidebarConfig = {
                         url: "/admin/users",
                     },*/
                     {
+                        title: "Admin",
+                        url: "/admin/admins",
+                    },
+                    {
                         title: "Guru",
                         url: "/admin/teacher",
                     },

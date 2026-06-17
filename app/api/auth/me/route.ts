@@ -53,11 +53,21 @@ export async function POST() {
 
         // ================= ADMIN =================
         if (role === "admin") {
-            const { data, error } = await supabase
+            let { data, error } = await supabase
                 .from("stg_admins")
-                .select("admin_id, fullname")
+                .select("admin_id, fullname, email")
                 .eq("admin_id", user_id)
                 .single();
+
+            if (error?.message?.toLowerCase().includes("column")) {
+                const fallback = await supabase
+                    .from("stg_admins")
+                    .select("admin_id, fullname")
+                    .eq("admin_id", user_id)
+                    .single();
+                data = fallback.data ? { ...fallback.data, email: null } : null;
+                error = fallback.error;
+            }
 
             if (error || !data) {
                 return NextResponse.json(
@@ -69,7 +79,7 @@ export async function POST() {
             return NextResponse.json({
                 role: "admin",
                 name: data.fullname,
-                email: "admin@smkpenanti.edu.my",
+                email: data.email ?? "admin@smkpenanti.edu.my",
                 avatar: "/img/admin-avatar.png",
             });
         }

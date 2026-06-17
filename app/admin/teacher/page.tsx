@@ -88,6 +88,7 @@ export default function UsersPage() {
     const [loading, setLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState("");
     const [filterRole, setFilterRole] = useState<string>("all");
+    const [filterStatus, setFilterStatus] = useState<"active" | "inactive">("active");
     const [sortBy, setSortBy] = useState<"name" | "roles" | "date">("name");
     const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
     const [currentPage, setCurrentPage] = useState(1);
@@ -122,8 +123,9 @@ export default function UsersPage() {
                 user.email?.toLowerCase().includes(searchQuery.toLowerCase());
 
             const matchesRole = filterRole === "all" || user.roles.includes(filterRole);
+            const matchesStatus = (user.status ?? "active") === filterStatus;
 
-            return matchesSearch && matchesRole;
+            return matchesSearch && matchesRole && matchesStatus;
         })
         .sort((a, b) => {
             let compareA, compareB;
@@ -156,7 +158,7 @@ export default function UsersPage() {
 
     useEffect(() => {
         setCurrentPage(1);
-    }, [searchQuery, filterRole, sortBy, sortOrder]);
+    }, [searchQuery, filterRole, filterStatus, sortBy, sortOrder]);
 
     useEffect(() => {
         const totalPages = Math.max(1, Math.ceil(filteredUsers.length / PAGE_SIZE));
@@ -188,12 +190,15 @@ export default function UsersPage() {
     }, [currentPage, totalPages]);
 
     // ================= STATS =================
+        const activeUsers = users.filter((u) => (u.status ?? "active") === "active");
         const stats = {
-        total: users.length,
-        classTeachers: users.filter((u) => u.roles.includes("class teacher")).length,
-        subjectTeachers: users.filter((u) => u.roles.includes("subject teacher")).length,
-        coordinators: users.filter((u) => u.roles.includes("subject coordinator")).length,
-        principals: users.filter((u) => u.roles.includes("principal")).length,
+        total: activeUsers.length,
+        classTeachers: activeUsers.filter((u) => u.roles.includes("class teacher")).length,
+        subjectTeachers: activeUsers.filter((u) => u.roles.includes("subject teacher")).length,
+        coordinators: activeUsers.filter((u) => u.roles.includes("subject coordinator")).length,
+        principals: activeUsers.filter((u) => u.roles.includes("principal")).length,
+        active: activeUsers.length,
+        inactive: users.filter((u) => u.status === "inactive").length,
         };
 
     // ================= ROLE COLORS =================
@@ -533,11 +538,27 @@ export default function UsersPage() {
                             </Select>
                             </div>
 
+                            <div className="w-full sm:w-[170px]">
+                            <Select
+                                value={filterStatus}
+                                onValueChange={(value) => setFilterStatus(value as "active" | "inactive")}
+                            >
+                                <SelectTrigger className="h-11 rounded-lg border-border bg-background">
+                                <SelectValue placeholder="Status" />
+                                </SelectTrigger>
+                                <SelectContent className="rounded-lg border-border">
+                                <SelectItem value="active">Aktif</SelectItem>
+                                <SelectItem value="inactive">Tidak Aktif</SelectItem>
+                                </SelectContent>
+                            </Select>
+                            </div>
+
                             <Button
                             variant="outline"
                             onClick={() => {
                                 setSearchQuery("");
                                 setFilterRole("all");
+                                setFilterStatus("active");
                                 setSortBy("name");
                                 setSortOrder("asc");
                             }}
@@ -594,6 +615,9 @@ export default function UsersPage() {
                                                     )}
                                                 </Button>
                                             </TableHead>
+                                            <TableHead className="font-semibold text-foreground py-4">
+                                                Status
+                                            </TableHead>
                                             <TableHead className="font-semibold text-foreground py-4 text-right pr-6">
                                                 Tindakan
                                             </TableHead>
@@ -603,7 +627,7 @@ export default function UsersPage() {
                                     <TableBody>
                                         {loading ? (
                                             <TableRow>
-                                                <TableCell colSpan={6} className="py-16">
+                                                <TableCell colSpan={7} className="py-16">
                                                     <div className="flex flex-col items-center justify-center gap-4">
                                                         <div className="relative">
                                                             <Loader2 className="w-10 h-10 animate-spin text-primary" />
@@ -617,7 +641,7 @@ export default function UsersPage() {
                                             </TableRow>
                                         ) : filteredUsers.length === 0 ? (
                                             <TableRow>
-                                                <TableCell colSpan={6} className="py-16">
+                                                <TableCell colSpan={7} className="py-16">
                                                     <div className="flex flex-col items-center justify-center gap-4">
                                                         <div className="p-4 rounded-full bg-muted/50">
                                                             <Users className="w-12 h-12 text-muted-foreground/50" />
@@ -709,7 +733,7 @@ export default function UsersPage() {
 
       {/* Peranan */}
       <TableCell className="py-4">
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-col items-start gap-2">
           {user.roles.map((roles) => {
             const roleColors = getRoleColor(roles);
 
@@ -735,6 +759,19 @@ export default function UsersPage() {
             );
           })}
         </div>
+      </TableCell>
+
+      {/* Status */}
+      <TableCell className="py-4">
+        {user.status === "inactive" ? (
+          <Badge variant="outline" className="border-slate-300 bg-slate-50 text-slate-700">
+            Tidak Aktif
+          </Badge>
+        ) : (
+          <Badge variant="outline" className="border-emerald-300 bg-emerald-50 text-emerald-700">
+            Aktif
+          </Badge>
+        )}
       </TableCell>
 
       {/* Tindakan */}
@@ -784,6 +821,12 @@ export default function UsersPage() {
                                         <span className="font-semibold text-foreground">{users.length}</span>
                                         <span>guru</span>
                                     </div>
+                                    <Badge variant="outline" className="ml-2 border-emerald-300 bg-emerald-50 text-emerald-700">
+                                        {stats.active} aktif
+                                    </Badge>
+                                    <Badge variant="outline" className="ml-1 border-slate-300 bg-slate-50 text-slate-700">
+                                        {stats.inactive} tidak aktif
+                                    </Badge>
                                     {filterRole !== "all" && (
                                         <Badge variant="secondary" className="ml-2">
                                             {filterRole === "class teacher" ? "Guru Kelas" :

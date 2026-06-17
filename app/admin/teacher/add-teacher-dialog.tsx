@@ -141,7 +141,7 @@ export function AddTeacherDialog({ onSuccess, children }: AddTeacherDialogProps)
         return;
       }
 
-      toast.success("Akaun berjaya dibuat");
+      toast.success(data?.message || "Akaun berjaya dibuat dan e-mel telah dihantar");
       setOpen(false);
       onSuccess?.();
     } catch {
@@ -197,7 +197,7 @@ export function AddTeacherDialog({ onSuccess, children }: AddTeacherDialogProps)
 
         <form onSubmit={handleSubmit} noValidate className="space-y-5">
           <div className="rounded-xl bg-muted p-4">
-            <Label className="text-xs">Staff ID</Label>
+            <Label className="text-xs">No. Staff</Label>
             <div className="font-mono font-bold text-primary">{generatedId}</div>
           </div>
 
@@ -323,7 +323,7 @@ export function AddTeacherDialog({ onSuccess, children }: AddTeacherDialogProps)
 
           <div className="pt-2 border-t border-border/20">
             <p className="text-xs text-muted-foreground text-center">
-              Password default guru buat masa ini ialah <span className="font-mono">123456</span> (tiada e-mel dihantar).
+              No. Staff dan kata laluan sementara akan dihantar ke e-mel guru yang didaftarkan.
             </p>
           </div>
         </form>
