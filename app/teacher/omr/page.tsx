@@ -121,8 +121,38 @@ function buildSpmTemplateBundle(
   };
 }
 
+function buildAnswerRegionTemplateBundle(
+  questionCount: number
+): Required<Pick<TemplateBundle, "template_width" | "template_height" | "template" | "answer_region">> {
+  const fullBundle = buildSpmTemplateBundle(questionCount, "camera");
+  const region = fullBundle.answer_region;
+  const fullTemplate = fullBundle.template as Record<string, Record<"A" | "B" | "C" | "D", { x: number; y: number; r: number }>>;
+  const template = Object.fromEntries(
+    Object.entries(fullTemplate).map(([questionNo, options]) => [
+      questionNo,
+      Object.fromEntries(
+        (["A", "B", "C", "D"] as const).map((option) => [
+          option,
+          {
+            x: options[option].x - region.x,
+            y: options[option].y - region.y,
+            r: options[option].r,
+          },
+        ])
+      ),
+    ])
+  );
+
+  return {
+    template_width: region.width,
+    template_height: region.height,
+    answer_region: { x: 0, y: 0, width: region.width, height: region.height },
+    template,
+  };
+}
+
 function buildAnswerGuideBubbles(questionCount: number) {
-  const bundle = buildSpmTemplateBundle(questionCount, "camera");
+  const bundle = buildAnswerRegionTemplateBundle(questionCount);
   const template = bundle.template as Record<string, Record<"A" | "B" | "C" | "D", { x: number; y: number; r: number }>>;
 
   return Object.entries(template).flatMap(([questionNo, options]) =>
@@ -179,6 +209,52 @@ async function optimizeOmrImage(imageDataUrl: string) {
   return canvas.toDataURL("image/jpeg", OMR_JPEG_QUALITY);
 }
 
+function drawVideoRegionToCanvas(
+  video: HTMLVideoElement,
+  canvas: HTMLCanvasElement,
+  videoRect: DOMRect,
+  targetRect: DOMRect
+) {
+  const videoWidth = video.videoWidth;
+  const videoHeight = video.videoHeight;
+  if (!videoWidth || !videoHeight) return false;
+
+  const displayWidth = videoRect.width;
+  const displayHeight = videoRect.height;
+  const videoAspect = videoWidth / videoHeight;
+  const displayAspect = displayWidth / displayHeight;
+
+  let scale = displayWidth / videoWidth;
+  let renderedWidth = displayWidth;
+  let renderedHeight = videoHeight * scale;
+  let offsetX = 0;
+  let offsetY = (displayHeight - renderedHeight) / 2;
+
+  if (videoAspect > displayAspect) {
+    scale = displayHeight / videoHeight;
+    renderedWidth = videoWidth * scale;
+    renderedHeight = displayHeight;
+    offsetX = (displayWidth - renderedWidth) / 2;
+    offsetY = 0;
+  }
+
+  const targetX = targetRect.left - videoRect.left;
+  const targetY = targetRect.top - videoRect.top;
+  const sourceX = Math.max(0, Math.round((targetX - offsetX) / scale));
+  const sourceY = Math.max(0, Math.round((targetY - offsetY) / scale));
+  const sourceWidth = Math.min(videoWidth - sourceX, Math.round(targetRect.width / scale));
+  const sourceHeight = Math.min(videoHeight - sourceY, Math.round(targetRect.height / scale));
+
+  if (sourceWidth <= 0 || sourceHeight <= 0) return false;
+
+  canvas.width = sourceWidth;
+  canvas.height = sourceHeight;
+  const context = canvas.getContext("2d");
+  if (!context) return false;
+  context.drawImage(video, sourceX, sourceY, sourceWidth, sourceHeight, 0, 0, sourceWidth, sourceHeight);
+  return true;
+}
+
 function toId(v: unknown) {
   return typeof v === "string" ? v.trim() : v == null ? "" : String(v).trim();
 }
@@ -211,6 +287,8 @@ export default function OMRScanPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const cameraViewportRef = useRef<HTMLDivElement>(null);
+  const answerGuideRef = useRef<HTMLDivElement>(null);
 
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -229,6 +307,7 @@ export default function OMRScanPage() {
   const [warpedImage, setWarpedImage] = useState<string | null>(null);
   const [cornersFound, setCornersFound] = useState(false);
   const [capturedImageIsWarped, setCapturedImageIsWarped] = useState(false);
+  const [capturedAnswerRegionOnly, setCapturedAnswerRegionOnly] = useState(false);
   const [autoCapture, setAutoCapture] = useState<boolean>(() => {
     if (typeof window === "undefined") return true;
     return localStorage.getItem("stg_omr_autocapture") !== "false";
@@ -519,6 +598,7 @@ export default function OMRScanPage() {
       const optimizedImage = await optimizeOmrImage(rawImage);
       setCapturedImage(optimizedImage);
       setCapturedImageIsWarped(false);
+      setCapturedAnswerRegionOnly(false);
       setImageSourceLabel(label);
       setImageProcessingProfile(profile);
       stopCamera();
@@ -531,6 +611,32 @@ export default function OMRScanPage() {
       toast.error("Gagal memproses imej");
       setScanFlowState("idle");
       setCapturedImage(null);
+      setCapturedAnswerRegionOnly(false);
+      startCamera();
+    } finally {
+      captureInProgressRef.current = false;
+    }
+  }, [stopCamera, startCamera]);
+
+  const handleAnswerRegionCapture = useCallback(async (rawImage: string, label: string) => {
+    if (captureInProgressRef.current) return;
+    captureInProgressRef.current = true;
+    try {
+      const optimizedImage = await optimizeOmrImage(rawImage);
+      setCapturedImage(optimizedImage);
+      setCapturedImageIsWarped(true);
+      setCapturedAnswerRegionOnly(true);
+      setWarpedImage(null);
+      setCornersFound(false);
+      setImageSourceLabel(label);
+      setImageProcessingProfile("camera");
+      stopCamera();
+      setScanFlowState("idle");
+    } catch {
+      toast.error("Gagal memproses imej jawapan");
+      setScanFlowState("idle");
+      setCapturedImage(null);
+      setCapturedAnswerRegionOnly(false);
       startCamera();
     } finally {
       captureInProgressRef.current = false;
@@ -541,6 +647,7 @@ export default function OMRScanPage() {
     if (!warpedImage) return;
     setCapturedImage(warpedImage);
     setCapturedImageIsWarped(cornersFound);
+    setCapturedAnswerRegionOnly(false);
     setScanFlowState("idle");
   }
 
@@ -548,6 +655,7 @@ export default function OMRScanPage() {
     setScanFlowState("idle");
     setCapturedImage(null);
     setCapturedImageIsWarped(false);
+    setCapturedAnswerRegionOnly(false);
     setWarpedImage(null);
     captureInProgressRef.current = false;
     startCamera();
@@ -567,13 +675,25 @@ export default function OMRScanPage() {
     const canvas = canvasRef.current;
     const video = videoRef.current;
     if (!video.videoWidth || !video.videoHeight) return;
+    if (answerGuideRef.current) {
+      const ok = drawVideoRegionToCanvas(
+        video,
+        canvas,
+        video.getBoundingClientRect(),
+        answerGuideRef.current.getBoundingClientRect()
+      );
+      if (!ok) return;
+      const raw = canvas.toDataURL("image/png");
+      void handleAnswerRegionCapture(raw, "Diambil automatik dari zon jawapan");
+      return;
+    }
     const ctx = canvas.getContext("2d");
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
     ctx?.drawImage(video, 0, 0, canvas.width, canvas.height);
     const raw = canvas.toDataURL("image/png");
     void handleCaptureAndWarp(raw, "Diambil automatik — kertas dikesan", "camera");
-  }, [autoCapture, handleCaptureAndWarp]);
+  }, [autoCapture, handleAnswerRegionCapture, handleCaptureAndWarp]);
 
   const { detectionState } = useDocumentDetection({
     videoRef: videoRef as React.RefObject<HTMLVideoElement>,
@@ -588,6 +708,18 @@ export default function OMRScanPage() {
     const video = videoRef.current;
     const ctx = canvas.getContext("2d");
     if (!video.videoWidth || !video.videoHeight) { toast.error("Tunggu pratonton kamera muncul dahulu"); return; }
+    if (answerGuideRef.current) {
+      const ok = drawVideoRegionToCanvas(
+        video,
+        canvas,
+        video.getBoundingClientRect(),
+        answerGuideRef.current.getBoundingClientRect()
+      );
+      if (!ok) { toast.error("Zon jawapan belum dapat dikesan pada paparan"); return; }
+      const raw = canvas.toDataURL("image/png");
+      void handleAnswerRegionCapture(raw, "Diambil dari zon jawapan");
+      return;
+    }
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
     ctx?.drawImage(video, 0, 0, canvas.width, canvas.height);
@@ -640,7 +772,9 @@ export default function OMRScanPage() {
     let template: unknown = null;
     try {
       const parsed = (
-        templateMode === "auto-spm"
+        capturedAnswerRegionOnly
+          ? buildAnswerRegionTemplateBundle(objectiveQuestionCount)
+          : templateMode === "auto-spm"
           ? buildSpmTemplateBundle(objectiveQuestionCount, imageProcessingProfile)
           : templateJson.trim()
             ? JSON.parse(templateJson)
@@ -664,7 +798,7 @@ export default function OMRScanPage() {
         body: JSON.stringify({
           teacher_id: teacherId, student_id, subject_id, exam_id, class_id,
           image_base64: capturedImage, template_width, template_height, answer_region, template,
-          already_warped: capturedImageIsWarped,
+          already_warped: capturedImageIsWarped || capturedAnswerRegionOnly,
           processing_profile: imageProcessingProfile,
           min_mark_threshold: Number(minMarkThreshold) || 0.30,
           ambiguity_gap: Number(ambiguityGap) || 0.06,
@@ -857,7 +991,7 @@ export default function OMRScanPage() {
           <div className="md:col-span-2 flex flex-col">
 
             {/* Camera viewport */}
-            <div className="relative bg-black overflow-hidden md:rounded-xl md:border md:border-border/50">
+            <div ref={cameraViewportRef} className="relative bg-black overflow-hidden md:rounded-xl md:border md:border-border/50">
               {!capturedImage ? (
                 <>
                   <video
@@ -903,14 +1037,15 @@ export default function OMRScanPage() {
                   {/* Alignment guide */}
                   <div className="pointer-events-none absolute inset-0 flex items-center justify-center px-8 py-12">
                     <div
-                      className={`relative h-full max-h-[92%] aspect-[955/1280] border transition-colors ${
+                      ref={answerGuideRef}
+                      className={`relative h-full max-h-[88%] aspect-[580/900] border transition-colors ${
                         detectionState === "stable"
                           ? "border-green-400/90 bg-green-400/5"
                           : "border-white/55 bg-black/5"
                       }`}
                     >
                       <div className="absolute -top-7 left-1/2 -translate-x-1/2 rounded-t-md bg-black/70 px-3 py-1 text-[10px] font-semibold tracking-wide text-white">
-                        ATAS KERTAS
+                        ZON JAWAPAN
                       </div>
                       {["top-0 left-0", "top-0 right-0", "bottom-0 left-0", "bottom-0 right-0"].map((pos) => (
                         <span
@@ -926,7 +1061,7 @@ export default function OMRScanPage() {
                           }}
                         />
                       ))}
-                      <div className="absolute bottom-[6%] left-[36.5%] right-[2.5%] top-[23.5%] rounded-sm border border-sky-300/80 bg-sky-400/5">
+                      <div className="absolute inset-0 rounded-sm border border-sky-300/80 bg-sky-400/5">
                         <span className="absolute left-1/2 top-2 z-10 -translate-x-1/2 whitespace-nowrap rounded bg-black/60 px-2 py-0.5 text-[9px] font-medium text-sky-100">
                           Padankan bulatan jawapan
                         </span>
@@ -960,7 +1095,7 @@ export default function OMRScanPage() {
                         })}
                       </div>
                       <div className="absolute inset-x-3 bottom-3 rounded bg-black/60 px-2 py-1 text-center text-[9px] text-white/90">
-                        Pastikan empat penjuru kertas kelihatan dan kamera selari
+                        Pastikan semua bulatan jawapan masuk dalam kotak
                       </div>
                     </div>
                   </div>
