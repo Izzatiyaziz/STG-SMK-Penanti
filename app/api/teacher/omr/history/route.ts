@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireApiRole } from "@/lib/auth";
 import supabaseAdmin from "@/lib/supabase-admin";
+import { getActiveAcademicYearFromValues } from "@/lib/academic-year";
 
 export const runtime = "nodejs";
 
@@ -64,6 +65,9 @@ export async function GET(req: Request) {
     if (scansErr) return NextResponse.json({ message: scansErr.message }, { status: 500 });
 
     const rows = (Array.isArray(scans) ? scans : []) as unknown as ScanRow[];
+    const activeAcademicYear = getActiveAcademicYearFromValues(
+      rows.map((row) => row.stg_exams?.academic_year),
+    );
     const scanIds = rows.map((row) => toId(row.omr_scan_id)).filter(Boolean);
     const { data: answerRows, error: answersErr } = scanIds.length
       ? await supabaseAdmin
@@ -78,6 +82,7 @@ export async function GET(req: Request) {
 
     const data = rows
       .filter((row) => {
+        if (toId(row.stg_exams?.academic_year) !== activeAcademicYear) return false;
         if (!realOmrScanIds.has(toId(row.omr_scan_id))) return false;
         const studentClassId = String(row.stg_students?.class_id ?? "");
         const rowSubjectId = String(row.subject_id ?? "");

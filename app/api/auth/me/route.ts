@@ -19,7 +19,7 @@ export async function POST() {
         if (role === "student") {
             const { data, error } = await supabase
                 .from("stg_students")
-                .select("student_id, ic_number, fullname, status, class_id, created_at, level")
+                .select("student_id, ic_number, fullname, status, class_id, created_at, enrollment_date, level")
                 .eq("student_id", user_id)
                 .single();
 
@@ -31,22 +31,28 @@ export async function POST() {
             }
 
             let class_name = "";
+            let class_grade: number | null = null;
             if (data.class_id) {
                 const { data: cls } = await supabase
                     .from("stg_classes")
-                    .select("class_name")
+                    .select("class_name, grade")
                     .eq("class_id", data.class_id)
                     .maybeSingle();
                 class_name = String(cls?.class_name ?? "").trim();
+                class_grade = typeof cls?.grade === "number" ? cls.grade : cls?.grade ? Number(cls.grade) : null;
             }
 
             return NextResponse.json({
                 role: "student",
+                student_id: data.student_id,
                 ic_number: data.ic_number,
                 name: data.fullname,
                 status: data.status ?? "active",
+                class_id: data.class_id,
                 class_name,
+                class_grade: Number.isFinite(class_grade) ? class_grade : null,
                 level: data.level ?? null,
+                enrollment_date: data.enrollment_date ?? null,
                 created_at: data.created_at,
             });
         }

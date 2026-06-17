@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import supabaseAdmin from "@/lib/supabase-admin";
 import { requireApiRole } from "@/lib/auth";
+import { filterByActiveAcademicYear } from "@/lib/academic-year";
 
 export const runtime = "nodejs";
 
@@ -67,8 +68,10 @@ export async function GET() {
       return NextResponse.json({ data: [] }, { status: 200 });
     }
 
+    const activeRows = filterByActiveAcademicYear((data ?? []) as ExamRow[], (exam) => exam.academic_year);
+
     return NextResponse.json({
-      data: ((data ?? []) as ExamRow[]).map((e) => ({
+      data: activeRows.map((e) => ({
         id: e.exam_id,
         name: e.exam_name,
         year: e.academic_year,

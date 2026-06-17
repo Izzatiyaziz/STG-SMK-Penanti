@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import supabase from "@/lib/supabase";
 import { requireApiRole } from "@/lib/auth";
+import { getActiveAcademicYearFromValues } from "@/lib/academic-year";
 
 export const runtime = "nodejs";
 
@@ -19,6 +20,13 @@ function statusRank(status: string) {
 	if (status === "rejected") return 1;
 	return 0;
 }
+
+type AssignmentRow = { teacher_subject_id?: unknown; teacher_id?: unknown; class_id?: unknown };
+type ClassRow = { class_id?: unknown; class_name?: unknown; grade?: unknown };
+type TeacherRow = { teacher_id?: unknown; fullname?: unknown };
+type StudentRow = { student_id?: unknown; fullname?: unknown; class_id?: unknown };
+type SubjectiveMarkRow = { subjective_id?: unknown; teacher_id?: unknown; student_id?: unknown };
+type ResultRow = { student_id?: unknown; total?: unknown; grade?: unknown; status?: unknown; subjective_id?: unknown };
 
 async function isCoordinatorForSubject(params: {
 	coordinator_teacher_id: string;
@@ -88,6 +96,19 @@ export async function GET(req: Request) {
 			exam?.subject_settings && typeof exam.subject_settings === "object"
 				? (exam.subject_settings as Record<string, unknown>)
 				: {};
+
+		const { data: yearRows } = await supabase
+			.from("stg_exams")
+			.select("academic_year")
+			.order("academic_year", { ascending: false })
+			.limit(200);
+		const activeAcademicYear = getActiveAcademicYearFromValues(
+			(Array.isArray(yearRows) ? yearRows : []).map((row) => row.academic_year),
+		);
+		if (toId(exam?.academic_year) !== activeAcademicYear) {
+			return NextResponse.json({ message: "Peperiksaan ini telah diarkibkan" }, { status: 403 });
+		}
+
 		const subjectSettingsRaw = subjectSettingsAll[subject_id];
 		const subjectSettings =
 			subjectSettingsRaw && typeof subjectSettingsRaw === "object"
@@ -103,11 +124,12 @@ export async function GET(req: Request) {
 			return NextResponse.json({ message: aErr.message }, { status: 500 });
 		}
 
+		const assignmentRows = (assignments ?? []) as AssignmentRow[];
 		const classIds = Array.from(
-			new Set((assignments ?? []).map((a: any) => toId(a.class_id))),
+			new Set(assignmentRows.map((a) => toId(a.class_id))),
 		).filter(Boolean);
 		const teacherIds = Array.from(
-			new Set((assignments ?? []).map((a: any) => toId(a.teacher_id))),
+			new Set(assignmentRows.map((a) => toId(a.teacher_id))),
 		).filter(Boolean);
 
 		const [{ data: classes }, { data: teachers }, { data: students }] =
@@ -136,20 +158,18 @@ export async function GET(req: Request) {
 			string,
 			{ id: string; name: string; grade: number }
 		>();
-		for (const c of Array.isArray(classes) ? classes : []) {
-			if (!c || typeof c !== "object") continue;
-			const id = toId((c as any).class_id);
-			const name = String((c as any).class_name ?? "");
-			const grade = Number((c as any).grade ?? 0);
+		for (const c of (Array.isArray(classes) ? classes : []) as ClassRow[]) {
+			const id = toId(c.class_id);
+			const name = String(c.class_name ?? "");
+			const grade = Number(c.grade ?? 0);
 			if (id)
 				classById.set(id, { id, name, grade: Number.isFinite(grade) ? grade : 0 });
 		}
 
 		const teacherNameById = new Map<string, string>();
-		for (const t of Array.isArray(teachers) ? teachers : []) {
-			if (!t || typeof t !== "object") continue;
-			const id = toId((t as any).teacher_id);
-			const name = String((t as any).fullname ?? "");
+		for (const t of (Array.isArray(teachers) ? teachers : []) as TeacherRow[]) {
+			const id = toId(t.teacher_id);
+			const name = String(t.fullname ?? "");
 			if (id) teacherNameById.set(id, name);
 		}
 
@@ -157,11 +177,10 @@ export async function GET(req: Request) {
 			string,
 			Array<{ id: string; name: string }>
 		>();
-		for (const s of Array.isArray(students) ? students : []) {
-			if (!s || typeof s !== "object") continue;
-			const sid = toId((s as any).student_id);
-			const cid = toId((s as any).class_id);
-			const name = String((s as any).fullname ?? "");
+		for (const s of (Array.isArray(students) ? students : []) as StudentRow[]) {
+			const sid = toId(s.student_id);
+			const cid = toId(s.class_id);
+			const name = String(s.fullname ?? "");
 			if (!sid || !cid) continue;
 			if (!studentsByClassId.has(cid)) studentsByClassId.set(cid, []);
 			studentsByClassId.get(cid)!.push({ id: sid, name });
@@ -196,10 +215,9 @@ export async function GET(req: Request) {
 		]);
 
 		const subjectiveTeacherByStudentId = new Map<string, string>();
-		for (const m of Array.isArray(subjectiveMarks) ? subjectiveMarks : []) {
-			if (!m || typeof m !== "object") continue;
-			const sid = toId((m as any).student_id);
-			const tid = toId((m as any).teacher_id);
+		for (const m of (Array.isArray(subjectiveMarks) ? subjectiveMarks : []) as SubjectiveMarkRow[]) {
+			const sid = toId(m.student_id);
+			const tid = toId(m.teacher_id);
 			if (sid && tid) subjectiveTeacherByStudentId.set(sid, tid);
 		}
 
@@ -207,15 +225,14 @@ export async function GET(req: Request) {
 			string,
 			{ total: number; grade: string; status: string; hasSubjective: boolean }
 		>();
-		for (const r of Array.isArray(results) ? results : []) {
-			if (!r || typeof r !== "object") continue;
-			const sid = toId((r as any).student_id);
+		for (const r of (Array.isArray(results) ? results : []) as ResultRow[]) {
+			const sid = toId(r.student_id);
 			if (!sid) continue;
 			const nextResult = {
-				total: toNumber((r as any).total),
-				grade: String((r as any).grade ?? ""),
-				status: String((r as any).status ?? "pending"),
-				hasSubjective: Boolean((r as any).subjective_id),
+				total: toNumber(r.total),
+				grade: String(r.grade ?? ""),
+				status: String(r.status ?? "pending"),
+				hasSubjective: Boolean(r.subjective_id),
 			};
 			const currentResult = resultByStudentId.get(sid);
 			if (!currentResult || statusRank(nextResult.status) > statusRank(currentResult.status)) {
@@ -224,8 +241,8 @@ export async function GET(req: Request) {
 		}
 
 		const gradeCounts: Record<string, number> = { A: 0, B: 0, C: 0, D: 0, E: 0 };
-		const classSummaries = (assignments ?? [])
-			.map((a: any) => {
+		const classSummaries = assignmentRows
+			.map((a) => {
 				const class_id = toId(a.class_id);
 				const assignedTeacherId = toId(a.teacher_id);
 				const classInfo = classById.get(class_id);

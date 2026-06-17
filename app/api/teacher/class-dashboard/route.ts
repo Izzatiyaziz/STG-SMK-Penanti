@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import supabase from "@/lib/supabase";
 import { requireApiRole } from "@/lib/auth";
 import { compareExamsChronologically } from "@/lib/exam-utils";
+import { getActiveAcademicYearFromValues } from "@/lib/academic-year";
 
 export const runtime = "nodejs";
 
@@ -155,10 +156,14 @@ export async function GET(req: Request) {
 			subjectNameById.set(id, toId(subject.subject_name) || id);
 		}
 
+		const activeAcademicYear = getActiveAcademicYearFromValues(
+			((exams ?? []) as ExamRow[]).map((exam) => exam.academic_year),
+		);
 		const examById = new Map<string, { id: string; name: string; academic_year: string }>();
 		for (const exam of (exams ?? []) as ExamRow[]) {
 			const id = toId(exam.exam_id);
 			if (!id) continue;
+			if (toId(exam.academic_year) !== activeAcademicYear) continue;
 			examById.set(id, {
 				id,
 				name: toId(exam.exam_name) || id,
@@ -177,6 +182,7 @@ export async function GET(req: Request) {
 			const subjectId = toId(result.subject_id);
 			const total = toNumber(result.total);
 			if (!examId || !studentId || !subjectId) continue;
+			if (!examById.has(examId)) continue;
 
 			if (!marksByExamStudent.has(examId)) marksByExamStudent.set(examId, new Map());
 			const studentMap = marksByExamStudent.get(examId)!;

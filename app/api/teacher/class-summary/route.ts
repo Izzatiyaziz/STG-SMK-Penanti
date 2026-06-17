@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import supabaseAdmin from "@/lib/supabase-admin";
 import { requireApiRole } from "@/lib/auth";
+import { getActiveAcademicYearFromValues } from "@/lib/academic-year";
 
 export const runtime = "nodejs";
 
@@ -61,6 +62,24 @@ export async function GET(req: Request) {
         }
         if (!Array.isArray(assignment) || assignment.length === 0) {
             return NextResponse.json({ message: "Akses ditolak" }, { status: 403 });
+        }
+
+        const { data: selectedExam } = await supabaseAdmin
+            .from("stg_exams")
+            .select("academic_year")
+            .eq("exam_id", exam_id)
+            .maybeSingle();
+        const { data: yearRows } = await supabaseAdmin
+            .from("stg_exams")
+            .select("academic_year")
+            .order("academic_year", { ascending: false })
+            .limit(200);
+        const activeAcademicYear = getActiveAcademicYearFromValues(
+            (Array.isArray(yearRows) ? yearRows : []).map((exam) => exam.academic_year)
+        );
+
+        if (toId(selectedExam?.academic_year) !== activeAcademicYear) {
+            return NextResponse.json({ message: "Peperiksaan ini telah diarkibkan" }, { status: 403 });
         }
 
         const [{ data: classInfo }, { data: students }] = await Promise.all([
@@ -226,6 +245,7 @@ export async function GET(req: Request) {
         for (const row of (Array.isArray(trendResults) ? trendResults : []) as TrendResultRow[]) {
             const examId = toId(row.exam_id);
             if (!examId) continue;
+            if (examById.get(examId)?.year !== activeAcademicYear) continue;
             const current = trendGroups.get(examId) ?? { total: 0, results: 0 };
             current.total += toNumber(row.total);
             current.results += 1;

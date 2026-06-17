@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { requireApiRole } from "@/lib/auth";
 import supabaseAdmin from "@/lib/supabase-admin";
+import { getActiveAcademicYearFromValues } from "@/lib/academic-year";
 
 export const runtime = "nodejs";
 
@@ -88,10 +89,22 @@ export async function PATCH(req: Request) {
 
 		const { data: exam, error } = await supabaseAdmin
 			.from("stg_exams")
-			.select("subject_settings")
+			.select("subject_settings, academic_year")
 			.eq("exam_id", examId)
 			.single();
 		if (error || !exam) return NextResponse.json({ message: "Peperiksaan tidak dijumpai" }, { status: 404 });
+
+		const { data: yearRows } = await supabaseAdmin
+			.from("stg_exams")
+			.select("academic_year")
+			.order("academic_year", { ascending: false })
+			.limit(200);
+		const activeAcademicYear = getActiveAcademicYearFromValues(
+			(Array.isArray(yearRows) ? yearRows : []).map((row) => row.academic_year),
+		);
+		if (toId(exam.academic_year) !== activeAcademicYear) {
+			return NextResponse.json({ message: "Peperiksaan ini telah diarkibkan" }, { status: 403 });
+		}
 
 		const settings = exam.subject_settings && typeof exam.subject_settings === "object"
 			? (exam.subject_settings as Record<string, unknown>)

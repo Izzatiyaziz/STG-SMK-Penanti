@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import supabaseAdmin from "@/lib/supabase-admin";
 import { requireApiRole } from "@/lib/auth";
+import { getActiveAcademicYearFromValues } from "@/lib/academic-year";
 
 export const runtime = "nodejs";
 
@@ -59,7 +60,22 @@ export async function GET() {
             )
         );
 
-        return NextResponse.json({ data: examIds });
+        const { data: exams } = examIds.length
+            ? await supabaseAdmin
+                  .from("stg_exams")
+                  .select("exam_id, academic_year")
+                  .in("exam_id", examIds)
+            : { data: [] };
+        const examRows = Array.isArray(exams) ? exams : [];
+        const activeAcademicYear = getActiveAcademicYearFromValues(
+            examRows.map((exam) => exam.academic_year)
+        );
+        const activeExamIds = examRows
+            .filter((exam) => toId(exam.academic_year) === activeAcademicYear)
+            .map((exam) => toId(exam.exam_id))
+            .filter(Boolean);
+
+        return NextResponse.json({ data: activeExamIds });
     } catch (error) {
         console.error("GET teacher approved exams FAILED:", error);
         return NextResponse.json({ data: [] }, { status: 500 });

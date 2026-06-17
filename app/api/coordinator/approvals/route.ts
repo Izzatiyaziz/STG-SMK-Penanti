@@ -8,6 +8,7 @@ import { gradeFromTotal } from "@/lib/grade-utils";
 import { isMarkingClosedForAssignment } from "@/lib/exam-utils";
 import { getClientIp, isRequestBodyTooLarge, looksLikeXssAttempt, sanitizePlainText } from "@/lib/security";
 import { logSecurityEvent } from "@/lib/security-events";
+import { getActiveAcademicYearFromValues } from "@/lib/academic-year";
 
 export const runtime = "nodejs";
 
@@ -298,10 +299,18 @@ export async function GET(req: Request) {
             string,
             { name: string; year: string; subjectSettings: Record<string, unknown> }
         >();
+        const activeAcademicYear = getActiveAcademicYearFromValues(
+            (Array.isArray(exams) ? exams : []).map((exam) =>
+                exam && typeof exam === "object"
+                    ? (exam as { academic_year?: unknown }).academic_year
+                    : ""
+            )
+        );
         for (const e of Array.isArray(exams) ? exams : []) {
             if (!e || typeof e !== "object") continue;
             const id = toId((e as { exam_id?: unknown }).exam_id);
             if (!id) continue;
+            if (toId((e as { academic_year?: unknown }).academic_year) !== activeAcademicYear) continue;
             examInfoById.set(id, {
                 name: toId((e as { exam_name?: unknown }).exam_name),
                 year: toId((e as { academic_year?: unknown }).academic_year),
@@ -430,6 +439,7 @@ export async function GET(req: Request) {
 
             const subjectName = subjectNameById.get(subject_id) ?? "";
             const examInfo = examInfoById.get(exam_id);
+            if (!examInfo) continue;
 
             const subjectiveInfo = subjectiveInfoById.get(subjective_id);
             const teacher_id = subjectiveInfo?.teacherId ?? null;
@@ -545,6 +555,7 @@ export async function GET(req: Request) {
             const classGrade = classInfo?.grade ?? 0;
             const subjectName = subjectNameById.get(subject_id) ?? "";
             const examInfo = examInfoById.get(exam_id);
+            if (!examInfo) continue;
             const teacherName = teacher_id ? teacherNameById.get(teacher_id) ?? "" : "";
             const submittedAt =
                 subjectiveInfo?.inputDate || toId((row as { input_date?: unknown }).input_date) || null;

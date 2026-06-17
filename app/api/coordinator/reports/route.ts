@@ -4,6 +4,7 @@ import { requireApiRole } from "@/lib/auth";
 import { isAllowedClassForSubject } from "@/lib/subject-rules";
 import { gradeFromTotal, gradeScaleForLevels } from "@/lib/grade-utils";
 import { compareExamsChronologically } from "@/lib/exam-utils";
+import { getActiveAcademicYearFromValues } from "@/lib/academic-year";
 
 export const runtime = "nodejs";
 
@@ -142,16 +143,20 @@ export async function GET(req: Request) {
 		}
 
 		const examById = new Map<string, { name: string; year: string }>();
+		const activeAcademicYear = getActiveAcademicYearFromValues(
+			((exams ?? []) as ExamRow[]).map((exam) => exam.academic_year),
+		);
 		for (const exam of (exams ?? []) as ExamRow[]) {
 			const id = toId(exam.exam_id);
 			if (!id) continue;
+			if (toId(exam.academic_year) !== activeAcademicYear) continue;
 			examById.set(id, {
 				name: toId(exam.exam_name) || id,
 				year: toId(exam.academic_year),
 			});
 		}
 
-		const studentPerformanceAll = resultRows.map((row) => {
+		const studentPerformanceAll = resultRows.filter((row) => examById.has(toId(row.exam_id))).map((row) => {
 			const studentId = toId(row.student_id);
 			const total = toNumber(row.total);
 			const student = studentById.get(studentId);
