@@ -10,6 +10,32 @@ export const runtime = "nodejs";
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+function getEmailErrorMessage(error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    const code =
+        error && typeof error === "object" && "code" in error
+            ? String(error.code)
+            : "";
+    const responseCode =
+        error && typeof error === "object" && "responseCode" in error
+            ? String(error.responseCode)
+            : "";
+
+    if (/Konfigurasi e-mel belum lengkap/i.test(message)) {
+        return "Konfigurasi EMAIL_USER atau EMAIL_PASS belum lengkap di Vercel Production.";
+    }
+
+    if (code === "EAUTH" || responseCode === "535" || /Invalid login|Username and Password not accepted/i.test(message)) {
+        return "Gmail menolak EMAIL_USER atau EMAIL_PASS. Pastikan EMAIL_PASS ialah Gmail App Password 16 aksara, bukan password Gmail biasa.";
+    }
+
+    if (code === "ETIMEDOUT" || code === "ESOCKET" || /timeout|network|socket/i.test(message)) {
+        return "Sambungan SMTP dari Vercel gagal. Cuba semula atau semak tetapan rangkaian/SMTP.";
+    }
+
+    return "Ralat SMTP tidak dikenal pasti. Sila semak Runtime Logs Vercel untuk butiran SEND ADMIN WELCOME EMAIL ERROR.";
+}
+
 function generateTemporaryPassword() {
     return `Temp-${randomBytes(5).toString("hex").toUpperCase()}!`;
 }
@@ -29,8 +55,8 @@ async function sendAdminWelcomeEmail(params: {
     adminId: string;
     temporaryPassword: string;
 }) {
-    const emailUser = process.env.EMAIL_USER;
-    const emailPass = process.env.EMAIL_PASS;
+    const emailUser = process.env.EMAIL_USER?.trim();
+    const emailPass = process.env.EMAIL_PASS?.replace(/\s+/g, "");
 
     if (!emailUser || !emailPass) {
         throw new Error("Konfigurasi e-mel belum lengkap");
@@ -158,11 +184,27 @@ export async function POST(req: Request) {
                 temporaryPassword,
             });
         } catch (emailError) {
-            console.error("SEND ADMIN WELCOME EMAIL ERROR:", emailError);
+            console.error("SEND ADMIN WELCOME EMAIL ERROR:", {
+                message: emailError instanceof Error ? emailError.message : String(emailError),
+                code:
+                    emailError && typeof emailError === "object" && "code" in emailError
+                        ? String(emailError.code)
+                        : undefined,
+                responseCode:
+                    emailError && typeof emailError === "object" && "responseCode" in emailError
+                        ? String(emailError.responseCode)
+                        : undefined,
+                command:
+                    emailError && typeof emailError === "object" && "command" in emailError
+                        ? String(emailError.command)
+                        : undefined,
+            });
             await supabaseAdmin.from("stg_admins").delete().eq("admin_id", adminId);
 
             return NextResponse.json(
-                { message: "Akaun admin tidak dibuat kerana e-mel kata laluan sementara gagal dihantar" },
+                {
+                    message: `Akaun admin tidak dibuat kerana e-mel kata laluan sementara gagal dihantar. ${getEmailErrorMessage(emailError)}`,
+                },
                 { status: 502 }
             );
         }
