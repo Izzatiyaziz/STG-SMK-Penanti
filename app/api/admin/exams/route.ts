@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import supabase from "@/lib/supabase";
 import supabaseAdmin from "@/lib/supabase-admin";
 import { requireApiRole } from "@/lib/auth";
-import { filterByActiveAcademicYear } from "@/lib/academic-year";
 
 export const runtime = "nodejs";
 
@@ -34,13 +33,7 @@ export async function GET() {
       return NextResponse.json([], { status: 200 });
     }
 
-    const rows = (data ?? []) as ExamRow[];
-    const visibleRows =
-      guard.session.userType === "teacher"
-        ? filterByActiveAcademicYear(rows, (exam) => exam.academic_year)
-        : rows;
-
-    const exams = visibleRows.map((e) => ({
+    const exams = ((data ?? []) as ExamRow[]).map((e) => ({
       id: e.exam_id,
       name: e.exam_name,
       academic_year: e.academic_year,
