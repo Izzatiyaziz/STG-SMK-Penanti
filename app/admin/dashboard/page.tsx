@@ -44,7 +44,7 @@ export default function AdminDashboardPage() {
       const [studentRes, teacherRes, sessionRes] = await Promise.all([
         fetch("/api/admin/users?role=student"),
         fetch("/api/admin/users?role=teacher"),
-        fetch("/api/admin/sessions?limit=200"),
+        fetch("/api/admin/sessions?limit=200", { cache: "no-store" }),
       ]);
 
       if (studentRes.ok) setStudents(await studentRes.json());

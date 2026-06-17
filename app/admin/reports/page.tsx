@@ -18,7 +18,7 @@ export default function AdminReportsPage() {
     async function load() {
       setLoading(true);
       try {
-        const res = await fetch("/api/admin/sessions?limit=100");
+        const res = await fetch("/api/admin/sessions?limit=100", { cache: "no-store" });
         const json = await res.json();
         if (!cancelled) setLogs(json?.data ?? []);
       } catch {

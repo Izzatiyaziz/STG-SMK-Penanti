@@ -78,6 +78,14 @@ function formatDateTime(value?: string | null) {
 }
 
 function formatAction(action?: string | null) {
+  const rawAction = String(action ?? "");
+  if (/^Semak OMR:\s*Pelajar\s+[^|]+\|\s*Subject:\s*[^|]+\|\s*Exam:/i.test(rawAction)) {
+    return "Semak OMR";
+  }
+  if (/^Kemaskini Markah:\s*[^|]+\|\s*Exam:\s*[^|]+\|\s*Kelas:/i.test(rawAction)) {
+    return "Kemaskini markah";
+  }
+
   const labels: Record<string, string> = {
     failed_login: "Login gagal",
     brute_force: "Brute force",
@@ -86,7 +94,7 @@ function formatAction(action?: string | null) {
     filter_injection: "Cubaan filter injection",
     "Log Masuk": "Log masuk",
   };
-  return labels[String(action ?? "")] ?? action ?? "Aktiviti sistem";
+  return labels[rawAction] ?? action ?? "Aktiviti sistem";
 }
 
 function statusBadge(log: SystemUsageLogRow) {

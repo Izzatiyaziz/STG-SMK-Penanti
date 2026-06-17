@@ -4,6 +4,10 @@ import { requireApiRole } from "@/lib/auth";
 
 export const runtime = "nodejs";
 
+const NO_STORE_HEADERS = {
+    "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+};
+
 type SessionRow = {
     session_id: string;
     user_id: string;
@@ -97,7 +101,7 @@ export async function GET(req: Request) {
         if (sessionError) {
             return NextResponse.json(
                 { message: sessionError.message, data: [] },
-                { status: 500 }
+                { status: 500, headers: NO_STORE_HEADERS }
             );
         }
 
@@ -270,9 +274,9 @@ export async function GET(req: Request) {
             )
             .slice(0, limit);
 
-        return NextResponse.json({ data: combined });
+        return NextResponse.json({ data: combined }, { headers: NO_STORE_HEADERS });
     } catch (err) {
         console.error("SESSIONS LIST ERROR:", err);
-        return NextResponse.json({ data: [] }, { status: 500 });
+        return NextResponse.json({ data: [] }, { status: 500, headers: NO_STORE_HEADERS });
     }
 }
