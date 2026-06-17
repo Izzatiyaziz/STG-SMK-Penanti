@@ -29,6 +29,10 @@ function uniqueSessionIds(sessions: SessionRow[], role: string) {
     );
 }
 
+function uniqueValues(values: string[]) {
+    return Array.from(new Set(values.map((value) => value.trim()).filter(Boolean)));
+}
+
 function parseMarkUpdateAction(action?: string | null) {
     const value = String(action ?? "");
     const match = value.match(
@@ -42,6 +46,22 @@ function parseMarkUpdateAction(action?: string | null) {
         examId: match[2].trim(),
         classId: match[3].trim(),
         suffix: match[4].trim(),
+    };
+}
+
+function parseOmrReviewAction(action?: string | null) {
+    const value = String(action ?? "");
+    const match = value.match(
+        /^Semak OMR:\s*Pelajar\s+([^|]+)\|\s*Subject:\s*([^|]+)\|\s*Exam:\s*([^|]+)(?:\|\s*(.+))?$/i
+    );
+
+    if (!match) return null;
+
+    return {
+        studentId: match[1].trim(),
+        subjectId: match[2].trim(),
+        examId: match[3].trim(),
+        suffix: match[4]?.trim() ?? "",
     };
 }
 
@@ -91,26 +111,39 @@ export async function GET(req: Request) {
         const markActions = sessionData
             .map((session) => parseMarkUpdateAction(session.action))
             .filter((action): action is NonNullable<ReturnType<typeof parseMarkUpdateAction>> => Boolean(action));
-        const classIds = Array.from(new Set(markActions.map((action) => action.classId).filter(Boolean)));
-        const examIds = Array.from(new Set(markActions.map((action) => action.examId).filter(Boolean)));
-        const [teacherLookup, studentLookup, classLookup, examLookup] = await Promise.all([
+        const omrActions = sessionData
+            .map((session) => parseOmrReviewAction(session.action))
+            .filter((action): action is NonNullable<ReturnType<typeof parseOmrReviewAction>> => Boolean(action));
+        const sessionAndTargetStudentIds = uniqueValues([
+            ...studentIds,
+            ...omrActions.map((action) => action.studentId),
+        ]);
+        const subjectIds = uniqueValues([
+            ...markActions.map((action) => action.subjectId),
+            ...omrActions.map((action) => action.subjectId),
+        ]);
+        const examIds = uniqueValues([
+            ...markActions.map((action) => action.examId),
+            ...omrActions.map((action) => action.examId),
+        ]);
+        const [teacherLookup, studentLookup, subjectLookup, examLookup] = await Promise.all([
             teacherIds.length
                 ? supabaseAdmin
                       .from("stg_teachers")
                       .select("teacher_id, username")
                       .in("teacher_id", teacherIds)
                 : Promise.resolve({ data: [], error: null }),
-            studentIds.length
+            sessionAndTargetStudentIds.length
                 ? supabaseAdmin
                       .from("stg_students")
-                      .select("student_id, ic_number")
-                      .in("student_id", studentIds)
+                      .select("student_id, ic_number, class_id")
+                      .in("student_id", sessionAndTargetStudentIds)
                 : Promise.resolve({ data: [], error: null }),
-            classIds.length
+            subjectIds.length
                 ? supabaseAdmin
-                      .from("stg_classes")
-                      .select("class_id, class_name, grade")
-                      .in("class_id", classIds)
+                      .from("stg_subjects")
+                      .select("subject_id, subject_name")
+                      .in("subject_id", subjectIds)
                 : Promise.resolve({ data: [], error: null }),
             examIds.length
                 ? supabaseAdmin
@@ -120,7 +153,9 @@ export async function GET(req: Request) {
                 : Promise.resolve({ data: [], error: null }),
         ]);
         const identifierBySessionUserId = new Map<string, string>();
+        const studentClassIdById = new Map<string, string>();
         const classLabelById = new Map<string, string>();
+        const subjectLabelById = new Map<string, string>();
         const examLabelById = new Map<string, string>();
 
         for (const teacher of teacherLookup.data ?? []) {
@@ -132,8 +167,21 @@ export async function GET(req: Request) {
         for (const student of studentLookup.data ?? []) {
             const id = String(student.student_id ?? "").trim();
             const icNumber = String(student.ic_number ?? "").trim();
+            const classId = String(student.class_id ?? "").trim();
             if (id && icNumber) identifierBySessionUserId.set(id, icNumber);
+            if (id && classId) studentClassIdById.set(id, classId);
         }
+
+        const classIds = uniqueValues([
+            ...markActions.map((action) => action.classId),
+            ...omrActions.map((action) => studentClassIdById.get(action.studentId) ?? ""),
+        ]);
+        const classLookup = classIds.length
+            ? await supabaseAdmin
+                  .from("stg_classes")
+                  .select("class_id, class_name, grade")
+                  .in("class_id", classIds)
+            : { data: [], error: null };
 
         for (const classRow of classLookup.data ?? []) {
             const id = String(classRow.class_id ?? "").trim();
@@ -141,6 +189,12 @@ export async function GET(req: Request) {
             const grade = String(classRow.grade ?? "").trim();
             const label = [grade, className].filter(Boolean).join(" ").trim();
             if (id) classLabelById.set(id, label || id);
+        }
+
+        for (const subject of subjectLookup.data ?? []) {
+            const id = String(subject.subject_id ?? "").trim();
+            const subjectName = String(subject.subject_name ?? "").trim();
+            if (id) subjectLabelById.set(id, subjectName || id);
         }
 
         for (const exam of examLookup.data ?? []) {
@@ -151,15 +205,29 @@ export async function GET(req: Request) {
 
         function formatSessionAction(action?: string | null) {
             const markAction = parseMarkUpdateAction(action);
-            if (!markAction) return action;
+            if (markAction) {
+                return [
+                    `Kemaskini markah: Subjek: ${subjectLabelById.get(markAction.subjectId) ?? "-"}`,
+                    `Kelas: ${classLabelById.get(markAction.classId) ?? "-"}`,
+                    `Peperiksaan: ${examLabelById.get(markAction.examId) ?? "-"}`,
+                ]
+                    .filter(Boolean)
+                    .join(", ");
+            }
 
-            return [
-                `Kemaskini markah kelas: ${classLabelById.get(markAction.classId) ?? "-"}`,
-                `Peperiksaan: ${examLabelById.get(markAction.examId) ?? "-"}`,
-                markAction.suffix,
-            ]
-                .filter(Boolean)
-                .join(", ");
+            const omrAction = parseOmrReviewAction(action);
+            if (omrAction) {
+                const classId = studentClassIdById.get(omrAction.studentId) ?? "";
+                return [
+                    `Semak OMR: Subjek: ${subjectLabelById.get(omrAction.subjectId) ?? "-"}`,
+                    `Kelas: ${classLabelById.get(classId) ?? "-"}`,
+                    `Peperiksaan: ${examLabelById.get(omrAction.examId) ?? "-"}`,
+                ]
+                    .filter(Boolean)
+                    .join(", ");
+            }
+
+            return action;
         }
 
         const sessionRows = sessionData.map((row) => ({
