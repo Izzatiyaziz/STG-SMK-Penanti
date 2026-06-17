@@ -194,6 +194,29 @@ function getCameraErrorMessage(error: unknown) {
   return "Kamera tidak dapat diakses. Cuba semula atau guna Kamera Sistem.";
 }
 
+async function applyContinuousCameraFocus(mediaStream: MediaStream) {
+  const [track] = mediaStream.getVideoTracks();
+  if (!track) return;
+  const capabilities = typeof track.getCapabilities === "function"
+    ? track.getCapabilities() as MediaTrackCapabilities & {
+      focusMode?: string[];
+      exposureMode?: string[];
+      whiteBalanceMode?: string[];
+    }
+    : null;
+  const advanced: Array<Record<string, string>> = [];
+  if (capabilities?.focusMode?.includes("continuous")) advanced.push({ focusMode: "continuous" });
+  if (capabilities?.exposureMode?.includes("continuous")) advanced.push({ exposureMode: "continuous" });
+  if (capabilities?.whiteBalanceMode?.includes("continuous")) advanced.push({ whiteBalanceMode: "continuous" });
+  if (advanced.length === 0) return;
+
+  try {
+    await track.applyConstraints({ advanced } as MediaTrackConstraints);
+  } catch {
+    // Some mobile browsers expose capabilities but reject focus constraints.
+  }
+}
+
 async function optimizeOmrImage(imageDataUrl: string) {
   const image = document.createElement("img");
   image.decoding = "async";
@@ -555,6 +578,7 @@ export default function OMRScanPage() {
         videoRef.current.srcObject = mediaStream;
         await videoRef.current.play().catch(() => undefined);
       }
+      await applyContinuousCameraFocus(mediaStream);
       streamRef.current = mediaStream;
       setIsCameraActive(true);
     } catch (error) {
@@ -567,6 +591,13 @@ export default function OMRScanPage() {
       setIsStartingCamera(false);
     }
   }, [stopCamera]);
+
+  const refocusCamera = useCallback(async () => {
+    const mediaStream = streamRef.current;
+    if (!mediaStream) return;
+    await applyContinuousCameraFocus(mediaStream);
+    toast.message("Cuba fokus semula. Jarakkan kamera sedikit jika imej masih kabur.");
+  }, []);
 
   useEffect(() => {
     if (activeTab === "scan" && isMobileScanDevice) {
@@ -1001,6 +1032,7 @@ export default function OMRScanPage() {
                     ref={videoRef}
                     autoPlay
                     playsInline
+                    onClick={refocusCamera}
                     className="w-full object-cover"
                     style={{ height: "min(70dvh, 520px)" }}
                   />
@@ -1098,7 +1130,7 @@ export default function OMRScanPage() {
                         })}
                       </div>
                       <div className="absolute inset-x-3 bottom-3 rounded bg-black/60 px-2 py-1 text-center text-[9px] text-white/90">
-                        Pastikan semua bulatan jawapan masuk dalam kotak
+                        Pastikan semua bulatan masuk dalam kotak. Ketik preview untuk fokus semula.
                       </div>
                     </div>
                   </div>
