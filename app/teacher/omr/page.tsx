@@ -126,6 +126,9 @@ function buildAnswerRegionTemplateBundle(
 ): Required<Pick<TemplateBundle, "template_width" | "template_height" | "template" | "answer_region">> {
   const fullBundle = buildSpmTemplateBundle(questionCount, "camera");
   const region = fullBundle.answer_region;
+  const scale = 800 / region.width;
+  const template_width = 800;
+  const template_height = Math.round(region.height * scale);
   const fullTemplate = fullBundle.template as Record<string, Record<"A" | "B" | "C" | "D", { x: number; y: number; r: number }>>;
   const template = Object.fromEntries(
     Object.entries(fullTemplate).map(([questionNo, options]) => [
@@ -134,9 +137,9 @@ function buildAnswerRegionTemplateBundle(
         (["A", "B", "C", "D"] as const).map((option) => [
           option,
           {
-            x: options[option].x - region.x,
-            y: options[option].y - region.y,
-            r: options[option].r,
+            x: Math.round((options[option].x - region.x) * scale),
+            y: Math.round((options[option].y - region.y) * scale),
+            r: Math.round(options[option].r * scale),
           },
         ])
       ),
@@ -144,9 +147,9 @@ function buildAnswerRegionTemplateBundle(
   );
 
   return {
-    template_width: region.width,
-    template_height: region.height,
-    answer_region: { x: 0, y: 0, width: region.width, height: region.height },
+    template_width,
+    template_height,
+    answer_region: { x: 0, y: 0, width: template_width, height: template_height },
     template,
   };
 }
