@@ -534,6 +534,7 @@ def _aligned_option_ratios(
                 offsets.append((dx, dy))
 
     best_ratios: dict[str, float] = {}
+    best_offset = (0, 0)
     best_score = float("-inf")
     for dx, dy in offsets:
         ratios = {
@@ -555,8 +556,28 @@ def _aligned_option_ratios(
         if score > best_score:
             best_score = score
             best_ratios = ratios
+            best_offset = (dx, dy)
 
-    return best_ratios
+    # After the shared row offset is found, allow each option a small local
+    # tolerance. Phone crops can bend/shift bubbles slightly within the same row.
+    fine_radius = min(max(radius // 2, 4), 8) if radius > 0 else 0
+    if fine_radius == 0:
+        return best_ratios
+
+    dx, dy = best_offset
+    return {
+        option: _best_fill_ratio_near(
+            gray,
+            BubblePoint(x=point.x + dx, y=point.y + dy, r=point.r),
+            fine_radius,
+        )
+        for option, point in [
+            ("A", question.A),
+            ("B", question.B),
+            ("C", question.C),
+            ("D", question.D),
+        ]
+    }
 
 
 def _apply_answer_region_mask(gray: np.ndarray, region: AnswerRegion | None) -> np.ndarray:
@@ -967,7 +988,9 @@ def grade(req: OMRGradeRequest) -> Any:
         q_template = req.template[qid]
         is_camera_profile = req.processing_profile == "camera"
         effective_search_radius = (
-            0 if is_camera_profile and req.already_warped else req.search_radius
+            min(max(req.search_radius, 12), 18)
+            if is_camera_profile and req.already_warped
+            else req.search_radius
         )
         ratios = _aligned_option_ratios(gray, q_template, effective_search_radius)
         ranked = sorted(ratios.items(), key=lambda item: item[1], reverse=True)

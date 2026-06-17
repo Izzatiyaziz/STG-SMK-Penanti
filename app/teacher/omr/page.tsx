@@ -363,7 +363,7 @@ export default function OMRScanPage() {
   );
   const [minMarkThreshold, setMinMarkThreshold] = useState<string>("0.30");
   const [ambiguityGap, setAmbiguityGap] = useState<string>("0.06");
-  const [searchRadius, setSearchRadius] = useState<string>("6");
+  const [searchRadius, setSearchRadius] = useState<string>("14");
 
   /* ================= ROLE GUARD ================= */
   useEffect(() => {
