@@ -847,7 +847,13 @@ export default function OMRScanPage() {
         json = {};
       }
       if (!res.ok || !json?.success) {
-        toast.error(typeof json?.message === "string" ? json.message : `Gagal memproses OMR (${res.status})`);
+        const detail = typeof json?.detail === "string"
+          ? json.detail
+          : json?.detail && typeof json.detail === "object" && "detail" in json.detail
+            ? String((json.detail as { detail?: unknown }).detail ?? "")
+            : "";
+        const message = typeof json?.message === "string" ? json.message : `Gagal memproses OMR (${res.status})`;
+        toast.error(detail ? `${message}: ${detail}` : message);
         return;
       }
       localStorage.setItem("stg_marks_context", JSON.stringify({ class_id, subject_id, exam_id, student_id }));

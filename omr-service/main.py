@@ -940,7 +940,7 @@ def grade(req: OMRGradeRequest) -> Any:
     else:
         ordered = _find_sheet_corners(image)
         warped = _warp_sheet(image, ordered, req.template_width, req.template_height)
-    if not _check_warp_quality(warped):
+    if not req.already_warped and not _check_warp_quality(warped):
         raise HTTPException(
             status_code=422,
             detail=(
