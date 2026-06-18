@@ -30,6 +30,13 @@ function toNumber(value: unknown) {
 	return Number.isFinite(n) ? n : 0;
 }
 
+function isHiddenCoordinatorExam(exam: ExamRow) {
+	return (
+		toId(exam.academic_year) === "2025" &&
+		toId(exam.exam_name).toLowerCase() === "peperiksaan akhir tahun"
+	);
+}
+
 function normalizeGrade(value: unknown, total: number, level: number) {
 	const grade = toId(value).toUpperCase();
 	const allowed = level >= 4
@@ -145,13 +152,14 @@ export async function GET(req: Request) {
 		for (const exam of (exams ?? []) as ExamRow[]) {
 			const id = toId(exam.exam_id);
 			if (!id) continue;
+			if (isHiddenCoordinatorExam(exam)) continue;
 			examById.set(id, {
 				name: toId(exam.exam_name) || id,
 				year: toId(exam.academic_year),
 			});
 		}
 
-		const studentPerformanceAll = resultRows.map((row) => {
+		const studentPerformanceAll = resultRows.filter((row) => examById.has(toId(row.exam_id))).map((row) => {
 			const studentId = toId(row.student_id);
 			const total = toNumber(row.total);
 			const student = studentById.get(studentId);

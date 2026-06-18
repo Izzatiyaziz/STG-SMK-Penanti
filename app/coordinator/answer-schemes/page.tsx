@@ -56,6 +56,12 @@ type Exam = {
   subject_settings?: Record<string, unknown>;
 };
 
+const HIDDEN_ANSWER_SCHEME_YEARS = new Set(["2025", "2027"]);
+
+function isVisibleAnswerSchemeExam(exam: Exam) {
+  return !HIDDEN_ANSWER_SCHEME_YEARS.has(exam.academic_year.trim());
+}
+
 type Subject = { id: string; name: string };
 
 function isUpperOnlySubject(subjectName: string) {
@@ -207,12 +213,17 @@ export default function AnswerSchemesPage() {
       const eJson = await eRes.json();
 
       const subjectList = Array.isArray(sJson?.data) ? (sJson.data as Subject[]) : [];
-      const examList: Exam[] = Array.isArray(eJson) ? eJson : [];
+      const examList: Exam[] = (Array.isArray(eJson) ? (eJson as Exam[]) : [])
+        .filter(isVisibleAnswerSchemeExam);
       setSubjects(subjectList);
       setExams(examList);
 
       if (subjectList.length > 0) setSubjectId((current) => current || subjectList[0].id);
-      if (examList.length > 0) setExamId((current) => current || examList[0].id);
+      setExamId((current) =>
+        examList.some((exam) => exam.id === current)
+          ? current
+          : examList[0]?.id ?? "",
+      );
     } catch {
       setSubjects([]);
       setExams([]);

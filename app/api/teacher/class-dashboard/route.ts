@@ -159,6 +159,7 @@ export async function GET(req: Request) {
 		for (const exam of (exams ?? []) as ExamRow[]) {
 			const id = toId(exam.exam_id);
 			if (!id) continue;
+			if (toId(exam.academic_year) === "2025") continue;
 			examById.set(id, {
 				id,
 				name: toId(exam.exam_name) || id,
@@ -177,6 +178,7 @@ export async function GET(req: Request) {
 			const subjectId = toId(result.subject_id);
 			const total = toNumber(result.total);
 			if (!examId || !studentId || !subjectId) continue;
+			if (!examById.has(examId)) continue;
 
 			if (!marksByExamStudent.has(examId)) marksByExamStudent.set(examId, new Map());
 			const studentMap = marksByExamStudent.get(examId)!;

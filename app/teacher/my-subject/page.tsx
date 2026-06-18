@@ -57,6 +57,13 @@ type Exam = {
   subject_settings?: Record<string, unknown>;
 };
 
+function isHiddenSubjectTeacherExam(exam: Exam) {
+  return (
+    exam.academic_year.trim() === "2025" &&
+    exam.name.trim().toLowerCase() === "peperiksaan akhir tahun"
+  );
+}
+
 type Student = {
   id: string;
   name: string;
@@ -222,13 +229,22 @@ export default function SubjectTeacherPage() {
     selectedExamId && selectedGrade && selectedClassId && selectedSubjectId,
   );
   const deadlineExams = useMemo(
-    () => exams.filter((exam) => hasOpenMarkingForAssignments(exam, assignments)),
+    () =>
+      exams.filter(
+        (exam) =>
+          !isHiddenSubjectTeacherExam(exam) &&
+          hasOpenMarkingForAssignments(exam, assignments),
+      ),
     [assignments, exams],
   );
   const visibleExams = useMemo(
     () =>
       viewOnly
-        ? exams.filter((exam) => approvedExamIds.includes(exam.id))
+        ? exams.filter(
+            (exam) =>
+              !isHiddenSubjectTeacherExam(exam) &&
+              approvedExamIds.includes(exam.id),
+          )
         : deadlineExams,
     [approvedExamIds, deadlineExams, exams, viewOnly],
   );

@@ -86,6 +86,17 @@ type Exam = {
   subject_settings?: Record<string, unknown>;
 };
 
+function isHiddenSubjectTeacherExam(exam: Exam) {
+  return (
+    exam.year.trim() === "2025" &&
+    exam.name.trim().toLowerCase() === "peperiksaan akhir tahun"
+  );
+}
+
+function isHiddenClassTeacherExam(exam: Exam) {
+  return exam.year.trim() === "2025";
+}
+
 type StudentSubject = {
   subject_id: string;
   name: string;
@@ -477,13 +488,19 @@ export function TeacherReportContent({
   }, [teacherId]);
 
   const displayedExams = useMemo(() => {
-    if (viewMode === "class_teacher") return classTeacherExams;
+    if (viewMode === "class_teacher") {
+      return classTeacherExams.filter((exam) => !isHiddenClassTeacherExam(exam));
+    }
     if (viewMode !== "subject_teacher") return exams;
-    return exams.filter((exam) => hasConfiguredDeadlineForAssignments(exam, assignments));
+    return exams.filter(
+      (exam) =>
+        !isHiddenSubjectTeacherExam(exam) &&
+        hasConfiguredDeadlineForAssignments(exam, assignments),
+    );
   }, [assignments, classTeacherExams, exams, viewMode]);
 
   useEffect(() => {
-    if (!selectedExamId || viewMode !== "subject_teacher") return;
+    if (!selectedExamId || viewMode === "loading") return;
     if (displayedExams.some((exam) => exam.id === selectedExamId)) return;
     setSelectedExamId("");
   }, [displayedExams, selectedExamId, viewMode]);
@@ -1163,7 +1180,7 @@ export function TeacherReportContent({
                         <SelectValue placeholder="Pilih peperiksaan" />
                       </SelectTrigger>
                       <SelectContent>
-                        {exams.map((exam) => (
+                        {displayedExams.map((exam) => (
                           <SelectItem key={exam.id} value={exam.id}>
                             {exam.name} ({exam.year})
                           </SelectItem>
@@ -1218,7 +1235,7 @@ export function TeacherReportContent({
                     <SelectValue placeholder="Pilih peperiksaan" />
                   </SelectTrigger>
                   <SelectContent className="rounded-lg border-border">
-                    {classTeacherExams.map((exam) => (
+                    {displayedExams.map((exam) => (
                       <SelectItem key={exam.id} value={exam.id}>
                         {exam.name} ({exam.year})
                       </SelectItem>
@@ -1226,7 +1243,7 @@ export function TeacherReportContent({
                   </SelectContent>
                 </Select>
               </div>
-              {classTeacherExams.length === 0 ? (
+              {displayedExams.length === 0 ? (
                 <p className="mt-3 text-sm text-muted-foreground">
                   Tiada peperiksaan dengan keputusan diluluskan untuk kelas ini.
                 </p>

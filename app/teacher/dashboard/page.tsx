@@ -116,6 +116,13 @@ type Exam = {
 	subject_settings?: Record<string, SubjectSetting>;
 };
 
+function isHiddenSubjectTeacherExam(exam: Exam) {
+	return (
+		exam.academic_year.trim() === "2025" &&
+		exam.name.trim().toLowerCase() === "peperiksaan akhir tahun"
+	);
+}
+
 type DashboardStudent = {
 	student_id: string;
 	name: string;
@@ -462,7 +469,12 @@ export function SubjectTeacherDashboard({ teacherId }: { teacherId: string }) {
 	}, []);
 
 	const deadlineExams = useMemo(
-		() => exams.filter((exam) => hasConfiguredDeadlineForAssignments(exam, assignments)),
+		() =>
+			exams.filter(
+				(exam) =>
+					!isHiddenSubjectTeacherExam(exam) &&
+					hasConfiguredDeadlineForAssignments(exam, assignments),
+			),
 		[assignments, exams],
 	);
 

@@ -58,6 +58,13 @@ type Exam = {
 	subject_settings?: Record<string, unknown>;
 };
 
+function isHiddenCoordinatorExam(exam: Exam) {
+	return (
+		exam.academic_year.trim() === "2025" &&
+		exam.name.trim().toLowerCase() === "peperiksaan akhir tahun"
+	);
+}
+
 type DashboardData = {
 	coordinator: { id: string; name: string; email: string | null } | null;
 	subject: { id: string; name: string } | null;
@@ -312,7 +319,12 @@ export default function SubjectCoordinatorDashboard() {
 	}, [session?.user_id]);
 
 	const configuredExams = useMemo(
-		() => exams.filter((exam) => hasSubjectScheme(exam, subjectId)),
+		() =>
+			exams.filter(
+				(exam) =>
+					!isHiddenCoordinatorExam(exam) &&
+					hasSubjectScheme(exam, subjectId),
+			),
 		[exams, subjectId],
 	);
 

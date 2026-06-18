@@ -101,6 +101,13 @@ type Submission = {
 	}>;
 };
 
+function isHiddenCoordinatorSubmission(submission: Submission) {
+	return (
+		submission.academic_year.trim() === "2025" &&
+		submission.examName.trim().toLowerCase() === "peperiksaan akhir tahun"
+	);
+}
+
 type ApprovalResponse = {
 	data?: Submission[];
 	message?: string;
@@ -273,9 +280,12 @@ export default function SubjectCoordinatorApprovalPage() {
 				setData([]);
 				return;
 			}
-			setData(json?.data ?? []);
-			if (!firstSubjectName && json?.data?.[0]?.subject) {
-				setSubjectName(json.data[0].subject);
+			const visibleData = (json?.data ?? []).filter(
+				(submission) => !isHiddenCoordinatorSubmission(submission),
+			);
+			setData(visibleData);
+			if (!firstSubjectName && visibleData[0]?.subject) {
+				setSubjectName(visibleData[0].subject);
 			}
 		} catch {
 			setData([]);

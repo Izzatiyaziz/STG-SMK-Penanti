@@ -85,6 +85,10 @@ function formatClassLabel(classRow: { class_name?: unknown; grade?: unknown } | 
     return className;
 }
 
+function isHiddenStudentReportExam(exam: DbRow) {
+    return toId(exam.academic_year) === "2025";
+}
+
 export async function GET(req: Request) {
     try {
         const guard = await requireApiRole("student");
@@ -124,11 +128,30 @@ export async function GET(req: Request) {
                     .filter(Boolean),
             ),
         );
+        const { data: availableExamRows } = availableExamIds.length
+            ? await supabase
+                  .from("stg_exams")
+                  .select("exam_id, exam_name, academic_year")
+                  .in("exam_id", availableExamIds)
+            : { data: [] as unknown[] };
+        const visibleExamRows = (Array.isArray(availableExamRows) ? availableExamRows : [])
+            .filter((row) => !isHiddenStudentReportExam(row as DbRow));
+        const visibleExamIds = visibleExamRows
+            .map((row) => toId((row as DbRow).exam_id))
+            .filter(Boolean);
+
+        if (exam_id && !visibleExamIds.includes(exam_id)) {
+            return NextResponse.json({ message: "Slip keputusan tidak tersedia" }, { status: 404 });
+        }
+        if (visibleExamIds.length === 0) {
+            return NextResponse.json({ message: "Slip keputusan belum dijana" }, { status: 404 });
+        }
 
         let reportCardQuery = supabase
             .from("stg_report_cards")
             .select("report_card_id, class_id, teacher_id, exam_id, average_mark, class_position, ai_comment, generated_date")
             .eq("student_id", student_id)
+            .in("exam_id", visibleExamIds)
             .order("generated_date", { ascending: false })
             .limit(1);
 
@@ -158,7 +181,7 @@ export async function GET(req: Request) {
             return NextResponse.json({ message: "Slip keputusan belum dijana" }, { status: 404 });
         }
 
-        const [{ data: classRow }, { data: teacherRow }, { data: examRow }, { data: results }, { data: availableExamRows }] = await Promise.all([
+        const [{ data: classRow }, { data: teacherRow }, { data: examRow }, { data: results }] = await Promise.all([
             supabase
                 .from("stg_classes")
                 .select("class_id, class_name, grade")
@@ -180,12 +203,6 @@ export async function GET(req: Request) {
                 .eq("student_id", student_id)
                 .eq("exam_id", toId(reportCard.exam_id))
                 .eq("status", "approved"),
-            availableExamIds.length
-                ? supabase
-                      .from("stg_exams")
-                      .select("exam_id, exam_name, academic_year")
-                      .in("exam_id", availableExamIds)
-                : { data: [] as unknown[] },
         ]);
 
         const { count: totalStudents } = classId
@@ -286,7 +303,7 @@ export async function GET(req: Request) {
                 year: String(examRow?.academic_year ?? ""),
                 classTeacher: String(teacherRow?.fullname ?? ""),
             },
-            exams: (Array.isArray(availableExamRows) ? availableExamRows : [])
+            exams: visibleExamRows
                 .map((row) => ({
                     id: toId((row as DbRow).exam_id),
                     name: String((row as DbRow).exam_name ?? "").trim(),
