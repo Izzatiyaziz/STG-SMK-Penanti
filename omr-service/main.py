@@ -990,6 +990,8 @@ def grade(req: OMRGradeRequest) -> Any:
         effective_search_radius = (
             min(max(req.search_radius, 12), 18)
             if is_camera_profile and req.already_warped
+            else min(req.search_radius, 6)
+            if req.processing_profile == "upload"
             else req.search_radius
         )
         ratios = _aligned_option_ratios(gray, q_template, effective_search_radius)

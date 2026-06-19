@@ -12,6 +12,16 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   Table,
   TableBody,
   TableCell,
@@ -81,6 +91,7 @@ export default function OMRResultsPage() {
   const [loading, setLoading] = useState(true);
   const [overrides, setOverrides] = useState<Record<number, string>>({});
   const [isSaving, setIsSaving] = useState(false);
+  const [markingConfirmationOpen, setMarkingConfirmationOpen] = useState(false);
 
   // Context IDs needed for review API
   const student_id = searchParams.get("student_id") ?? "";
@@ -477,7 +488,12 @@ export default function OMRResultsPage() {
                 <ArrowLeft className="mr-2 h-4 w-4" />
                 Kembali ke OMR
               </Button>
-              <Button variant="outline" className="shrink-0" onClick={goToMarksEntry}>
+              <Button
+                variant="outline"
+                className="shrink-0"
+                onClick={() => setMarkingConfirmationOpen(true)}
+                disabled={!resultRaw}
+              >
                 <ClipboardList className="mr-2 h-4 w-4" />
                 Pemarkahan Markah
               </Button>
@@ -486,6 +502,74 @@ export default function OMRResultsPage() {
                 Export PDF
               </Button>
           </div>
+
+          <AlertDialog open={markingConfirmationOpen} onOpenChange={setMarkingConfirmationOpen}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <div className="flex items-start gap-3">
+                  <div className="rounded-lg bg-amber-100 p-2 text-amber-700">
+                    <AlertTriangle className="h-5 w-5" />
+                  </div>
+                  <div className="min-w-0">
+                    <AlertDialogTitle>Semak keputusan OMR untuk kali kedua</AlertDialogTitle>
+                    <AlertDialogDescription className="mt-2 leading-6">
+                      Pastikan jawapan pelajar, skema dan jumlah markah adalah betul sebelum
+                      meneruskan ke penghantaran pemarkahan.
+                    </AlertDialogDescription>
+                  </div>
+                </div>
+              </AlertDialogHeader>
+
+              <div className="grid gap-2 rounded-lg bg-muted/50 p-4 text-sm">
+                <div className="flex justify-between gap-4">
+                  <span className="text-muted-foreground">Pelajar</span>
+                  <span className="text-right font-medium">
+                    {String(resultRaw?.student_name ?? "").trim() || "-"}
+                  </span>
+                </div>
+                <div className="flex justify-between gap-4">
+                  <span className="text-muted-foreground">Kelas</span>
+                  <span className="text-right font-medium">
+                    {[
+                      String(resultRaw?.class_grade ?? "").trim(),
+                      String(resultRaw?.class_name ?? "").trim(),
+                    ].filter(Boolean).join(" ") || "-"}
+                  </span>
+                </div>
+                <div className="flex justify-between gap-4">
+                  <span className="text-muted-foreground">Keputusan</span>
+                  <span className="text-right font-medium">
+                    {summary.correct} betul, {summary.wrong} salah, {summary.blank} kosong
+                  </span>
+                </div>
+                <div className="flex justify-between gap-4">
+                  <span className="text-muted-foreground">Jumlah Markah</span>
+                  <span className="text-right font-semibold text-primary">
+                    {summary.totalMarks}/{summary.totalQuestions}
+                  </span>
+                </div>
+              </div>
+
+              {(pendingReview > 0 || Object.keys(overrides).length > 0) && (
+                <div className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                  {pendingReview > 0
+                    ? `${pendingReview} soalan masih perlu disemak. Lengkapkan semakan sebelum meneruskan.`
+                    : `${Object.keys(overrides).length} perubahan jawapan belum disimpan. Klik Simpan Semakan dahulu.`}
+                </div>
+              )}
+
+              <AlertDialogFooter>
+                <AlertDialogCancel>Semak Semula</AlertDialogCancel>
+                <AlertDialogAction
+                  disabled={pendingReview > 0 || Object.keys(overrides).length > 0}
+                  onClick={goToMarksEntry}
+                >
+                  <ClipboardList className="mr-2 h-4 w-4" />
+                  Sahkan dan Teruskan
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </CardContent>
       </Card>
     </div>

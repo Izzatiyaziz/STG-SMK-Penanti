@@ -233,6 +233,84 @@ export async function POST(req: Request) {
       );
     }
 
+    if (!saveAsDraft && payloadByStudent.size > 0) {
+      const payloadStudentIds = Array.from(payloadByStudent.keys()).filter((studentId) =>
+        studentIdSet.has(studentId),
+      );
+      const [
+        { data: existingComponentRows, error: existingComponentsErr },
+        { data: existingSubjectiveRows, error: existingSubjectivesErr },
+      ] = payloadStudentIds.length > 0
+        ? await Promise.all([
+            supabase
+              .from("stg_mark_components")
+              .select("student_id, component_key, mark")
+              .eq("subject_id", subject_id)
+              .eq("exam_id", exam_id)
+              .eq("class_id", class_id)
+              .eq("teacher_id", teacher_id)
+              .in("student_id", payloadStudentIds),
+            supabase
+              .from("stg_subjective_marks")
+              .select("student_id, subjective_mark")
+              .eq("subject_id", subject_id)
+              .eq("exam_id", exam_id)
+              .eq("teacher_id", teacher_id)
+              .in("student_id", payloadStudentIds),
+          ])
+        : [
+            { data: [], error: null },
+            { data: [], error: null },
+          ];
+
+      if (existingComponentsErr) {
+        return NextResponse.json({ message: existingComponentsErr.message }, { status: 500 });
+      }
+      if (existingSubjectivesErr) {
+        return NextResponse.json({ message: existingSubjectivesErr.message }, { status: 500 });
+      }
+
+      const existingMarksByStudent = new Map<string, Record<string, number>>();
+      for (const row of existingComponentRows ?? []) {
+        const studentId = toId(row.student_id);
+        const componentKey = toId(row.component_key);
+        if (!studentId || !componentKey) continue;
+        const current = existingMarksByStudent.get(studentId) ?? {};
+        current[componentKey] = toNumber(row.mark, 0);
+        existingMarksByStudent.set(studentId, current);
+      }
+
+      const manualComponents = templateInfo.template.components.filter(
+        (component) => component.type === "manual",
+      );
+      const fallbackManualComponent =
+        manualComponents.find((component) => component.key === "subjective") ??
+        (manualComponents.length === 1 ? manualComponents[0] : null);
+      if (fallbackManualComponent) {
+        for (const row of existingSubjectiveRows ?? []) {
+          const studentId = toId(row.student_id);
+          if (!studentId) continue;
+          const current = existingMarksByStudent.get(studentId) ?? {};
+          if (current[fallbackManualComponent.key] === undefined) {
+            current[fallbackManualComponent.key] = toNumber(row.subjective_mark, 0);
+          }
+          existingMarksByStudent.set(studentId, current);
+        }
+      }
+
+      for (const [studentId, marksByKey] of payloadByStudent) {
+        const existingMarks = existingMarksByStudent.get(studentId) ?? {};
+        for (const component of templateInfo.template.components) {
+          if (marksByKey[component.key] !== null && marksByKey[component.key] !== undefined) {
+            continue;
+          }
+          if (existingMarks[component.key] !== undefined) {
+            marksByKey[component.key] = existingMarks[component.key];
+          }
+        }
+      }
+    }
+
     const submittedStudentIds = saveAsDraft
       ? studentIds
       : Array.from(payloadByStudent.entries())
@@ -243,6 +321,23 @@ export async function POST(req: Request) {
           )
           .map(([studentId]) => studentId)
           .filter((studentId) => studentIdSet.has(studentId));
+
+    if (!saveAsDraft) {
+      const incompleteStudentCount = Array.from(payloadByStudent.keys()).filter(
+        (studentId) =>
+          studentIdSet.has(studentId) && !submittedStudentIds.includes(studentId),
+      ).length;
+      if (incompleteStudentCount > 0) {
+        return NextResponse.json(
+          {
+            message:
+              `${incompleteStudentCount} pelajar masih mempunyai markah yang tidak lengkap. ` +
+              "Lengkapkan komponen yang belum pernah diisi sebelum menghantar semula.",
+          },
+          { status: 400 },
+        );
+      }
+    }
 
     if (!saveAsDraft && submittedStudentIds.length === 0) {
       return NextResponse.json(
@@ -537,6 +632,7 @@ export async function POST(req: Request) {
             total: row.total,
             grade: row.grade,
             status: row.status,
+            rejection_reason: null,
           })
           .eq("student_id", row.student_id)
           .eq("subject_id", subject_id)

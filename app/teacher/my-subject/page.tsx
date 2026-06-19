@@ -23,16 +23,6 @@ import {
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
 import { AlertTriangle, Camera, CheckCircle2, ClipboardList, Clock, Download, Eye, Filter, MessageSquareWarning, Save, Send, LayoutDashboard } from "lucide-react";
 import {
   computeMarkSummary,
@@ -162,7 +152,6 @@ export default function SubjectTeacherPage() {
   const [draftLoading, setDraftLoading] = useState(false);
   const [markStatus, setMarkStatus] = useState<MarkStatus>(EMPTY_MARK_STATUS);
   const [viewOnly, setViewOnly] = useState(false);
-  const [submitConfirmationOpen, setSubmitConfirmationOpen] = useState(false);
 
   useEffect(() => {
     try {
@@ -508,7 +497,7 @@ export default function SubjectTeacherPage() {
       const marks = students
         .filter((student) => {
           if (mode === "draft") return true;
-          return templateInfo.template!.components.every((component) => {
+          return templateInfo.template!.components.some((component) => {
             const value = componentMarksByStudent[student.id]?.[component.key];
             return value !== undefined && String(value).trim() !== "";
           });
@@ -1077,7 +1066,7 @@ export default function SubjectTeacherPage() {
             {draftLoading ? "Menyimpan..." : "Simpan Draf"}
           </Button>
           <Button
-            onClick={() => setSubmitConfirmationOpen(true)}
+            onClick={() => saveMarks("submit")}
             disabled={submitLoading || draftLoading || isApproved || !selectedAssignment || !selectedExamId || !templateInfo.template}
           >
             <Send className="mr-2 h-4 w-4" />
@@ -1085,61 +1074,6 @@ export default function SubjectTeacherPage() {
           </Button>
         </div>
         )}
-
-        <AlertDialog open={submitConfirmationOpen} onOpenChange={setSubmitConfirmationOpen}>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <div className="flex items-start gap-3">
-                <div className="rounded-lg bg-amber-100 p-2 text-amber-700">
-                  <AlertTriangle className="h-5 w-5" />
-                </div>
-                <div className="min-w-0">
-                  <AlertDialogTitle>Semak markah untuk kali kedua</AlertDialogTitle>
-                  <AlertDialogDescription className="mt-2 leading-6">
-                    Sila semak semula semua markah pelajar sebelum dihantar kepada Panitia Subjek.
-                    Pastikan tiada markah tertinggal atau tersalah masuk.
-                  </AlertDialogDescription>
-                </div>
-              </div>
-            </AlertDialogHeader>
-
-            <div className="grid gap-2 rounded-lg bg-muted/50 p-4 text-sm">
-              <div className="flex justify-between gap-4">
-                <span className="text-muted-foreground">Peperiksaan</span>
-                <span className="text-right font-medium">
-                  {selectedExam ? `${selectedExam.name} (${selectedExam.academic_year})` : "-"}
-                </span>
-              </div>
-              <div className="flex justify-between gap-4">
-                <span className="text-muted-foreground">Kelas</span>
-                <span className="text-right font-medium">
-                  {selectedAssignment
-                    ? `Tingkatan ${selectedAssignment.grade ?? "-"} ${selectedAssignment.class_name}`
-                    : "-"}
-                </span>
-              </div>
-              <div className="flex justify-between gap-4">
-                <span className="text-muted-foreground">Subjek</span>
-                <span className="text-right font-medium">{selectedAssignment?.subject_name ?? "-"}</span>
-              </div>
-              <div className="flex justify-between gap-4">
-                <span className="text-muted-foreground">Pelajar</span>
-                <span className="text-right font-medium">{students.length} orang</span>
-              </div>
-            </div>
-
-            <AlertDialogFooter>
-              <AlertDialogCancel disabled={submitLoading}>Semak Semula</AlertDialogCancel>
-              <AlertDialogAction
-                disabled={submitLoading}
-                onClick={() => void saveMarks("submit")}
-              >
-                <Send className="mr-2 h-4 w-4" />
-                {submitLoading ? "Menghantar..." : "Sahkan dan Hantar"}
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
       </div>
     </div>
   );

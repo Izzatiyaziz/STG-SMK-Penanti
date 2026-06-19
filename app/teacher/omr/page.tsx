@@ -608,7 +608,9 @@ export default function OMRScanPage() {
     return () => { stopCamera(); };
   }, [activeTab, isMobileScanDevice, startCamera, stopCamera]);
 
-  async function callWarp(imageBase64: string): Promise<{ warped: string; cornersFound: boolean }> {
+  async function callWarp(
+    imageBase64: string,
+  ): Promise<{ warped: string; cornersFound: boolean; canonicalized: boolean }> {
     try {
       const res = await fetch("/api/teacher/omr/warp", {
         method: "POST",
@@ -617,11 +619,15 @@ export default function OMRScanPage() {
       });
       const json = await res.json();
       if (!res.ok || !json?.success) {
-        return { warped: imageBase64, cornersFound: false };
+        return { warped: imageBase64, cornersFound: false, canonicalized: false };
       }
-      return { warped: json.warped_image_base64, cornersFound: !!json.corners_found };
+      return {
+        warped: json.warped_image_base64,
+        cornersFound: !!json.corners_found,
+        canonicalized: json.canonicalized === true,
+      };
     } catch {
-      return { warped: imageBase64, cornersFound: false };
+      return { warped: imageBase64, cornersFound: false, canonicalized: false };
     }
   }
 
@@ -637,10 +643,23 @@ export default function OMRScanPage() {
       setImageProcessingProfile(profile);
       stopCamera();
       setScanFlowState("warping");
-      const { warped, cornersFound: cf } = await callWarp(optimizedImage);
-      setWarpedImage(warped);
+      const { warped, cornersFound: cf, canonicalized } = await callWarp(optimizedImage);
       setCornersFound(cf);
-      setScanFlowState("preview");
+      if (profile === "upload") {
+        setCapturedImage(canonicalized ? warped : optimizedImage);
+        setCapturedImageIsWarped(canonicalized);
+        setImageSourceLabel(
+          canonicalized
+            ? `${label} - imej telah diselaraskan`
+            : `${label} - alignment akan dibuat semasa pemprosesan`,
+        );
+        setWarpedImage(null);
+        setScanFlowState("idle");
+      } else {
+        setWarpedImage(warped);
+        setCapturedImageIsWarped(canonicalized);
+        setScanFlowState("preview");
+      }
     } catch {
       toast.error("Gagal memproses imej");
       setScanFlowState("idle");
@@ -680,7 +699,6 @@ export default function OMRScanPage() {
   function confirmWarp() {
     if (!warpedImage) return;
     setCapturedImage(warpedImage);
-    setCapturedImageIsWarped(cornersFound);
     setCapturedAnswerRegionOnly(false);
     setScanFlowState("idle");
   }
@@ -826,6 +844,11 @@ export default function OMRScanPage() {
 
     setIsProcessing(true);
     try {
+      const requestedSearchRadius = Number(searchRadius) || 6;
+      const effectiveSearchRadius =
+        imageProcessingProfile === "upload"
+          ? Math.min(Math.max(requestedSearchRadius, 2), 6)
+          : requestedSearchRadius;
       const res = await fetch(`/api/teacher/omr/grade`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -836,7 +859,7 @@ export default function OMRScanPage() {
           processing_profile: imageProcessingProfile,
           min_mark_threshold: Number(minMarkThreshold) || 0.30,
           ambiguity_gap: Number(ambiguityGap) || 0.06,
-          search_radius: Number(searchRadius) || 6,
+          search_radius: effectiveSearchRadius,
         }),
       });
       const responseText = await res.text();
@@ -1226,7 +1249,11 @@ export default function OMRScanPage() {
                     style={{ maxHeight: "min(70dvh, 520px)" }}
                   />
                   <div className="absolute top-3 left-1/2 -translate-x-1/2 rounded-full px-3 py-1 text-[11px] font-semibold text-white shadow backdrop-blur-sm bg-black/60">
-                    {cornersFound ? "Perspektif dibetulkan — sahkan?" : "Sudut tidak dikesan — guna imej asal"}
+                    {cornersFound
+                      ? "Perspektif dibetulkan - sahkan?"
+                      : capturedImageIsWarped
+                        ? "Imej dinormalisasi menggunakan bingkai penuh - sahkan?"
+                        : "Sudut tidak dikesan - alignment akan dibuat semasa proses"}
                   </div>
                   <div className="absolute bottom-0 inset-x-0 flex items-center justify-center gap-3 pb-5 pt-10 bg-gradient-to-t from-black/70 to-transparent">
                     <Button
